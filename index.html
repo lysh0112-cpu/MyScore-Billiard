@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-4 홈 새 디자인 · 복식 이름 부르기 -->
+<!-- build: 1판-5 기록 알약 짜부라짐 고침 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -974,11 +974,16 @@ const Pills = ({
   set,
   items,
   cols
-}) => /*#__PURE__*/React.createElement("div", {
+}) =>
+/*#__PURE__*/
+/* ★ cols 는 CSS 값이다. 숫자를 넣으면 "grid-template-columns: 4" 가 되어
+      칸 폭이 0이 되고 글자가 세로로 접힌다 (실제로 기록 화면에서 그랬다).
+      숫자로 와도 돌아가게 여기서 받아준다 */
+React.createElement("div", {
   style: {
     display: "grid",
-    gridTemplateColumns: cols || `repeat(${items.length},1fr)`,
-    gap: 6
+    gap: 6,
+    gridTemplateColumns: typeof cols === "number" ? `repeat(${cols},1fr)` : cols || `repeat(${items.length},1fr)`
   }
 }, items.map(([v, label, dim]) => /*#__PURE__*/React.createElement("button", {
   key: String(v),
@@ -4407,7 +4412,7 @@ function MatchCard({
     style: {
       fontSize: 11.5,
       color: "var(--chalk)",
-      marginRight: 5
+      marginRight: 6
     }
   }, "핸디"), m.score.map((u, i) => /*#__PURE__*/React.createElement(React.Fragment, {
     key: u.name + i
@@ -4415,7 +4420,7 @@ function MatchCard({
     style: {
       color: "#6F8598"
     }
-  }, " · "), u.name, " ", /*#__PURE__*/React.createElement("span", {
+  }, m.team ? "  :  " : " · "), u.name, " ", /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--accent)"
     }
@@ -4466,29 +4471,35 @@ function MatchCard({
     style: {
       color: "var(--accent)"
     }
-  }, fin[0]?.name, " \xA0", fin.map(u => u.w).join(" : "), " 승") : /*#__PURE__*/React.createElement("span", {
+  }, fin[0]?.name, " \xA0", fin.map(u => u.w).join(" : "), " 승") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--accent)"
     }
-  }, m.rounds[0]?.drew ? "무승부" : `${m.rounds[0]?.win || fin[0]?.name} 승`, "\xA0", /*#__PURE__*/React.createElement("span", {
+  }, m.rounds[0]?.drew ? "무승부" : `${m.rounds[0]?.win || fin[0]?.name} 승`), /*#__PURE__*/React.createElement("span", {
     style: {
-      color: "#B9CCDA"
+      color: "#B9CCDA",
+      marginLeft: 8
     }
   }, m.score.map(u => u.total).join(" : ")))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "flex-end",
-      gap: 8,
-      marginTop: 5
+      gap: 10,
+      marginTop: 6
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
+      minWidth: 0,
       fontSize: 12,
       color: "var(--chalk)",
       lineHeight: 1.7
     }
-  }, "avg\xA0", m.score.map((u, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#6F8598"
+    }
+  }, "avg"), "\xA0", m.score.map((u, i) => /*#__PURE__*/React.createElement(React.Fragment, {
     key: u.name + i
   }, i > 0 && " · ", u.name, " ", fmtAvg(avg(u.total, u.inn || 1), m.mode)))), /*#__PURE__*/React.createElement("button", {
     onClick: onDel,
@@ -4541,7 +4552,7 @@ function Log({
       marginBottom: 11
     }
   }, "기록 보기"), /*#__PURE__*/React.createElement(Pills, {
-    cols: 4,
+    cols: "repeat(4,1fr)",
     value: range,
     set: setRange,
     items: [["m", "이번 달"], ["3m", "3개월"], ["1y", "1년"], ["own", "직접"]]
