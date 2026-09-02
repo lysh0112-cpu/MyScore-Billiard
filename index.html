@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-5 기록 알약 짜부라짐 고침 -->
+<!-- build: 1판-6 홈 단추 바로 홈으로 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -2019,28 +2019,27 @@ function EndAsk({
       이미 있는 🏠 를 눌러 여는 방식입니다. 6판에서 "목표" 를 눌러 핸디를 고치게 한 것과 같습니다.
    ★ 탭으로 가도 점수판은 살아 있습니다 (bareNow = bare && tab === "new").
       아래에 [● 경기 진행 중 · 점수판으로] 알약이 떠서 그대로 돌아옵니다.                */
-function GoSheet({
-  dirty,
-  onTab,
-  onHome,
+/* ── 🏠 를 눌렀을 때 ──
+   ★ 8판까지는 "어디로 갈까요?" 를 띄우고 기록·통계·회원·주고받기·종목 고르기를 늘어놨다.
+      당구 전용 앱에는 통계·회원·주고받기·종목 고르기가 아예 없다.
+      기록은 하단 탭에 있다. 그래서 그 화면을 통째로 없앴다 (사용자 지시).
+
+   지금은 홈으로 바로 간다. 점수가 있을 때만 한 번 묻는다.
+   ⚠ [남기고 나가기] 를 위에 둔다 — 아래 붉은 것이 먼저 눌리면 한 판이 날아간다 */
+function HomeAsk({
+  line,
+  canSave,
+  onSave,
+  onWipe,
   onBack
 }) {
   const box = {
     width: "100%",
-    padding: "13px 0",
+    padding: "14px 0",
     borderRadius: 10,
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: 700,
-    marginBottom: 7
-  };
-  const cell = {
-    padding: "15px 0",
-    borderRadius: 10,
-    fontSize: 13.5,
-    fontWeight: 700,
-    background: "rgba(255,255,255,.06)",
-    border: "1px solid #3a464d",
-    color: "#F4EEDF"
+    marginBottom: 8
   };
   return /*#__PURE__*/React.createElement("div", {
     onClick: onBack,
@@ -2058,7 +2057,7 @@ function GoSheet({
     onClick: e => e.stopPropagation(),
     style: {
       width: "100%",
-      maxWidth: 380,
+      maxWidth: 360,
       background: "var(--bg)",
       border: "1px solid var(--line)",
       borderRadius: 14,
@@ -2068,61 +2067,32 @@ function GoSheet({
     style: {
       fontSize: 18,
       fontWeight: 700,
-      marginBottom: dirty ? 9 : 14
+      marginBottom: 7
     }
-  }, "어디로 갈까요?"), dirty && /*#__PURE__*/React.createElement("div", {
+  }, "홈으로 나가시겠습니까?"), /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "#2a2418",
-      border: "1px solid #6b5a2a",
-      borderRadius: 8,
-      padding: "9px 11px",
-      color: "#e0c88a",
-      fontSize: 12,
-      lineHeight: 1.5,
-      marginBottom: 13
+      fontSize: 12.5,
+      color: "var(--chalk)",
+      lineHeight: 1.6,
+      marginBottom: 15
     }
-  }, "치던 점수가 있습니다. 나가면 기록하지 않고 사라집니다."), /*#__PURE__*/React.createElement("div", {
+  }, line, /*#__PURE__*/React.createElement("br", null), "홈에서 선수와 방식을 다시 정할 수 있습니다."), canSave && /*#__PURE__*/React.createElement("button", {
     style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 8,
-      marginBottom: 12
-    }
-  }, [["log", "기록", "📋"], ["stat", "통계", "📊"], ["mem", "회원", "👥"], ["sync", "주고받기", "🔄"]].map(([k, l, ic]) => /*#__PURE__*/React.createElement("button", {
-    key: k,
-    onClick: () => onTab(k),
-    style: cell
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 21,
-      lineHeight: 1.2
-    }
-  }, ic), l))), dirty ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+      ...box,
+      background: "#E8B838",
+      border: "none",
+      color: "#141200"
+    },
+    onClick: onSave
+  }, "✓ 지금까지 기록을 남기고 나가기"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...box,
       background: "#2e1a1a",
       border: "1px solid #9e5757",
       color: "#f0a9a9"
     },
-    onClick: onHome
-  }, "🏠 기록하지 않고 나가기"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...box,
-      background: "#1E88E5",
-      border: "none",
-      color: "#fff",
-      marginBottom: 0
-    },
-    onClick: onBack
-  }, "돌아가서 계속 치기")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...box,
-      background: "#2b2b2b",
-      border: "1px solid #6a6a6a",
-      color: "#ddd"
-    },
-    onClick: onHome
-  }, "🏠 종목 고르는 화면"), /*#__PURE__*/React.createElement("button", {
+    onClick: onWipe
+  }, "지우고 새로 시작하기"), /*#__PURE__*/React.createElement("button", {
     style: {
       width: "100%",
       padding: "11px 0",
@@ -2130,10 +2100,10 @@ function GoSheet({
       background: "transparent",
       border: "none",
       color: "#7d8f9b",
-      fontSize: 13
+      fontSize: 13.5
     },
     onClick: onBack
-  }, "돌아가기"))));
+  }, "돌아가서 계속 치기")));
 }
 
 /* ── 당구에 들어오면 맨 먼저 뜨는 창 ──
@@ -2918,8 +2888,7 @@ function Billiard({
   openSheet,
   setBare,
   tv,
-  goHome,
-  goTab
+  goHome
 }) {
   const [phase, setPhase] = useState("board");
   /* ★ 설정 화면이 없다. 홈에서 다 정하고 들어온다 (당구 전용 · 사용자 지시) */
@@ -3879,10 +3848,11 @@ function Billiard({
       bg: "#12243a",
       border: "1px solid #2f6fa8"
     },
-    /* ★ 회색 ← 하나뿐이라 안 보였고, 위의 되돌리기(↶)와도 헷갈렸다 (사용자 지적).
+    /* ★ 회색 ← 하나뿐이라 안 보였고, 위의 되돌리기(↶)와도 헷갈렸다 (7판 지적).
            어디로 가는지가 핵심이므로 집 그림과 글자를 붙인다.
-       ★ 7판 — 누르면 바로 안 나가고 "어디로 갈까요?" 를 연다.
-          기록·통계·회원으로 한 번에 가는 유일한 길이다 (좌측 바에 자리가 없다) */
+       ★ 당구 전용 — "어디로 갈까요?" 를 없앴다 (사용자 지시).
+          거기 있던 통계·회원·주고받기·종목 고르기가 이 앱에는 아예 없다.
+          누르면 홈으로 간다. 점수가 있을 때만 한 번 묻는다 */
     {
       label: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -3894,12 +3864,19 @@ function Billiard({
           fontSize: 9.5
         }
       }, "홈")),
-      title: "홈 · 기록 · 통계",
+      title: "홈으로 나가서 다시 정하기",
       size: RAIL_SYM,
       color: "#ddd",
       bg: "#2b2b2b",
       border: "1px solid #6a6a6a",
-      onClick: () => setGoAsk(true)
+      onClick: () => {
+        if (Object.values(score).some(v => v > 0) || log.length) {
+          setGoAsk(true);
+          return;
+        }
+        wakeOff();
+        goHome(); /* 친 것이 없으면 묻지 않는다 */
+      }
     }]
   }), /*#__PURE__*/React.createElement(BoardArea, null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4167,19 +4144,22 @@ function Billiard({
         say("이번 판 점수를 지웠습니다");
       }
     });
-  })(), goAsk && /*#__PURE__*/React.createElement(GoSheet, {
-    dirty: Object.values(score).some(v => v > 0) || !!log.length,
-    onBack: () => setGoAsk(false)
-    /* ★ 탭만 바꾼다. 점수판은 살아 있어서 [● 경기 진행 중] 알약으로 돌아온다 */,
-    onTab: k => {
+  })(), goAsk && /*#__PURE__*/React.createElement(HomeAsk, {
+    line: log.length ? `${bestOf > 1 ? `${bestOf}게임 중 ${gameNo}게임째` : "치는 중"} · 앞 게임 ${log.length}판은 이미 끝났습니다` : `${bestOf > 1 ? `${gameNo}게임째` : "치는 중"} · 아직 저장하지 않았습니다`
+    /* ★ 한 판이라도 끝냈으면 남기고 나갈 수 있다.
+          지금 치던 판만 있으면 남길 것이 없다 — 그 판은 아직 안 끝났다 */,
+    canSave: log.length > 0,
+    onSave: () => {
       setGoAsk(false);
-      goTab && goTab(k);
+      setSaveNow(true);
+      finish("done", true);
     },
-    onHome: () => {
+    onWipe: () => {
       setGoAsk(false);
       wakeOff();
       goHome();
-    }
+    },
+    onBack: () => setGoAsk(false)
   }), seat !== null && /*#__PURE__*/React.createElement(SeatSheet, {
     ps: ps,
     seat: seat,
@@ -5548,8 +5528,7 @@ function App() {
     ...ctx,
     setup: setup,
     setBare: setBare,
-    openSheet: setSheet,
-    goTab: setTab
+    openSheet: setSheet
     /* ★ 종목 고르기가 없으므로 goHome 은 점수판을 새로 띄우는 일이다.
           열쇠를 바꿔 다시 그리면 7판의 "저장 뒤 홈으로" 가 그대로 돈다 */,
     goHome: () => {
