@@ -1,0 +1,17 @@
+{
+  "name": "당구 스코어",
+  "short_name": "당구",
+  "description": "동호회 당구 경기 기록 · 3쿠션 · 4구",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0A2438",
+  "theme_color": "#0A2438",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
