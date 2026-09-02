@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-2 저장하면 결과표 바로 -->
+<!-- build: 1판-3 종료하면 결과표로 바로 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -2708,6 +2708,10 @@ function Billiard({
   const [log, setLog] = useState([]);
   const [endAsk, setEndAsk] = useState(false); // [종료] 를 눌러 확인을 기다리는 중
   const [goAsk, setGoAsk] = useState(false); // 🏠 를 눌러 "어디로 갈까요?" 를 연 상태
+  /* ★ [경기 끝내기] 를 누르면 결과 화면을 거치지 않고 곧바로 저장하고 결과표로 간다 (사용자 지시).
+        finish() 가 setLog 로 마지막 판을 담는 것이 먼저 끝나야 하므로,
+        표시만 켜 두고 다음 그림에서 commit 을 부른다 */
+  const [saveNow, setSaveNow] = useState(false);
   const [memo, setMemo] = useState("");
   const [score, setScore] = useState({});
   const [turns, setTurns] = useState({});
@@ -3275,6 +3279,14 @@ function Billiard({
     });
     goHome();
   };
+
+  /* ★ [경기 끝내기] 로 들어왔으면 결과 화면을 안 거치고 바로 저장한다.
+        log·wins·pts 가 이미 갱신된 뒤라 commit 이 마지막 판까지 담는다 */
+  useEffect(() => {
+    if (!saveNow || phase !== "done") return;
+    setSaveNow(false);
+    commit();
+  }, [saveNow, phase]); // eslint-disable-line
 
   /* ★ 목표에 닿으면 판을 끝낸다.
         ⚠ 3명 이상은 1등이 나와도 나머지가 끝까지 친다 (사용자 확인).
@@ -3885,6 +3897,7 @@ function Billiard({
       },
       onFinishHere: () => {
         setEndAsk(false);
+        setSaveNow(true);
         finish("done", true);
       },
       onWipe: () => {
@@ -3976,6 +3989,71 @@ const unitsOf = g => {
   return seen;
 };
 
+/* ★ 한 경기를 화면과 공유 글이 함께 쓰는 모양으로 만든다.
+      ⚠ 같은 계산을 두 군데 두면 반드시 어긋난다 (8판 ⑳). 여기 하나만 고칠 것.
+        기록 카드(MatchCard)와 카톡 글(buildText)이 똑같이 이것을 쓴다 */
+function matchOf(first, list) {
+  const all = list || [first];
+  const sum = all.map(g => g.series).filter(Boolean)[0] || null;
+  const us = unitsOf(first);
+  const many = sum ? !!sum.byRank : us.length > 2;
+
+  /* 판별 줄 — 여러 판이면 요약에서, 단판이면 그 판에서 */
+  const rounds = sum ? sum.rounds || [] : [{
+    no: 1,
+    names: us.map(u => ({
+      name: u.name,
+      score: u.score,
+      pt: 0
+    })),
+    drew: !!first.drew,
+    win: first.team ? first.winnerSide || "" : (first.players || []).find(p => p.won === true)?.name || ""
+  }];
+
+  /* 전체 성적 */
+  const score = sum ? sum.score || [] : us.map(u => ({
+    name: u.name,
+    w: first.drew ? 0 : (first.team ? first.winnerSide === u.name : (first.players || []).some(p => p.name === u.name && p.won === true)) ? 1 : 0,
+    pt: 0,
+    total: u.score,
+    inn: u.inn,
+    high: u.high,
+    handi: u.handi
+  }));
+
+  /* ★ 판별 점수의 순서를 핸디 줄과 똑같이 맞춘다 (사용자 지적).
+        7판 요약은 "먼저 목표에 닿은 순서" 로 담겨 있어서 게임마다 좌우가 뒤집혔다.
+        "2게임 12 : 4" 만 보고는 어느 쪽이 누구 점수인지 알 수가 없다.
+        ⚠ 세 명 이상은 등수로 적으므로 그때는 달성 순서 그대로 둔다 */
+  const order = score.map(x => x.name);
+  const fixed = many ? rounds : rounds.map(r => ({
+    ...r,
+    names: order.map(nm => (r.names || []).find(x => x.name === nm)).filter(Boolean).concat((r.names || []).filter(x => !order.includes(x.name)))
+  }));
+  const bestOf = sum ? sum.bestOf : first.bestOf || 1;
+  return {
+    key: first.seriesId || first.id,
+    date: first.date,
+    place: first.place || "",
+    mode: first.mode || "3",
+    team: !!first.team,
+    bestOf,
+    games: sum ? sum.games : 1,
+    many,
+    rounds: fixed,
+    score,
+    startAt: first.startAt || 0,
+    endAt: all[all.length - 1]?.endAt || first.endAt || 0,
+    seconds: all.reduce((t, g) => t + (Number(g.seconds) || 0), 0),
+    memo: all.map(g => g.memo).filter(Boolean)[0] || "",
+    ids: all.map(g => g.id),
+    last: all[all.length - 1]
+  };
+}
+
+/* 방식을 사람 말로 — 화면과 공유 글이 같은 말을 쓰게 한다 */
+const wayOf = m => m.bestOf === 1 ? "단판" : m.many ? `${m.score.length}명 · ${m.bestOf}게임` : `${m.bestOf}판 ${Math.ceil(m.bestOf / 2)}선승`;
+
 /* 저장된 여러 판을 한 경기로 묶는다.
    ★ 마지막 판에만 series(요약)가 들어 있다 — 8판 형식 그대로다 */
 function seriesList(games) {
@@ -3987,52 +4065,7 @@ function seriesList(games) {
   });
   return Object.keys(byId).map(k => {
     const list = byId[k].slice().sort((a, b) => (a.gameNo || 1) - (b.gameNo || 1));
-    const first = list[0];
-    const sum = list.map(g => g.series).filter(Boolean)[0] || null;
-    const us = unitsOf(first);
-    const many = us.length > 2;
-
-    /* 판별 줄 */
-    const rounds = sum ? sum.rounds || [] : [{
-      no: 1,
-      names: (() => {
-        const ord = first.order || [];
-        const key = (u, i) => i;
-        return unitsOf(first).map((u, i) => ({
-          name: u.name,
-          score: u.score,
-          pt: 0
-        }));
-      })(),
-      drew: !!first.drew,
-      win: first.team ? first.winnerSide || "" : (first.players || []).find(p => p.won === true)?.name || ""
-    }];
-
-    /* 전체 성적 */
-    const score = sum ? sum.score || [] : us.map(u => ({
-      name: u.name,
-      w: 0,
-      pt: 0,
-      total: u.score,
-      inn: u.inn,
-      high: u.high,
-      handi: u.handi
-    }));
-    return {
-      key: k,
-      date: first.date,
-      place: first.place || "",
-      mode: first.mode || "3",
-      team: !!first.team,
-      bestOf: sum ? sum.bestOf : first.bestOf || 1,
-      games: sum ? sum.games : 1,
-      many,
-      rounds,
-      score,
-      ids: list.map(g => g.id),
-      last: list[list.length - 1],
-      endAt: first.endAt || 0
-    };
+    return matchOf(list[0], list);
   }).sort((a, b) => a.date === b.date ? b.endAt - a.endAt : a.date < b.date ? 1 : -1);
 }
 
@@ -4048,7 +4081,7 @@ function MatchCard({
   onDel
 }) {
   const fin = [...m.score].sort((a, b) => m.many ? b.pt - a.pt : b.w - a.w);
-  const seriesWord = m.bestOf === 1 ? "단판" : m.many ? `${m.score.length}명 · ${m.bestOf}게임` : `${m.bestOf}판 ${Math.ceil(m.bestOf / 2)}승제`;
+  const seriesWord = wayOf(m);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       borderBottom: "1px solid var(--line)",
@@ -4327,55 +4360,56 @@ const hhmm = t => {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 function buildText(g, tail) {
+  /* ★ 기록 화면(MatchCard)과 똑같은 모양을 쓴다 — 같은 matchOf 를 본다.
+        전에는 여기서 따로 계산해서, 단판일 때 핸디 줄과 최종 줄이 빠졌다 (사용자 지적) */
+  const m = matchOf(g, null);
   const L = [];
   L.push(`🎱 ${g.date} (${dow(g.date)}) · ${B_LABEL[g.mode] || ""}`);
-  const mins = Math.round((Number(g.seconds) || 0) / 60);
-  if (g.startAt && g.endAt) L.push(`🕐 ${hhmm(g.startAt)} ~ ${hhmm(g.endAt)}${mins ? ` · ${mins}분` : ""}`);
-  L.push(`📍 ${g.place || "-"}`);
+  const mins = Math.round((Number(m.seconds) || 0) / 60);
+  /* ★ 1분이 안 되면 시간 줄을 아예 뺀다 — "00:15 ~ 00:15" 가 나온다 (사용자 지적) */
+  if (m.startAt && m.endAt && mins >= 1) L.push(`🕐 ${hhmm(m.startAt)} ~ ${hhmm(m.endAt)} · ${mins}분`);
+  if (g.place) L.push(`📍 ${g.place}`);
   L.push("━━━━━━━━━━━━━");
-  const S2 = g.series;
-  const many = S2 ? !!S2.byRank : unitsOf(g).length > 2;
-  if (S2) {
-    L.push(many ? `🏁 ${S2.bestOf}게임 · ${S2.games}게임 진행` : `🏁 ${S2.bestOf}판 ${Math.ceil(S2.bestOf / 2)}선승 · ${S2.games}게임 진행`);
-    L.push("");
-    (S2.rounds || []).forEach(r => {
-      if (many) {
-        /* ★ 세 명 이상은 등수만 (사용자 지시) */
-        const body = (r.names || []).map((x, i) => `${i + 1}등 ${x.name}`).join("  ");
-        L.push(`${r.no}게임  ${body}`);
-      } else {
-        const body = (r.names || []).map(x => `${x.name} ${x.score}`).join(" : ");
-        L.push(`${r.no}게임  ${body}${r.drew ? "  무승부" : ""}`);
-      }
-    });
-    L.push("─────────────");
-    if (many) {
-      const tot = [...(S2.score || [])].sort((a, b) => (b.pt || 0) - (a.pt || 0));
-      L.push(`최종  ${tot.map((x, i) => `${rankNoOf(tot, i, "pt")}등 ${x.name} (${x.pt || 0}점)`).join("  ")}`);
+  L.push(`🏁 ${wayOf(m)}${m.bestOf > 1 ? ` · ${m.games}게임 진행` : ""}`);
+  L.push("");
+
+  /* 핸디 */
+  L.push(`핸디  ${m.score.map(u => `${u.name} ${u.handi}`).join(m.team ? "  :  " : " · ")}`);
+  L.push("");
+
+  /* 판별 */
+  m.rounds.forEach((r, i) => {
+    const no = r.no || i + 1;
+    if (m.many) {
+      L.push(`${no}게임  ${(r.names || []).map((x, j) => `${j + 1}등 ${x.name}`).join("  ")}`);
     } else {
-      const tot = [...(S2.score || [])].sort((a, b) => (b.w || 0) - (a.w || 0));
-      L.push(`최종  ${tot[0]?.name || ""}  ${tot.map(x => x.w || 0).join(" : ")} 승`);
+      const sc = (r.names || []).map(x => x.score).join(" : ");
+      const win = r.drew ? "무승부" : `${r.win || (r.names || [])[0]?.name || ""} 승`;
+      L.push(`${no}게임  ${sc}  ${win}`);
     }
-    L.push("━━━━━━━━━━━━━");
-    L.push(`전체 ${S2.games}게임`);
-    (S2.score || []).forEach(x => {
-      L.push(`${x.name}  ${x.total}점 ${x.inn}이닝`);
-      L.push(`  에버 ${fmtAvg(avg(x.total, x.inn || 1), g.mode)}  하이런 ${x.high || 0}`);
-    });
+  });
+  L.push("─────────────");
+  if (m.many) {
+    const tot = [...m.score].sort((a, b) => (b.pt || 0) - (a.pt || 0));
+    L.push(`최종  ${tot.map((x, i) => `${rankNoOf(tot, i, "pt")}등 ${x.name} (${x.pt || 0}점)`).join("  ")}`);
+  } else if (m.bestOf > 1) {
+    const tot = [...m.score].sort((a, b) => (b.w || 0) - (a.w || 0));
+    L.push(`최종  ${tot[0]?.name || ""}  ${tot.map(x => x.w || 0).join(" : ")} 승`);
   } else {
-    const us = unitsOf(g);
-    us.forEach(u => {
-      L.push(`${u.name}  ${u.score}/${u.handi}  ${u.inn}이닝`);
-      L.push(`  에버 ${fmtAvg(avg(u.score, u.inn || 1), g.mode)}  하이런 ${u.high || 0}`);
-    });
-    if (g.drew) L.push("무승부 · 아무도 목표에 닿지 못했습니다");
+    const r = m.rounds[0] || {};
+    L.push(`최종  ${r.drew ? "무승부" : `${r.win || ""} 승`}`);
   }
-  if (g.memo) {
+  L.push("━━━━━━━━━━━━━");
+  if (m.bestOf > 1) L.push(`전체 ${m.games}게임`);
+  m.score.forEach(x => {
+    L.push(`${x.name}  ${x.total}점 ${x.inn}이닝`);
+    L.push(`  에버 ${fmtAvg(avg(x.total, x.inn || 1), g.mode)}  하이런 ${x.high || 0}`);
+  });
+  if (m.memo) {
     L.push("━━━━━━━━━━━━━");
-    L.push(`📝 ${g.memo}`);
+    L.push(`📝 ${m.memo}`);
   }
-  /* ★ 맨 아래에 그때그때 필요한 말을 붙인다 (사용자 지시).
-        다음 약속 · 자리 이야기 같은 것. 기록에는 저장하지 않는다 */
+  /* ★ 맨 아래에 그때그때 필요한 말을 붙인다 (사용자 지시). 기록에는 저장하지 않는다 */
   if (tail && tail.trim()) {
     L.push("━━━━━━━━━━━━━");
     L.push(tail.trim());
