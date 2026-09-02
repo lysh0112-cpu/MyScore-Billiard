@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판 -->
+<!-- build: 1판-2 저장하면 결과표 바로 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -2707,9 +2707,7 @@ function Billiard({
   const [pts, setPts] = useState({});
   const [log, setLog] = useState([]);
   const [endAsk, setEndAsk] = useState(false); // [종료] 를 눌러 확인을 기다리는 중
-  const [goAsk, setGoAsk] = useState(false);
-  /* ★ 경기가 다 끝났을 때 한 번 묻는다 (사용자 요청) */
-  const [doneAsk, setDoneAsk] = useState(null); // { games, winner, first }       // 🏠 를 눌러 "어디로 갈까요?" 를 연 상태
+  const [goAsk, setGoAsk] = useState(false); // 🏠 를 눌러 "어디로 갈까요?" 를 연 상태
   const [memo, setMemo] = useState("");
   const [score, setScore] = useState({});
   const [turns, setTurns] = useState({});
@@ -2729,8 +2727,8 @@ function Billiard({
         ❙❙ 로 멈춰도 다시 안 풀립니다 — 판이 시작된 사실은 그대로이기 때문입니다 */
   const [begun, setBegun] = useState(false);
   useEffect(() => {
-    setBare(!endAsk && !goAsk && !doneAsk && phase === "board");
-  }, [phase, endAsk, goAsk, doneAsk]); // eslint-disable-line
+    setBare(!endAsk && !goAsk && phase === "board");
+  }, [phase, endAsk, goAsk]); // eslint-disable-line
   useEffect(() => {
     if (!running || phase !== "board") return;
     const t = setInterval(() => {
@@ -3264,15 +3262,18 @@ function Billiard({
           "아직 치는 중입니다" 가 떠서 말이 안 맞았다.
           세 판을 다 치면 복식으로 새로 잡거나 아주 끝내므로, 처음부터 다시 잡는 것이 맞다.
           공유 창은 홈 화면 위에 뜬다 — 닫으면 홈이다 */
-    /* ★ 저장이 끝나면 "경기가 끝났습니다" 를 띄우고, 거기서 홈으로 나간다 (사용자 요청).
-          ⚠ 저장이 먼저다 — 이 창을 저장 앞에 두면 안 누르고 나갔을 때 기록을 잃는다 */
+    /* ★ 저장이 끝나면 곧바로 결과표를 띄운다 (사용자 지시).
+          전에는 "경기가 끝났습니다" 창을 한 번 더 거쳐야 했다.
+          결과표 창 안에 [홈으로 가기] 가 있으므로 한 단계가 준다.
+          ⚠ 저장이 먼저다 — 창을 저장 앞에 두면 안 누르고 나갔을 때 기록을 잃는다 */
     wakeOff();
     setPhase("board");
-    setDoneAsk({
-      games: recs.length,
-      winner: topName,
-      first: recs[0]
+    openSheet({
+      ...recs[0],
+      justSaved: true,
+      gamesSaved: recs.length
     });
+    goHome();
   };
 
   /* ★ 목표에 닿으면 판을 끝낸다.
@@ -3936,81 +3937,7 @@ function Billiard({
     say: say,
     locked: begun || turnNo > 0 || Object.values(score).some(v => v > 0),
     onClose: () => setTeamOpen(false)
-  }), doneAsk && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,.8)",
-      zIndex: 88,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "100%",
-      maxWidth: 340,
-      background: "var(--bg)",
-      border: "1px solid var(--line)",
-      borderRadius: 14,
-      padding: 20,
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 26
-    }
-  }, "🏆"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 18,
-      fontWeight: 700,
-      marginTop: 7
-    }
-  }, "경기가 끝났습니다"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12.5,
-      color: "var(--chalk)",
-      marginTop: 5
-    }
-  }, doneAsk.games > 1 ? `${doneAsk.games}게임` : "단판", place ? ` · ${place}` : ""), doneAsk.winner && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 15,
-      color: "var(--accent)",
-      fontWeight: 700,
-      marginTop: 9
-    }
-  }, doneAsk.winner, " 우승"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12.5,
-      color: "var(--chalk)",
-      lineHeight: 1.7,
-      margin: "14px 0 15px"
-    }
-  }, "기록에 저장했습니다.", /*#__PURE__*/React.createElement("br", null), "새로 치시려면 홈으로 가서 다시 정하십시오."), /*#__PURE__*/React.createElement("button", {
-    className: "prim",
-    onClick: () => {
-      const g = doneAsk.first;
-      setDoneAsk(null);
-      goHome();
-    },
-    style: {
-      padding: 15,
-      fontSize: 16,
-      marginBottom: 7
-    }
-  }, "홈으로 가기"), /*#__PURE__*/React.createElement("button", {
-    className: "ghost",
-    onClick: () => {
-      const g = doneAsk.first;
-      setDoneAsk(null);
-      goHome();
-      openSheet(g);
-    },
-    style: {
-      fontSize: 14
-    }
-  }, "결과표 보기 · 카톡으로 보내기"))));
+  }));
 }
 /* ── 기록 보기 ───────────────────────────────
    ★ 사용자가 적어준 형식 그대로다 (당구 전용 · 8판의 표를 걷어냈다).
@@ -4460,6 +4387,7 @@ function Sheet({
   onClose,
   say
 }) {
+  const saved = !!game.justSaved;
   const [edit, setEdit] = useState(false);
   const [outText, setOutText] = useState("");
   const [tail, setTail] = useState("");
@@ -4473,16 +4401,25 @@ function Sheet({
       say("복사하지 못했습니다. 글을 길게 눌러 복사하세요");
     }
   };
+  /* ★ 보내기 — 폰의 공유창을 띄운다. 그 목록에 카카오톡이 나온다.
+        웹 앱에서 카톡 앱으로 곧바로 들어가려면 카카오 개발자 열쇠가 있어야 한다
+        (developers.kakao.com 에 이 주소를 등록하고 JavaScript 키를 받는 일).
+        그 전까지는 공유창이 가장 확실하다 — 한 번만 더 누르면 된다.
+     ⚠ 공유창은 https 에서만 열린다. Vercel 주소는 https 라 괜찮다 */
   const send = async () => {
-    try {
-      if (navigator.share) {
+    if (navigator.share) {
+      try {
         await navigator.share({
           text: shown
         });
         return;
+      } catch (e) {
+        /* 사용자가 공유창을 닫은 것이면 아무 일도 안 한다 */
+        if (String(e && e.name) === "AbortError") return;
       }
-    } catch (e) {}
+    }
     copy();
+    say("공유가 안 되는 브라우저입니다. 복사했으니 카톡에 붙여넣으세요");
   };
   return /*#__PURE__*/React.createElement("div", {
     onClick: onClose,
@@ -4513,21 +4450,32 @@ function Sheet({
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 12
+      marginBottom: saved ? 8 : 12
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 16,
       fontWeight: 700
     }
-  }, "결과표"), /*#__PURE__*/React.createElement("button", {
+  }, saved ? "경기가 끝났습니다" : "결과표"), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
       color: "var(--chalk)",
       fontSize: 13,
       padding: 6
     }
-  }, "닫기")), edit ? /*#__PURE__*/React.createElement("textarea", {
+  }, "닫기")), saved && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(232,184,56,.1)",
+      border: "1px solid rgba(232,184,56,.3)",
+      borderRadius: 10,
+      padding: "9px 11px",
+      fontSize: 12.5,
+      color: "#F4EEDF",
+      marginBottom: 12,
+      lineHeight: 1.6
+    }
+  }, "✓ ", game.gamesSaved > 1 ? `${game.gamesSaved}게임을 ` : "", "기록에 저장했습니다. 아래 글을 그대로 보내시면 됩니다."), edit ? /*#__PURE__*/React.createElement("textarea", {
     value: shown,
     onChange: e => setOutText(e.target.value),
     rows: 14,
@@ -4625,7 +4573,15 @@ function Sheet({
       marginTop: 4,
       lineHeight: 1.6
     }
-  }, "고친 글은 저장되지 않습니다. 창을 닫으면 사라집니다.")));
+  }, "고친 글은 저장되지 않습니다. 창을 닫으면 사라집니다."), saved && /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    onClick: onClose,
+    style: {
+      marginTop: 12,
+      fontSize: 14,
+      padding: 13
+    }
+  }, "🏠 홈으로 가기")));
 }
 /* ── 계정 · 서버 백업 · 문의 ──────────────────
    ★ 하단 탭에서 [주고받기] 를 없앴다 (사용자 지시).
@@ -5351,9 +5307,19 @@ function App() {
     onClose: () => setLogin(false)
   }), sheet &&
   /*#__PURE__*/
-  /* ★ data.games 에서 다시 찾는다 — 기록이 갱신되면 그것을 봐야 한다 (7판) */
+  /* ★ data.games 에서 다시 찾는다 — 기록이 갱신되면 그것을 봐야 한다 (7판).
+        ⚠ 다만 justSaved 는 기록에 없는 일회용 표시라 다시 얹어준다.
+          8판에서 openCard 로 똑같은 자리를 겪었다 */
   React.createElement(Sheet, {
-    game: data.games.find(g => g.id === sheet.id) || sheet,
+    game: (() => {
+      const fresh = data.games.find(g => g.id === sheet.id);
+      if (!fresh) return sheet;
+      return sheet.justSaved ? {
+        ...fresh,
+        justSaved: true,
+        gamesSaved: sheet.gamesSaved
+      } : fresh;
+    })(),
     onClose: () => setSheet(null),
     say: say
   }), toast && /*#__PURE__*/React.createElement("div", {
