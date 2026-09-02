@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-6 홈 단추 바로 홈으로 -->
+<!-- build: 1판-7 판 종료 음성 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -3036,6 +3036,12 @@ function Billiard({
     const times = Math.floor(Math.max(0, tn) / units.length); /* 그 편이 몇 번째로 치는가 */
     return mem[times % mem.length]?.name || u.name;
   };
+
+  /* ★ 판이 끝날 때 소리로 알린다 (사용자 지시).
+        "1게임째 종료" 같은 숫자말 대신 사람이 부르는 말로 한다.
+        첫 판 · 두 번째 판 … 일곱 번째 판 */
+  const NTH = ["", "첫", "두 번째", "세 번째", "네 번째", "다섯 번째", "여섯 번째", "일곱 번째", "여덟 번째", "아홉 번째", "열 번째"];
+  const nthOf = (n, last) => `${NTH[n] || `${n}번째`} ${last ? "마지막 " : ""}판`;
   const STEP = mode === "4" ? 10 : 1;
   /* ★ 수구 색은 "몇 번째 차례인가" 로만 정한다 (7판 · 사용자 지시).
         초구 색을 고르면(firstBall) 그다음은 무조건 나머지 한 색이다.
@@ -3106,7 +3112,7 @@ function Billiard({
       const doneCnt = already + 1;
       const remain = units.length - doneCnt;
       if (units.length <= 2 || remain <= 1) {
-        say2(`${d}점, ${doneCnt}위 도달, 경기 종료`);
+        say2(`${d}점, 목표 도달`); /* ★ 곧이어 "…판 종료" 가 나온다. 두 번 말하지 않는다 */
       } else {
         say2(`${d}점, ${doneCnt}위 도달, ${remain}명 계속 진행`);
       }
@@ -3276,12 +3282,42 @@ function Billiard({
     setRunning(false);
     wakeOff();
     if (stop) setStopped(true);
+
+    /* ★ 판이 끝났을 때 부르는 말 (사용자가 정함)
+          1판  "첫 판 종료, 이인승 승"
+          2판  "두 번째 판 종료, 김성곤 승"
+          끝판  "세 번째 마지막 판 종료, 김성곤 승, 최종 김성곤 게임 승리했습니다"
+       ⚠ 여기서는 wins·pts 가 아직 안 바뀌었다 (바로 위에서 setWins 를 불렀을 뿐이다).
+         그래서 마지막 승자는 이 판 결과까지 얹어 직접 센다 */
+    const last = stop || gameNo >= bestOf || !multiSeat && Object.keys(wins).some(k => (wins[k] || 0) + (!drew && rank[0]?.key === k ? 1 : 0) >= need);
+    const head = bestOf > 1 ? `${nthOf(gameNo, last)} 종료` : "경기 종료";
+    const win = drew ? "무승부" : `${rank[0]?.name || ""} 승`;
+    if (!last) {
+      say2(`${head}, ${win}`);
+    } else {
+      /* 마지막 판이면 경기 전체 승자까지 이어서 부른다 */
+      const tally = {};
+      units.forEach(u => {
+        tally[u.key] = (wins[u.key] || 0) + (!drew && rank[0]?.key === u.key ? 1 : 0);
+      });
+      const board = multiSeat ? units.map(u => ({
+        n: u.name,
+        v: (pts[u.key] || 0) + (drew ? 0 : units.length - rank.findIndex(r => r.key === u.key))
+      })) : units.map(u => ({
+        n: u.name,
+        v: tally[u.key]
+      }));
+      board.sort((a, b) => b.v - a.v);
+      const champ = board.length > 1 && board[0].v === board[1].v ? "" : board[0] && board[0].v > 0 ? board[0].n : "";
+      /* ★ 단판은 이미 "경기 종료, OO 승" 으로 끝났다.
+            한 판뿐인데 "최종 … 게임 승리" 를 붙이면 군더더기다 */
+      if (bestOf === 1) say2(`${head}, ${win}`);else say2(champ ? `${head}, ${win}, 최종 ${champ} 게임 승리했습니다` : `${head}, ${win}, 승부를 가리지 못했습니다`);
+    }
     if (go === "next") {
       nextGame();
       return;
     }
     setPhase("done");
-    if (drew) say2("무승부입니다");else if (bestOf > 1) say2(`${gameNo}게임째 종료`);
   };
 
   /* ★ 시리즈가 안 끝났어도 "여기까지만 치고 끝내기" 를 고른 상태.
