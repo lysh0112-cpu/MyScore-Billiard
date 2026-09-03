@@ -4,11 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<!-- build: admin 1판-2 전화번호 하이픈 -->
+<!-- build: admin 1판-3 화면 다듬기 -->
 <title>당구 스코어 · 관리자</title>
 <style>
   :root{
-    --bg:#0B1219; --panel:#0F1A22; --card:#16232E; --line:rgba(255,255,255,.10);
+    --bg:#0B1219; --panel:#0F1A22; --card:#16232E; --row:#131F29;
+    /* ★ 다크 바탕에서 경계가 안 보였다 (사용자 지적). 세 단계로 나눈다 */
+    --line:rgba(255,255,255,.16);      /* 바깥 테두리 · 큰 구획 */
+    --line2:rgba(255,255,255,.14);     /* 표 안 줄 */
+    --line3:rgba(255,255,255,.10);     /* 카드 안쪽 — 은은하게 */
     --ivory:#F4EEDF; --chalk:#7E9AB0; --dim:#5B7186; --gold:#E8B838;
     --green:#4FB286; --red:#F09595;
   }
@@ -16,33 +20,42 @@
   body{margin:0;background:var(--bg);color:var(--ivory);
     font-family:'IBM Plex Sans KR',-apple-system,system-ui,'Malgun Gothic',sans-serif;font-size:14px;}
   button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;font-size:14px;}
-  input,select,textarea{font-family:inherit;font-size:14px;width:100%;
-    background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:8px;
-    padding:9px 11px;color:var(--ivory);}
+  input,select,textarea{font-family:inherit;font-size:13.5px;width:100%;
+    background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.16);border-radius:8px;
+    padding:10px 13px;color:var(--ivory);}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(232,184,56,.55);}
   input::placeholder{color:var(--dim);}
   .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 60px;}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
   .top{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;}
-  .tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line);}
-  .tab{padding:12px 18px;font-size:14px;color:var(--chalk);border-bottom:2px solid transparent;}
-  .tab.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:700;}
+  .tabs{display:flex;gap:4px;padding:10px 18px 0;border-bottom:1px solid var(--line);}
+  .tab{padding:9px 16px;font-size:13.5px;color:var(--chalk);border-radius:8px 8px 0 0;}
+  .tab.on{background:var(--gold);color:#141200;font-weight:700;}
+  .tab .n{opacity:.7;font-size:12px;margin-left:3px;}
   .body{padding:16px 18px;}
   .sum{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;}
-  .box{flex:1;min-width:170px;background:var(--card);border-radius:10px;padding:12px 14px;}
-  .box .k{font-size:11px;color:var(--chalk);}
-  .box .v{font-size:21px;margin-top:3px;font-variant-numeric:tabular-nums;}
-  .warn{background:#2a2418;border:1px solid rgba(232,184,56,.4);}
+  .box{flex:1;min-width:170px;background:var(--card);border:1px solid var(--line3);
+       border-radius:10px;padding:13px 15px;}
+  .box .k{font-size:11px;color:var(--chalk);letter-spacing:.04em;}
+  .box .v{font-size:22px;margin-top:4px;font-variant-numeric:tabular-nums;}
+  .box .u{font-size:12px;color:var(--chalk);margin-left:2px;}
+  .warn{background:#241E12;border-color:rgba(232,184,56,.45);}
   .warn .k,.warn .v{color:var(--gold);}
-  .bar{display:flex;gap:9px;margin-bottom:13px;align-items:center;flex-wrap:wrap;}
-  .prim{background:var(--gold);color:#141200;border-radius:8px;padding:9px 15px;font-weight:700;}
-  .ghost{border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:9px 13px;color:#B9CCDA;font-size:12.5px;}
+  .bar{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;}
+  .prim{background:var(--gold);color:#141200;border-radius:8px;padding:10px 16px;font-weight:700;font-size:13px;}
+  .ghost{border:1px solid rgba(255,255,255,.22);border-radius:8px;padding:10px 14px;
+         color:#B9CCDA;font-size:12.5px;}
   .ghost.on{border-color:var(--gold);color:var(--gold);}
-  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden;}
-  th{font-size:11px;color:var(--chalk);text-align:left;font-weight:600;
-     padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap;}
-  td{padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top;}
+  .tbox{border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden;}
+  table{width:100%;border-collapse:collapse;background:var(--row);}
+  th{font-size:11px;color:var(--chalk);text-align:left;font-weight:600;letter-spacing:.04em;
+     padding:11px 16px;background:var(--card);
+     border-bottom:1px solid var(--line2);white-space:nowrap;}
+  td{padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.07);vertical-align:top;font-size:13.5px;}
   tr:last-child td{border-bottom:none;}
-  .sub{font-size:11px;color:var(--dim);margin-top:2px;}
+  tbody tr:hover td{background:rgba(255,255,255,.03);}
+  .r{text-align:right;}
+  .sub{font-size:11.5px;color:var(--dim);margin-top:3px;}
   .num{font-variant-numeric:tabular-nums;}
   .gold{color:var(--gold);} .green{color:var(--green);} .red{color:var(--red);}
   .link{font-size:11.5px;color:var(--chalk);text-decoration:underline;}
@@ -57,6 +70,11 @@
        font-weight:600;z-index:60;}
   .mid{max-width:420px;margin:70px auto;text-align:center;}
   .note{font-size:12px;color:var(--dim);line-height:1.8;}
+  .empty{border:1px dashed rgba(255,255,255,.16);border-radius:10px;padding:52px 20px;text-align:center;}
+  .empty .ic{width:52px;height:52px;margin:0 auto 14px;border-radius:50%;
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+    display:flex;align-items:center;justify-content:center;font-size:23px;color:#3E5568;}
+  .empty .h{font-size:14.5px;color:#B9CCDA;margin-bottom:6px;}
 </style>
 </head>
 <body>
@@ -356,7 +374,7 @@ function EditSheet({
       fontSize: 17,
       fontWeight: 700
     }
-  }, kind === "venue" ? isNew ? "당구장 추가" : "당구장 고치기" : isNew ? "회원 추가" : "회원 고치기"), /*#__PURE__*/React.createElement("button", {
+  }, kind === "venue" ? isNew ? "당구장 등록" : "당구장 수정" : isNew ? "회원 등록" : "회원 수정"), /*#__PURE__*/React.createElement("button", {
     className: "link",
     onClick: onClose
   }, "닫기")), kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
@@ -518,34 +536,26 @@ function Ledger({
     className: "box"
   }, /*#__PURE__*/React.createElement("div", {
     className: "k"
-  }, "쓰고 있는 ", kind === "venue" ? "당구장" : "회원"), /*#__PURE__*/React.createElement("div", {
+  }, kind === "venue" ? "운영 중인 당구장" : "이용 중인 회원"), /*#__PURE__*/React.createElement("div", {
     className: "v num"
   }, live.length, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: "var(--chalk)"
-    }
-  }, "곳"))), /*#__PURE__*/React.createElement("div", {
+    className: "u"
+  }, kind === "venue" ? "곳" : "명"))), /*#__PURE__*/React.createElement("div", {
     className: "box"
   }, /*#__PURE__*/React.createElement("div", {
     className: "k"
-  }, "한 달 매출"), /*#__PURE__*/React.createElement("div", {
+  }, "월 반복 매출"), /*#__PURE__*/React.createElement("div", {
     className: "v num"
   }, won(money), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: "var(--chalk)"
-    }
+    className: "u"
   }, "원"))), /*#__PURE__*/React.createElement("div", {
     className: "box" + (soon ? " warn" : "")
   }, /*#__PURE__*/React.createElement("div", {
     className: "k"
-  }, "7일 안에 만료"), /*#__PURE__*/React.createElement("div", {
+  }, "갱신 임박 · 7일 이내"), /*#__PURE__*/React.createElement("div", {
     className: "v num"
   }, soon, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12
-    }
+    className: "u"
   }, "건")))), /*#__PURE__*/React.createElement("div", {
     className: "bar"
   }, /*#__PURE__*/React.createElement("input", {
@@ -555,20 +565,32 @@ function Ledger({
     },
     value: q,
     onChange: e => setQ(e.target.value),
-    placeholder: kind === "venue" ? "당구장 · 점주 · 연락처로 찾기" : "이름 · 이메일 · 연락처로 찾기"
+    placeholder: kind === "venue" ? "당구장 · 점주 · 연락처 검색" : "이름 · 이메일 · 연락처 검색"
   }), /*#__PURE__*/React.createElement("button", {
     className: "ghost" + (showOld ? " on" : ""),
     onClick: () => setShowOld(!showOld)
-  }, "만료된 것도 보기"), /*#__PURE__*/React.createElement("button", {
+  }, "만료 포함"), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     onClick: onAdd
-  }, "＋ ", kind === "venue" ? "당구장" : "회원", " 추가")), list.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "48px 0",
-      textAlign: "center"
-    },
+  }, "＋ ", kind === "venue" ? "당구장" : "회원", " 등록")), list.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "empty"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "ic"
+  }, q ? "🔍" : kind === "venue" ? "🎱" : "👥"), /*#__PURE__*/React.createElement("div", {
+    className: "h"
+  }, q ? "검색 결과가 없습니다" : `아직 등록된 ${kind === "venue" ? "당구장" : "회원"}이 없습니다`), /*#__PURE__*/React.createElement("div", {
     className: "note"
-  }, q ? "찾는 것이 없습니다." : "아직 없습니다. 오른쪽 위에서 추가하세요.") : /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "당구장"), /*#__PURE__*/React.createElement("th", null, "점주 · 연락처"), /*#__PURE__*/React.createElement("th", null, "대수"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "이름 · 연락처"), /*#__PURE__*/React.createElement("th", null, "이메일"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null, "메모"), /*#__PURE__*/React.createElement("th", null)))), /*#__PURE__*/React.createElement("tbody", null, list.map(r => {
+  }, q ? "다른 말로 찾아보시거나, [만료 포함] 을 켜 보세요." : /*#__PURE__*/React.createElement(React.Fragment, null, "입금을 확인하신 뒤 오른쪽 위 ", /*#__PURE__*/React.createElement("span", {
+    className: "gold"
+  }, "＋ ", kind === "venue" ? "당구장" : "회원", " 등록"), " 으로 추가하세요."))) : /*#__PURE__*/React.createElement("div", {
+    className: "tbox"
+  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "당구장"), /*#__PURE__*/React.createElement("th", null, "점주 · 연락처"), /*#__PURE__*/React.createElement("th", {
+    className: "r"
+  }, "대수"), /*#__PURE__*/React.createElement("th", null, "이용 기간"), /*#__PURE__*/React.createElement("th", {
+    className: "r"
+  }, "월 요금"), /*#__PURE__*/React.createElement("th", null)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "이름 · 연락처"), /*#__PURE__*/React.createElement("th", null, "이메일"), /*#__PURE__*/React.createElement("th", null, "이용 기간"), /*#__PURE__*/React.createElement("th", {
+    className: "r"
+  }, "월 요금"), /*#__PURE__*/React.createElement("th", null, "메모"), /*#__PURE__*/React.createElement("th", null)))), /*#__PURE__*/React.createElement("tbody", null, list.map(r => {
     const L = leftView(r.until);
     return /*#__PURE__*/React.createElement("tr", {
       key: r.id
@@ -577,8 +599,8 @@ function Ledger({
     }, r.addr || "-")), /*#__PURE__*/React.createElement("td", null, r.owner_name || "-", /*#__PURE__*/React.createElement("div", {
       className: "sub"
     }, r.phone || "-")), /*#__PURE__*/React.createElement("td", {
-      className: "num"
-    }, r.tables, "대")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", null, r.nick || "-", /*#__PURE__*/React.createElement("div", {
+      className: "num r"
+    }, r.tables)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", null, r.nick || "-", /*#__PURE__*/React.createElement("div", {
       className: "sub"
     }, r.phone || "-")), /*#__PURE__*/React.createElement("td", {
       style: {
@@ -592,7 +614,7 @@ function Ledger({
     }, md(r.started_on), " ~ ", md(r.until), /*#__PURE__*/React.createElement("div", {
       className: "sub " + L.cls
     }, L.txt)), /*#__PURE__*/React.createElement("td", {
-      className: "num gold"
+      className: "num r gold"
     }, r.source === "free" ? /*#__PURE__*/React.createElement("span", {
       style: {
         color: "var(--chalk)"
@@ -602,11 +624,13 @@ function Ledger({
       style: {
         maxWidth: 180
       }
-    }, r.memo || ""), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("button", {
+    }, r.memo || ""), /*#__PURE__*/React.createElement("td", {
+      className: "r"
+    }, /*#__PURE__*/React.createElement("button", {
       className: "link",
       onClick: () => onEdit(r)
-    }, "고치기")));
-  }))));
+    }, "수정")));
+  })))));
 }
 
 /* ── 전체 ── */
@@ -738,18 +762,12 @@ function App() {
     className: "tab" + (tab === "venue" ? " on" : ""),
     onClick: () => setTab("venue")
   }, "당구장 회원 ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: "var(--chalk)"
-    }
+    className: "n"
   }, venues.length)), /*#__PURE__*/React.createElement("button", {
     className: "tab" + (tab === "sub" ? " on" : ""),
     onClick: () => setTab("sub")
   }, "일반 회원 ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: "var(--chalk)"
-    }
+    className: "n"
   }, subs.length))), /*#__PURE__*/React.createElement(Ledger, {
     kind: tab,
     rows: rows,
