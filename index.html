@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-14 QR 로 카메라 주소 -->
+<!-- build: 1판-15 판 세는 말 통일 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -2552,6 +2552,7 @@ function EndAsk({
   notStarted,
   gameNo,
   nextNo,
+  nextWord,
   willEndSeries,
   seriesLine,
   unitWord,
@@ -2717,7 +2718,7 @@ function EndAsk({
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: blue,
     onClick: onNextGame
-  }, nextNo, unitWord, " 시작하기"), /*#__PURE__*/React.createElement("button", {
+  }, nextWord || `${nextNo}${unitWord}`, " 시작하기"), /*#__PURE__*/React.createElement("button", {
     style: line,
     onClick: onFinishHere
   }, "이번 판까지만 치고 끝내기"), /*#__PURE__*/React.createElement("button", {
@@ -4103,7 +4104,9 @@ function Billiard({
     setGameNo(n => n + 1);
     setPhase("board");
     wakeOn();
-    say2(`${gameNo + 1}게임 시작`);
+    /* ★ 판 종료는 "두 번째 판 종료" 인데 시작은 "2게임 시작" 이라 말투가 어긋났다 (사용자 지적).
+          한 곳에서만 고치고 다른 곳을 안 봐서 생긴 일이다 (8판 ⑳) */
+    say2(`${nthOf(gameNo + 1)} 시작`);
   };
   const commit = () => {
     const ids = ps.map(p => p.key);
@@ -4361,14 +4364,14 @@ function Billiard({
       color: "var(--chalk)",
       letterSpacing: ".1em"
     }
-  }, bestOf === 1 ? B_LABEL[mode] : `${bestOf}게임 중 ${log.length}번째`), /*#__PURE__*/React.createElement("div", {
+  }, bestOf === 1 ? B_LABEL[mode] : `${bestOf}판 중 ${nthOf(log.length)}`), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 19,
       fontWeight: 700,
       marginTop: 6,
       color: seriesOver ? "var(--accent)" : "var(--ivory)"
     }
-  }, seriesOver ? topName ? `${topName} 우승` : "승부를 가리지 못했습니다" : `${log.length}게임이 끝났습니다`), place ? /*#__PURE__*/React.createElement("div", {
+  }, seriesOver ? topName ? `${topName} 우승` : "승부를 가리지 못했습니다" : `${nthOf(log.length)}이 끝났습니다`), place ? /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "var(--chalk)",
@@ -4492,7 +4495,7 @@ function Billiard({
       color: "var(--chalk)",
       marginTop: 8
     }
-  }, multiSeat ? `${bestOf - log.length}게임 남았습니다` : `${need}판 먼저 이기면 승리`)), winner === "" && /*#__PURE__*/React.createElement("div", {
+  }, multiSeat ? `${bestOf - log.length}판 남았습니다` : `${need}판 먼저 이기면 승리`)), winner === "" && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12.5,
       color: "rgba(232,184,56,.9)",
@@ -4542,7 +4545,7 @@ function Billiard({
       padding: 16,
       fontSize: 16
     }
-  }, gameNo + 1, "게임 시작 ▸"), /*#__PURE__*/React.createElement("button", {
+  }, nthOf(gameNo + 1), " 시작 ▸"), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: () => setStopped(true)
   }, "여기까지만 치고 끝내기")), /*#__PURE__*/React.createElement("button", {
@@ -4759,7 +4762,7 @@ function Billiard({
         color: "#888",
         whiteSpace: "nowrap"
       }
-    }, gameNo, "게임째")), /*#__PURE__*/React.createElement("div", {
+    }, nthOf(gameNo))), /*#__PURE__*/React.createElement("div", {
       className: "num",
       style: {
         fontSize: MID_VAL,
@@ -4927,6 +4930,7 @@ function Billiard({
       seriesLine: line,
       unitWord: unitWord,
       single: bestOf === 1,
+      nextWord: nthOf(gameNo + 1),
       onBack: () => setEndAsk(false),
       onHome: () => {
         setEndAsk(false);
@@ -5006,7 +5010,7 @@ function Billiard({
     frames: replay,
     onClose: () => setReplay(null)
   }), goAsk && /*#__PURE__*/React.createElement(HomeAsk, {
-    line: log.length ? `${bestOf > 1 ? `${bestOf}게임 중 ${gameNo}게임째` : "치는 중"} · 앞 게임 ${log.length}판은 이미 끝났습니다` : `${bestOf > 1 ? `${gameNo}게임째` : "치는 중"} · 아직 저장하지 않았습니다`
+    line: log.length ? `${bestOf > 1 ? `${bestOf}판 중 ${nthOf(gameNo)}` : "치는 중"} · 앞의 ${log.length}판은 이미 끝났습니다` : `${bestOf > 1 ? nthOf(gameNo) : "치는 중"} · 아직 저장하지 않았습니다`
     /* ★ 한 판이라도 끝냈으면 남기고 나갈 수 있다.
           지금 치던 판만 있으면 남길 것이 없다 — 그 판은 아직 안 끝났다 */,
     canSave: log.length > 0,
