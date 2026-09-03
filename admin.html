@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<!-- build: admin 1판 -->
+<!-- build: admin 1판-2 전화번호 하이픈 -->
 <title>당구 스코어 · 관리자</title>
 <style>
   :root{
@@ -100,6 +100,30 @@ const addMonth = (d, n) => {
 const daysLeft = until => Math.ceil((new Date(until + "T23:59:59") - new Date()) / 86400000);
 const won = n => (Number(n) || 0).toLocaleString("ko-KR");
 const md = s => s ? s.slice(5).replace("-", "/") : "";
+
+/* ★ 전화번호에 하이픈을 저절로 붙인다 (사용자 지시).
+      치는 도중에도 자연스럽게 붙어야 하므로 자릿수에 따라 갈라 넣는다.
+      02 만 지역번호가 두 자리다. 1588 같은 대표번호도 있다 */
+function phoneFmt(v) {
+  const d = String(v || "").replace(/[^0-9]/g, "").slice(0, 11);
+  if (!d) return "";
+  if (d.startsWith("02")) {
+    /* 서울 — 02-123-4567 · 02-1234-5678 */
+    if (d.length < 3) return d;
+    if (d.length < 6) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length < 10) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  }
+  if (/^1[0-9]{3}/.test(d) && !d.startsWith("10")) {
+    /* 1588-1234 같은 대표번호 */
+    if (d.length < 5) return d;
+    return `${d.slice(0, 4)}-${d.slice(4, 8)}`;
+  }
+  if (d.length < 4) return d;
+  if (d.length < 8) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length < 11) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+}
 
 /* 남은 날짜를 색으로 */
 const leftView = until => {
@@ -279,6 +303,7 @@ function EditSheet({
   } : {
     nick: "",
     email: "",
+    phone: "",
     started_on: today(),
     until: addMonth(today(), 1),
     fee: SUB_FEE,
@@ -357,7 +382,8 @@ function EditSheet({
     className: "lbl"
   }, "연락처"), /*#__PURE__*/React.createElement("input", {
     value: f.phone || "",
-    onChange: e => set("phone", e.target.value),
+    inputMode: "tel",
+    onChange: e => set("phone", phoneFmt(e.target.value)),
     placeholder: "010-0000-0000"
   }))), /*#__PURE__*/React.createElement("span", {
     className: "lbl"
@@ -372,13 +398,22 @@ function EditSheet({
     value: f.nick || "",
     onChange: e => set("nick", e.target.value),
     placeholder: "류승현"
-  }), /*#__PURE__*/React.createElement("span", {
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "row2"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "lbl"
   }, "이메일"), /*#__PURE__*/React.createElement("input", {
     value: f.email || "",
     onChange: e => set("email", e.target.value),
     placeholder: "name@example.com"
-  }), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "연락처"), /*#__PURE__*/React.createElement("input", {
+    value: f.phone || "",
+    inputMode: "tel",
+    onChange: e => set("phone", phoneFmt(e.target.value)),
+    placeholder: "010-0000-0000"
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "note",
     style: {
       marginTop: 5
@@ -520,7 +555,7 @@ function Ledger({
     },
     value: q,
     onChange: e => setQ(e.target.value),
-    placeholder: kind === "venue" ? "당구장 · 점주 · 연락처로 찾기" : "이름 · 이메일로 찾기"
+    placeholder: kind === "venue" ? "당구장 · 점주 · 연락처로 찾기" : "이름 · 이메일 · 연락처로 찾기"
   }), /*#__PURE__*/React.createElement("button", {
     className: "ghost" + (showOld ? " on" : ""),
     onClick: () => setShowOld(!showOld)
@@ -533,7 +568,7 @@ function Ledger({
       textAlign: "center"
     },
     className: "note"
-  }, q ? "찾는 것이 없습니다." : "아직 없습니다. 오른쪽 위에서 추가하세요.") : /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "당구장"), /*#__PURE__*/React.createElement("th", null, "점주 · 연락처"), /*#__PURE__*/React.createElement("th", null, "대수"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "이름"), /*#__PURE__*/React.createElement("th", null, "이메일"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null, "메모"), /*#__PURE__*/React.createElement("th", null)))), /*#__PURE__*/React.createElement("tbody", null, list.map(r => {
+  }, q ? "찾는 것이 없습니다." : "아직 없습니다. 오른쪽 위에서 추가하세요.") : /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "당구장"), /*#__PURE__*/React.createElement("th", null, "점주 · 연락처"), /*#__PURE__*/React.createElement("th", null, "대수"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "이름 · 연락처"), /*#__PURE__*/React.createElement("th", null, "이메일"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null, "메모"), /*#__PURE__*/React.createElement("th", null)))), /*#__PURE__*/React.createElement("tbody", null, list.map(r => {
     const L = leftView(r.until);
     return /*#__PURE__*/React.createElement("tr", {
       key: r.id
@@ -543,7 +578,9 @@ function Ledger({
       className: "sub"
     }, r.phone || "-")), /*#__PURE__*/React.createElement("td", {
       className: "num"
-    }, r.tables, "대")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", null, r.nick || "-"), /*#__PURE__*/React.createElement("td", {
+    }, r.tables, "대")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", null, r.nick || "-", /*#__PURE__*/React.createElement("div", {
+      className: "sub"
+    }, r.phone || "-")), /*#__PURE__*/React.createElement("td", {
       style: {
         wordBreak: "break-all"
       }
