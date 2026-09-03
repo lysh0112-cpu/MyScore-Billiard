@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<!-- build: admin 1판 -->
+<title>당구 스코어 · 관리자</title>
+<style>
+  :root{
+    --bg:#0B1219; --panel:#0F1A22; --card:#16232E; --line:rgba(255,255,255,.10);
+    --ivory:#F4EEDF; --chalk:#7E9AB0; --dim:#5B7186; --gold:#E8B838;
+    --green:#4FB286; --red:#F09595;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ivory);
+    font-family:'IBM Plex Sans KR',-apple-system,system-ui,'Malgun Gothic',sans-serif;font-size:14px;}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;font-size:14px;}
+  input,select,textarea{font-family:inherit;font-size:14px;width:100%;
+    background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:8px;
+    padding:9px 11px;color:var(--ivory);}
+  input::placeholder{color:var(--dim);}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 60px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+  .top{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;}
+  .tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line);}
+  .tab{padding:12px 18px;font-size:14px;color:var(--chalk);border-bottom:2px solid transparent;}
+  .tab.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:700;}
+  .body{padding:16px 18px;}
+  .sum{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;}
+  .box{flex:1;min-width:170px;background:var(--card);border-radius:10px;padding:12px 14px;}
+  .box .k{font-size:11px;color:var(--chalk);}
+  .box .v{font-size:21px;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .warn{background:#2a2418;border:1px solid rgba(232,184,56,.4);}
+  .warn .k,.warn .v{color:var(--gold);}
+  .bar{display:flex;gap:9px;margin-bottom:13px;align-items:center;flex-wrap:wrap;}
+  .prim{background:var(--gold);color:#141200;border-radius:8px;padding:9px 15px;font-weight:700;}
+  .ghost{border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:9px 13px;color:#B9CCDA;font-size:12.5px;}
+  .ghost.on{border-color:var(--gold);color:var(--gold);}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden;}
+  th{font-size:11px;color:var(--chalk);text-align:left;font-weight:600;
+     padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  td{padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .sub{font-size:11px;color:var(--dim);margin-top:2px;}
+  .num{font-variant-numeric:tabular-nums;}
+  .gold{color:var(--gold);} .green{color:var(--green);} .red{color:var(--red);}
+  .link{font-size:11.5px;color:var(--chalk);text-decoration:underline;}
+  .veil{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;
+        align-items:center;justify-content:center;padding:16px;z-index:50;}
+  .modal{width:100%;max-width:460px;max-height:92vh;overflow-y:auto;
+         background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;}
+  .lbl{font-size:11px;color:var(--chalk);letter-spacing:.1em;margin:12px 0 6px;display:block;font-weight:600;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .msg{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);
+       background:var(--ivory);color:#141200;padding:11px 18px;border-radius:999px;
+       font-weight:600;z-index:60;}
+  .mid{max-width:420px;margin:70px auto;text-align:center;}
+  .note{font-size:12px;color:var(--dim);line-height:1.8;}
+</style>
+</head>
+<body>
+<div id="root"><div class="mid"><div class="note">불러오는 중…</div></div></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script>
+/* ══════════════════════════════════════════════
+   당구 스코어 — 관리자 (PC 전용)
+
+   ★ 당구 앱(index.html)과 완전히 다른 파일이다.
+      손님 태블릿에는 이 파일이 올라가지 않으므로 흔적도 안 남는다.
+
+   ★ 잠금은 서버가 한다
+      로그인한 뒤 bil_admin 표에 그 사람이 있어야만 장부가 보인다.
+      브라우저에서 아무리 만져도 못 뚫는다 (Supabase RLS).
+
+   ★ 지금은 손으로 적는 장부다
+      PG 결제가 붙기 전까지 계좌이체로 받고 여기에 직접 적는다.
+   ══════════════════════════════════════════════ */
+
+const {
+  useState,
+  useEffect,
+  useMemo
+} = React;
+const SB_URL = "https://auvuwytatfcoawdrgunl.supabase.co";
+const SB_KEY = "sb_publishable_9-cLLZC0YETjFq4XpAZCog_X9ofa2FZ";
+const KEY = "billiard:admin:v1";
+const VENUE_FEE = 50000; /* 당구장 월 요금 (잠정) */
+const SUB_FEE = 5000; /* 개인 월 요금 (잠정) */
+
+/* ── 자잘한 것 ── */
+const today = () => new Date().toISOString().slice(0, 10);
+const addMonth = (d, n) => {
+  const t = new Date(d + "T00:00:00");
+  t.setMonth(t.getMonth() + n);
+  return t.toISOString().slice(0, 10);
+};
+const daysLeft = until => Math.ceil((new Date(until + "T23:59:59") - new Date()) / 86400000);
+const won = n => (Number(n) || 0).toLocaleString("ko-KR");
+const md = s => s ? s.slice(5).replace("-", "/") : "";
+
+/* 남은 날짜를 색으로 */
+const leftView = until => {
+  const d = daysLeft(until);
+  if (d < 0) return {
+    txt: `${-d}일 지남`,
+    cls: "red"
+  };
+  if (d <= 3) return {
+    txt: `${d}일 남음`,
+    cls: "red"
+  };
+  if (d <= 7) return {
+    txt: `${d}일 남음`,
+    cls: "gold"
+  };
+  return {
+    txt: `${d}일 남음`,
+    cls: "green"
+  };
+};
+
+/* ── 서버 ── */
+const sb = async (path, opt = {}, token) => {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    ...opt,
+    headers: {
+      apikey: SB_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: opt.method === "POST" ? "return=representation" : opt.method === "PATCH" ? "return=representation" : "",
+      ...(opt.headers || {})
+    }
+  });
+  if (!r.ok) throw new Error((await r.text()) || r.status);
+  if (r.status === 204) return null;
+  const t = await r.text();
+  return t ? JSON.parse(t) : null;
+};
+const rpc = async (name, token, body = {}) => {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: {
+      apikey: SB_KEY,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error((await r.text()) || r.status);
+  return r.json();
+};
+const signIn = async (email, pw) => {
+  const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: {
+      apikey: SB_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email,
+      password: pw
+    })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error_description || j.msg || j.error || "로그인 실패");
+  return j;
+};
+const refresh = async rt => {
+  const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: {
+      apikey: SB_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      refresh_token: rt
+    })
+  });
+  if (!r.ok) return null;
+  return r.json();
+};
+
+/* ── 로그인 화면 ── */
+function Login({
+  onDone,
+  say
+}) {
+  const [email, setEmail] = useState(localStorage.getItem(KEY + ":email") || "");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    if (!email.trim() || !pw) return say("이메일과 비밀번호를 넣어주세요");
+    setBusy(true);
+    try {
+      const t = await signIn(email.trim().toLowerCase(), pw);
+      /* ★ 로그인만으로는 안 된다. 서버가 관리자라고 해야 한다 */
+      const okAdmin = await rpc("is_bil_admin", t.access_token);
+      if (!okAdmin) {
+        setBusy(false);
+        return say("이 계정은 관리자가 아닙니다");
+      }
+      localStorage.setItem(KEY + ":email", email.trim().toLowerCase());
+      onDone(t);
+    } catch (e) {
+      setBusy(false);
+      say(String(e.message || e).slice(0, 90));
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "mid"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "panel",
+    style: {
+      padding: 26
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      fontWeight: 700,
+      marginBottom: 6
+    }
+  }, "당구 스코어 · 관리자"), /*#__PURE__*/React.createElement("div", {
+    className: "note",
+    style: {
+      marginBottom: 18
+    }
+  }, "관리자 계정으로 로그인하세요."), /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "이메일"), /*#__PURE__*/React.createElement("input", {
+    value: email,
+    onChange: e => setEmail(e.target.value),
+    onKeyDown: e => e.key === "Enter" && go(),
+    placeholder: "name@example.com"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "비밀번호"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    value: pw,
+    onChange: e => setPw(e.target.value),
+    onKeyDown: e => e.key === "Enter" && go()
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    style: {
+      width: "100%",
+      marginTop: 18,
+      padding: 13
+    },
+    disabled: busy,
+    onClick: go
+  }, busy ? "확인하는 중…" : "로그인")));
+}
+
+/* ── 고치는 창 ──
+   ★ 당구장과 개인이 칸만 다르고 하는 일이 같다. 한 창으로 만든다
+      (같은 것을 두 벌 만들면 반드시 어긋난다) */
+function EditSheet({
+  kind,
+  row,
+  onSave,
+  onDel,
+  onClose,
+  say
+}) {
+  const fresh = kind === "venue" ? {
+    name: "",
+    addr: "",
+    owner_name: "",
+    phone: "",
+    tables: 1,
+    started_on: today(),
+    until: addMonth(today(), 1),
+    fee: VENUE_FEE,
+    source: "bank",
+    memo: ""
+  } : {
+    nick: "",
+    email: "",
+    started_on: today(),
+    until: addMonth(today(), 1),
+    fee: SUB_FEE,
+    source: "bank",
+    memo: ""
+  };
+  const [f, setF] = useState({
+    ...fresh,
+    ...(row || {})
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (k, v) => setF(x => ({
+    ...x,
+    [k]: v
+  }));
+  const isNew = !row;
+  const save = async () => {
+    if (busy) return;
+    if (kind === "venue" && !String(f.name).trim()) return say("당구장 이름을 넣어주세요");
+    if (kind === "sub" && !String(f.nick).trim() && !String(f.email).trim()) return say("이름이나 이메일 중 하나는 넣어주세요");
+    if (!f.until) return say("만료일을 넣어주세요");
+    setBusy(true);
+    try {
+      await onSave(f);
+    } catch (e) {
+      setBusy(false);
+      say(String(e.message || e).slice(0, 90));
+    }
+  };
+
+  /* 기간을 한 번에 늘리는 단추 — 매달 연장이 제일 잦은 일이다 */
+  const extend = n => {
+    const base = daysLeft(f.until) > 0 ? f.until : today();
+    set("until", addMonth(base, n));
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "veil",
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 17,
+      fontWeight: 700
+    }
+  }, kind === "venue" ? isNew ? "당구장 추가" : "당구장 고치기" : isNew ? "회원 추가" : "회원 고치기"), /*#__PURE__*/React.createElement("button", {
+    className: "link",
+    onClick: onClose
+  }, "닫기")), kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "당구장 이름"), /*#__PURE__*/React.createElement("input", {
+    value: f.name,
+    onChange: e => set("name", e.target.value),
+    placeholder: "신도림당구장"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "주소"), /*#__PURE__*/React.createElement("input", {
+    value: f.addr || "",
+    onChange: e => set("addr", e.target.value),
+    placeholder: "서울 구로구"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "row2"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "점주 이름"), /*#__PURE__*/React.createElement("input", {
+    value: f.owner_name || "",
+    onChange: e => set("owner_name", e.target.value)
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "연락처"), /*#__PURE__*/React.createElement("input", {
+    value: f.phone || "",
+    onChange: e => set("phone", e.target.value),
+    placeholder: "010-0000-0000"
+  }))), /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "당구대 수"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "1",
+    value: f.tables,
+    onChange: e => set("tables", Number(e.target.value) || 1)
+  })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "이름"), /*#__PURE__*/React.createElement("input", {
+    value: f.nick || "",
+    onChange: e => set("nick", e.target.value),
+    placeholder: "류승현"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "이메일"), /*#__PURE__*/React.createElement("input", {
+    value: f.email || "",
+    onChange: e => set("email", e.target.value),
+    placeholder: "name@example.com"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "note",
+    style: {
+      marginTop: 5
+    }
+  }, "앱에 로그인한 계정과 이메일이 같으면 그 사람의 이용권이 됩니다.")), /*#__PURE__*/React.createElement("div", {
+    className: "row2"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "시작일"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: f.started_on,
+    onChange: e => set("started_on", e.target.value)
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "만료일"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: f.until,
+    onChange: e => set("until", e.target.value)
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 7,
+      marginTop: 8
+    }
+  }, [1, 3, 6, 12].map(n => /*#__PURE__*/React.createElement("button", {
+    key: n,
+    className: "ghost",
+    style: {
+      flex: 1
+    },
+    onClick: () => extend(n)
+  }, "＋", n, "개월"))), /*#__PURE__*/React.createElement("div", {
+    className: "row2"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "월 요금"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    value: f.fee,
+    onChange: e => set("fee", Number(e.target.value) || 0)
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "받은 방법"), /*#__PURE__*/React.createElement("select", {
+    value: f.source,
+    onChange: e => set("source", e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "bank"
+  }, "계좌이체"), /*#__PURE__*/React.createElement("option", {
+    value: "card"
+  }, "카드"), /*#__PURE__*/React.createElement("option", {
+    value: "free"
+  }, "무료")))), /*#__PURE__*/React.createElement("span", {
+    className: "lbl"
+  }, "메모"), /*#__PURE__*/React.createElement("textarea", {
+    rows: "2",
+    value: f.memo || "",
+    onChange: e => set("memo", e.target.value)
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    style: {
+      width: "100%",
+      marginTop: 18,
+      padding: 13
+    },
+    disabled: busy,
+    onClick: save
+  }, busy ? "저장하는 중…" : "저장"), !isNew && /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      marginTop: 8,
+      padding: 11,
+      color: "var(--red)",
+      border: "1px solid rgba(240,149,149,.35)",
+      borderRadius: 8
+    },
+    onClick: () => {
+      if (confirm("이 줄을 지울까요?")) onDel(row);
+    }
+  }, "지우기")));
+}
+
+/* ── 장부 한 탭 ── */
+function Ledger({
+  kind,
+  rows,
+  onAdd,
+  onEdit
+}) {
+  const [q, setQ] = useState("");
+  const [showOld, setShowOld] = useState(false);
+  const list = useMemo(() => {
+    const k = q.trim().toLowerCase();
+    return rows.filter(r => showOld ? true : daysLeft(r.until) >= 0).filter(r => !k || [r.name, r.addr, r.owner_name, r.phone, r.nick, r.email, r.memo].some(x => String(x || "").toLowerCase().includes(k))).sort((a, b) => a.until < b.until ? -1 : 1);
+  }, [rows, q, showOld]);
+  const live = rows.filter(r => daysLeft(r.until) >= 0);
+  const money = live.reduce((t, r) => t + (r.source === "free" ? 0 : Number(r.fee) || 0), 0);
+  const soon = live.filter(r => daysLeft(r.until) <= 7).length;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "body"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sum"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "box"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "k"
+  }, "쓰고 있는 ", kind === "venue" ? "당구장" : "회원"), /*#__PURE__*/React.createElement("div", {
+    className: "v num"
+  }, live.length, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--chalk)"
+    }
+  }, "곳"))), /*#__PURE__*/React.createElement("div", {
+    className: "box"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "k"
+  }, "한 달 매출"), /*#__PURE__*/React.createElement("div", {
+    className: "v num"
+  }, won(money), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--chalk)"
+    }
+  }, "원"))), /*#__PURE__*/React.createElement("div", {
+    className: "box" + (soon ? " warn" : "")
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "k"
+  }, "7일 안에 만료"), /*#__PURE__*/React.createElement("div", {
+    className: "v num"
+  }, soon, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12
+    }
+  }, "건")))), /*#__PURE__*/React.createElement("div", {
+    className: "bar"
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      flex: 1,
+      minWidth: 200
+    },
+    value: q,
+    onChange: e => setQ(e.target.value),
+    placeholder: kind === "venue" ? "당구장 · 점주 · 연락처로 찾기" : "이름 · 이메일로 찾기"
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "ghost" + (showOld ? " on" : ""),
+    onClick: () => setShowOld(!showOld)
+  }, "만료된 것도 보기"), /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    onClick: onAdd
+  }, "＋ ", kind === "venue" ? "당구장" : "회원", " 추가")), list.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "48px 0",
+      textAlign: "center"
+    },
+    className: "note"
+  }, q ? "찾는 것이 없습니다." : "아직 없습니다. 오른쪽 위에서 추가하세요.") : /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "당구장"), /*#__PURE__*/React.createElement("th", null, "점주 · 연락처"), /*#__PURE__*/React.createElement("th", null, "대수"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", null, "이름"), /*#__PURE__*/React.createElement("th", null, "이메일"), /*#__PURE__*/React.createElement("th", null, "사용 기간"), /*#__PURE__*/React.createElement("th", null, "월 요금"), /*#__PURE__*/React.createElement("th", null, "메모"), /*#__PURE__*/React.createElement("th", null)))), /*#__PURE__*/React.createElement("tbody", null, list.map(r => {
+    const L = leftView(r.until);
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id
+    }, kind === "venue" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", null, r.name, /*#__PURE__*/React.createElement("div", {
+      className: "sub"
+    }, r.addr || "-")), /*#__PURE__*/React.createElement("td", null, r.owner_name || "-", /*#__PURE__*/React.createElement("div", {
+      className: "sub"
+    }, r.phone || "-")), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, r.tables, "대")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", null, r.nick || "-"), /*#__PURE__*/React.createElement("td", {
+      style: {
+        wordBreak: "break-all"
+      }
+    }, r.email || "-")), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        fontSize: 12.5
+      }
+    }, md(r.started_on), " ~ ", md(r.until), /*#__PURE__*/React.createElement("div", {
+      className: "sub " + L.cls
+    }, L.txt)), /*#__PURE__*/React.createElement("td", {
+      className: "num gold"
+    }, r.source === "free" ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "var(--chalk)"
+      }
+    }, "무료") : won(r.fee)), kind === "sub" && /*#__PURE__*/React.createElement("td", {
+      className: "sub",
+      style: {
+        maxWidth: 180
+      }
+    }, r.memo || ""), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("button", {
+      className: "link",
+      onClick: () => onEdit(r)
+    }, "고치기")));
+  }))));
+}
+
+/* ── 전체 ── */
+function App() {
+  const [tok, setTok] = useState(null);
+  const [tab, setTab] = useState("venue");
+  const [venues, setVenues] = useState([]);
+  const [subs, setSubs] = useState([]);
+  const [edit, setEdit] = useState(null); /* { kind, row } */
+  const [msg, setMsg] = useState("");
+  const [ready, setReady] = useState(false);
+  const say = m => {
+    setMsg(m);
+    setTimeout(() => setMsg(""), 2600);
+  };
+
+  /* 지난번 로그인을 이어받는다 */
+  useEffect(() => {
+    (async () => {
+      const rt = localStorage.getItem(KEY + ":rt");
+      if (rt) {
+        const t = await refresh(rt);
+        if (t && t.access_token) {
+          try {
+            if (await rpc("is_bil_admin", t.access_token)) {
+              setTok(t);
+            }
+          } catch (e) {}
+        }
+      }
+      setReady(true);
+    })();
+  }, []);
+  useEffect(() => {
+    if (!tok) return;
+    localStorage.setItem(KEY + ":rt", tok.refresh_token || "");
+    (async () => {
+      try {
+        const [v, s] = await Promise.all([sb("bil_venue?select=*", {}, tok.access_token), sb("bil_sub?select=*", {}, tok.access_token)]);
+        setVenues(v || []);
+        setSubs(s || []);
+      } catch (e) {
+        say("자료를 못 읽었습니다 — " + String(e.message || e).slice(0, 70));
+      }
+    })();
+  }, [tok]);
+  const table = k => k === "venue" ? "bil_venue" : "bil_sub";
+  const save = async (kind, f) => {
+    const clean = {
+      ...f
+    };
+    delete clean.created_at;
+    delete clean.updated_at;
+    if (clean.id) {
+      const id = clean.id;
+      delete clean.id;
+      const out = await sb(`${table(kind)}?id=eq.${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(clean)
+      }, tok.access_token);
+      const row = out && out[0] || {
+        ...f
+      };
+      (kind === "venue" ? setVenues : setSubs)(L => L.map(x => x.id === id ? row : x));
+    } else {
+      const out = await sb(table(kind), {
+        method: "POST",
+        body: JSON.stringify(clean)
+      }, tok.access_token);
+      const row = out && out[0] || clean;
+      (kind === "venue" ? setVenues : setSubs)(L => [...L, row]);
+    }
+    setEdit(null);
+    say("저장했습니다");
+  };
+  const del = async (kind, row) => {
+    try {
+      await sb(`${table(kind)}?id=eq.${row.id}`, {
+        method: "DELETE"
+      }, tok.access_token);
+      (kind === "venue" ? setVenues : setSubs)(L => L.filter(x => x.id !== row.id));
+      setEdit(null);
+      say("지웠습니다");
+    } catch (e) {
+      say(String(e.message || e).slice(0, 90));
+    }
+  };
+  if (!ready) return /*#__PURE__*/React.createElement("div", {
+    className: "mid"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "note"
+  }, "불러오는 중…"));
+  if (!tok) return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Login, {
+    onDone: setTok,
+    say: say
+  }), msg && /*#__PURE__*/React.createElement("div", {
+    className: "msg"
+  }, msg));
+  const rows = tab === "venue" ? venues : subs;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "wrap"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "top"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "당구 스코어 · 관리자"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--chalk)"
+    }
+  }, localStorage.getItem(KEY + ":email") || ""), /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    onClick: () => {
+      localStorage.removeItem(KEY + ":rt");
+      setTok(null);
+    }
+  }, "로그아웃")), /*#__PURE__*/React.createElement("div", {
+    className: "tabs"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "tab" + (tab === "venue" ? " on" : ""),
+    onClick: () => setTab("venue")
+  }, "당구장 회원 ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--chalk)"
+    }
+  }, venues.length)), /*#__PURE__*/React.createElement("button", {
+    className: "tab" + (tab === "sub" ? " on" : ""),
+    onClick: () => setTab("sub")
+  }, "일반 회원 ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--chalk)"
+    }
+  }, subs.length))), /*#__PURE__*/React.createElement(Ledger, {
+    kind: tab,
+    rows: rows,
+    onAdd: () => setEdit({
+      kind: tab,
+      row: null
+    }),
+    onEdit: r => setEdit({
+      kind: tab,
+      row: r
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "note",
+    style: {
+      marginTop: 14,
+      textAlign: "center"
+    }
+  }, "당구장 월 ", won(VENUE_FEE), "원 · 일반 회원 월 ", won(SUB_FEE), "원 (잠정)", /*#__PURE__*/React.createElement("br", null), "결제가 붙기 전까지는 계좌이체로 받고 여기에 직접 적습니다."), edit && /*#__PURE__*/React.createElement(EditSheet, {
+    kind: edit.kind,
+    row: edit.row,
+    say: say,
+    onSave: f => save(edit.kind, f),
+    onDel: r => del(edit.kind, r),
+    onClose: () => setEdit(null)
+  }), msg && /*#__PURE__*/React.createElement("div", {
+    className: "msg"
+  }, msg));
+}
+
+class ErrBoundary extends React.Component {
+  constructor(p){ super(p); this.state={err:null}; }
+  static getDerivedStateFromError(e){ return {err:e}; }
+  render(){
+    if(this.state.err){
+      return React.createElement('div',{className:'mid'},
+        React.createElement('div',{style:{fontSize:16,marginBottom:10}},'화면을 그리다 멈췄습니다'),
+        React.createElement('div',{className:'note'},String(this.state.err&&this.state.err.message||this.state.err)),
+        React.createElement('button',{className:'prim',style:{marginTop:18,padding:'11px 22px'},
+          onClick:function(){location.reload();}},'다시 열기'));
+    }
+    return this.props.children;
+  }
+}
+ReactDOM.createRoot(document.getElementById('root'))
+  .render(React.createElement(ErrBoundary,null,React.createElement(App)));
+</script>
+</body>
+</html>
