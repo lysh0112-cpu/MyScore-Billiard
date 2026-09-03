@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-7 판 종료 음성 -->
+<!-- build: 1판-10 단판 종료 정리 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -1842,6 +1842,7 @@ function EndAsk({
   willEndSeries,
   seriesLine,
   unitWord,
+  single,
   onBack,
   onNextGame,
   onFinishHere,
@@ -1907,7 +1908,9 @@ function EndAsk({
   };
 
   /* 제목 — 지금이 어떤 상황인지 제목만 보고 알 수 있게 */
-  const title = drew ? overTime ? `${limitMin}분이 다 됐습니다` : notStarted ? "아직 시작하지 않았습니다" : "아직 치는 중입니다" : `${gameNo}${unitWord}를 끝낼까요?`;
+  const title = drew ? overTime ? `${limitMin}분이 다 됐습니다` : notStarted ? "아직 시작하지 않았습니다" : "아직 치는 중입니다"
+  /* ★ 단판은 "1게임를 끝낼까요?" 가 아니라 그냥 경기가 끝난 것이다 (사용자 지적).
+        조사도 틀렸다 — "게임를" */ : single ? "경기가 끝났습니다" : `${gameNo}${unitWord}을 끝낼까요?`;
   return /*#__PURE__*/React.createElement("div", {
     onClick: onBack,
     style: {
@@ -1992,7 +1995,7 @@ function EndAsk({
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: green,
     onClick: onFinishHere
-  }, "경기 끝내기"), /*#__PURE__*/React.createElement("button", {
+  }, single ? "기록하고 끝내기" : "경기 끝내기"), /*#__PURE__*/React.createElement("button", {
     style: back,
     onClick: onBack
   }, "돌아가기")) :
@@ -2927,6 +2930,8 @@ function Billiard({
         finish() 가 setLog 로 마지막 판을 담는 것이 먼저 끝나야 하므로,
         표시만 켜 두고 다음 그림에서 commit 을 부른다 */
   const [saveNow, setSaveNow] = useState(false);
+  /* ★ 단판에서 목표에 닿는 순간 이미 승부를 말했다는 표시. finish 에서 또 말하지 않는다 */
+  const endSaid = useRef(false);
   const [memo, setMemo] = useState("");
   const [score, setScore] = useState({});
   const [turns, setTurns] = useState({});
@@ -3112,7 +3117,15 @@ function Billiard({
       const doneCnt = already + 1;
       const remain = units.length - doneCnt;
       if (units.length <= 2 || remain <= 1) {
-        say2(`${d}점, 목표 도달`); /* ★ 곧이어 "…판 종료" 가 나온다. 두 번 말하지 않는다 */
+        /* ★ 단판은 이 순간이 곧 경기의 끝이다. "목표 도달" 만으로는 끝난 줄 모른다 (사용자 지적).
+              여러 판이면 곧이어 "첫 판 종료, OO 승" 이 나오므로 여기서는 짧게 둔다 */
+        if (bestOf === 1 && autoEnd) {
+          /* ★ 목표를 넘겨 한 점 더 쳐도 같은 말을 또 하지 않는다 */
+          if (endSaid.current) say2(`${d}점`);else {
+            say2(`${d}점, ${p.name} 승, 경기가 종료되었습니다`);
+            endSaid.current = true;
+          }
+        } else say2(`${d}점, 목표 도달`);
       } else {
         say2(`${d}점, ${doneCnt}위 도달, ${remain}명 계속 진행`);
       }
@@ -3198,6 +3211,7 @@ function Billiard({
     setHist([]);
     setRunning(false);
     setBegun(false);
+    endSaid.current = false;
   };
   /* ★ go — 이 판을 저장한 뒤 어디로 갈지
         "next"   바로 다음 판으로 (결과 화면을 안 거친다)
@@ -3291,7 +3305,13 @@ function Billiard({
          그래서 마지막 승자는 이 판 결과까지 얹어 직접 센다 */
     const last = stop || gameNo >= bestOf || !multiSeat && Object.keys(wins).some(k => (wins[k] || 0) + (!drew && rank[0]?.key === k ? 1 : 0) >= need);
     const head = bestOf > 1 ? `${nthOf(gameNo, last)} 종료` : "경기 종료";
-    const win = drew ? "무승부" : `${rank[0]?.name || ""} 승`;
+    const win = `${rank[0]?.name || ""} 승`;
+
+    /* ★ 무승부는 소리로 알리지 않는다 (사용자 지시).
+          화면에는 그대로 "무승부" 로 나온다 — 소리만 안 낸다.
+          다만 마지막 판이 무승부라도 경기 전체 승자는 있을 수 있으므로
+          그때는 승자만 부른다 */
+    if (drew && !last) return;
     if (!last) {
       say2(`${head}, ${win}`);
     } else {
@@ -3311,7 +3331,10 @@ function Billiard({
       const champ = board.length > 1 && board[0].v === board[1].v ? "" : board[0] && board[0].v > 0 ? board[0].n : "";
       /* ★ 단판은 이미 "경기 종료, OO 승" 으로 끝났다.
             한 판뿐인데 "최종 … 게임 승리" 를 붙이면 군더더기다 */
-      if (bestOf === 1) say2(`${head}, ${win}`);else say2(champ ? `${head}, ${win}, 최종 ${champ} 게임 승리했습니다` : `${head}, ${win}, 승부를 가리지 못했습니다`);
+      const tail = drew ? head : `${head}, ${win}`;
+      if (bestOf === 1) {
+        if (!drew && !endSaid.current) say2(tail);
+      } else if (champ) say2(`${tail}, 최종 ${champ} 게임 승리했습니다`);else if (!drew) say2(tail);
     }
     if (go === "next") {
       nextGame();
@@ -3358,6 +3381,7 @@ function Billiard({
           [1편 ⇄ 2편 자리 바꾸기] 가 경기가 끝날 때까지 안 그려졌다.
           reset() 과 commit() 에는 있는데 여기에만 없었다 (8판 ㉔ 와 같은 종류) */
     setBegun(false);
+    endSaid.current = false;
     setGameNo(n => n + 1);
     setPhase("board");
     wakeOn();
@@ -3563,6 +3587,11 @@ function Billiard({
     if (phase !== "board" || !autoEnd || multiSeat) return;
     const reached = units.filter(p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi));
     if (!reached.length) return;
+    /* ★ 목표에 닿으면 곧바로 시계를 멈춘다 (사용자 지적 · 진짜 버그였다).
+          8판까지는 running 을 안 껐다. 확인창이 떠 있는 동안에도 샷 클락이 계속 줄어들어
+          끝내 "시간 초과" 까지 말했다. 판이 끝났는데 시간을 재고 있을 이유가 없다 */
+    setRunning(false);
+    wakeOff();
     const t = setTimeout(() => setEndAsk(true), 1200);
     return () => clearTimeout(t);
   }, [score, phase, autoEnd]); // eslint-disable-line
@@ -4158,6 +4187,7 @@ function Billiard({
       willEndSeries: willEndSeries,
       seriesLine: line,
       unitWord: unitWord,
+      single: bestOf === 1,
       onBack: () => setEndAsk(false),
       onHome: () => {
         setEndAsk(false);
