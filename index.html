@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-11 다시 보기 -->
+<!-- build: 1판-12 다시 보기 연결 하나로 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -2935,36 +2935,57 @@ const camVideoUrl = u => {
   if (/\.(mjpg|mjpeg|cgi)(\?|$)/i.test(s) || /\/video$/i.test(s)) return s;
   return s + "/video";
 };
-function useReplay(url, on) {
+function useReplay(url, on, preview) {
   const frames = useRef([]);
-  const img = useRef(null);
   const canvas = useRef(null);
   const busy = useRef(false);
   const [state, setState] = useState("off"); /* off · wait · live · error */
-  const [count, setCount] = useState(0);
+  const [secs, setSecs] = useState(0); /* 몇 초 담겼는지 — 1초에 한 번만 고친다 */
+
   useEffect(() => {
     const src = camVideoUrl(url);
     if (!on || !src) {
       setState("off");
+      setSecs(0);
       return;
     }
     let alive = true;
+    let im = null;
     let lastOk = 0;
+    let tries = 0;
     setState("wait");
-    const im = new Image();
-    /* ★ 이게 없으면 캔버스가 잠겨 담을 수 없다. 2026-09-03 에 확인한 그 조건이다 */
-    im.crossOrigin = "anonymous";
-    im.decoding = "async";
-    im.onload = () => alive && setState("live");
-    im.onerror = () => {
-      if (alive) setState("error");
+
+    /* ★ MJPEG 연결은 하나만 쓴다 (사용자 지적으로 찾은 진짜 버그).
+          전에는 담는 Image 와 구석 미리보기 <img> 로 두 개를 열었다.
+          IP 카메라·IP Webcam 은 동시 연결 수가 적어서, 다시 보기를 한 번 열면
+          연결이 밀려 담는 쪽이 얼어붙었다 — "한 번 보고 나면 다시 안 된다"
+          미리보기는 담을 때 캔버스에 같이 그려서 해결한다 (연결을 안 늘린다) */
+    const connect = () => {
+      if (!alive) return;
+      if (im) {
+        im.onload = im.onerror = null;
+        im.src = "";
+      }
+      im = new Image();
+      /* ★ 이게 없으면 캔버스가 잠겨 담을 수 없다 (2026-09-03 확인한 조건) */
+      im.crossOrigin = "anonymous";
+      im.decoding = "async";
+      im.onload = () => {
+        if (alive) {
+          setState("live");
+          lastOk = Date.now();
+        }
+      };
+      im.onerror = () => {
+        if (alive) setState(tries > 2 ? "error" : "wait");
+      };
+      im.src = src + (src.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now();
+      lastOk = Date.now();
     };
-    im.src = src + (src.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now();
-    img.current = im;
+    connect();
     const MAX = CAM_FPS * CAM_SEC;
     const grab = () => {
-      if (!alive || busy.current) return; /* ★ 겹쳐 돌면 일이 밀려 쌓인다 */
-      if (!im.naturalWidth) return;
+      if (!alive || busy.current || !im || !im.naturalWidth) return;
       busy.current = true;
       const w = CAM_W;
       const h = Math.round(w * (im.naturalHeight / im.naturalWidth)) || 360;
@@ -2972,9 +2993,9 @@ function useReplay(url, on) {
         const c = document.createElement("canvas");
         c.width = w;
         c.height = h;
-        /* alpha:false — 투명도를 안 쓰면 그리기가 눈에 띄게 빠르다 */
         canvas.current = c;
       }
+      /* alpha:false — 투명도를 안 쓰면 그리기가 눈에 띄게 빠르다 */
       const ctx = canvas.current.getContext("2d", {
         alpha: false
       });
@@ -2986,6 +3007,20 @@ function useReplay(url, on) {
         setState("error");
         return;
       }
+
+      /* 미리보기 — 연결을 늘리지 않고 담은 그림을 그대로 옮겨 그린다 */
+      const pv = preview && preview.current;
+      if (pv) {
+        if (pv.width !== 208) {
+          pv.width = 208;
+          pv.height = Math.round(208 * h / w);
+        }
+        try {
+          pv.getContext("2d", {
+            alpha: false
+          }).drawImage(canvas.current, 0, 0, pv.width, pv.height);
+        } catch (e) {}
+      }
       canvas.current.toBlob(b => {
         busy.current = false;
         if (!b || !alive) return;
@@ -2995,32 +3030,40 @@ function useReplay(url, on) {
         });
         while (frames.current.length > MAX) frames.current.shift(); /* ★ 링 버퍼는 이 한 줄이 전부다 */
         lastOk = Date.now();
-        setCount(frames.current.length);
       }, "image/jpeg", 0.55);
     };
     const tick = setInterval(grab, Math.round(1000 / CAM_FPS));
-    const watch = setInterval(() => {
-      if (alive && lastOk && Date.now() - lastOk > 4000) setState("error");
-    }, 2000);
+    /* ★ 1초에 한 번만 화면 숫자를 고친다.
+          매 장마다 고치면 점수판 전체가 1초에 12번 다시 그려져 태블릿이 버겁다 */
+    const beat = setInterval(() => {
+      if (!alive) return;
+      setSecs(Math.floor(frames.current.length / CAM_FPS));
+      /* 3초 넘게 새 장면이 없으면 연결이 끊긴 것이다 — 다시 붙는다 */
+      if (Date.now() - lastOk > 3000) {
+        tries++;
+        connect();
+      }
+    }, 1000);
     return () => {
       alive = false;
       clearInterval(tick);
-      clearInterval(watch);
-      im.onload = im.onerror = null;
-      im.src = "";
-      img.current = null;
+      clearInterval(beat);
+      if (im) {
+        im.onload = im.onerror = null;
+        im.src = "";
+      }
+      im = null;
       canvas.current = null;
       /* ★ 나갈 때 반드시 비운다. 안 그러면 탭이 무거워진다 */
       frames.current = [];
-      setCount(0);
+      setSecs(0);
       setState("off");
     };
-  }, [url, on]);
+  }, [url, on, preview]);
   return {
     state,
-    count,
-    snapshot: () => frames.current.slice(),
-    liveSrc: camVideoUrl(url)
+    secs,
+    snapshot: () => frames.current.slice()
   };
 }
 
@@ -3077,7 +3120,7 @@ function ReplaySheet({
   const btn = {
     background: "rgba(255,255,255,.06)",
     borderRadius: 10,
-    padding: "13px 0",
+    padding: "11px 0",
     textAlign: "center",
     color: "#B9CCDA",
     fontSize: 16
@@ -3099,17 +3142,19 @@ function ReplaySheet({
     style: {
       width: "100%",
       maxWidth: 560,
+      maxHeight: "96vh",
+      overflowY: "auto",
       background: "#08192A",
       border: "1px solid var(--line)",
       borderRadius: 16,
-      padding: 14
+      padding: 12
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 11
+      marginBottom: 9
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -3129,13 +3174,15 @@ function ReplaySheet({
       background: "#0B1420",
       borderRadius: 12,
       overflow: "hidden",
-      marginBottom: 11
+      marginBottom: 9
     }
   }, /*#__PURE__*/React.createElement("canvas", {
     ref: cv,
     style: {
       width: "100%",
-      display: "block"
+      display: "block",
+      maxHeight: "42vh",
+      objectFit: "contain"
     }
   }), /*#__PURE__*/React.createElement("span", {
     style: {
@@ -3164,7 +3211,7 @@ function ReplaySheet({
       display: "flex",
       alignItems: "center",
       gap: 9,
-      marginBottom: 13
+      marginBottom: 11
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -3199,7 +3246,7 @@ function ReplaySheet({
       display: "grid",
       gridTemplateColumns: "repeat(5,1fr)",
       gap: 7,
-      marginBottom: 12
+      marginBottom: 10
     }
   }, /*#__PURE__*/React.createElement("button", {
     style: btn,
@@ -3263,7 +3310,7 @@ function ReplaySheet({
     className: "prim",
     onClick: onClose,
     style: {
-      padding: 14,
+      padding: 12,
       fontSize: 15
     }
   }, "점수판으로 돌아가기")));
@@ -3317,7 +3364,8 @@ function Billiard({
   const [saveNow, setSaveNow] = useState(false);
   /* ★ 다시 보기 — 카메라 주소를 넣었을 때만 돈다.
         안 넣으면 단추도 미리보기도 안 나온다 (카메라 없이 쓰는 분들 화면 그대로) */
-  const cam = useReplay(setup.cam, phase === "board");
+  const camPv = useRef(null);
+  const cam = useReplay(setup.cam, phase === "board", camPv);
   const [replay, setReplay] = useState(null);
   /* ★ 단판에서 목표에 닿는 순간 이미 승부를 말했다는 표시. finish 에서 또 말하지 않는다 */
   const endSaid = useRef(false);
@@ -4302,7 +4350,7 @@ function Billiard({
       bg: "#12243a",
       border: "1px solid #2f6fa8"
     }, /* ★ 다시 보기 — 카메라를 넣었을 때만 나온다 */
-    ...(cam.state === "live" && cam.count > CAM_FPS ? [{
+    ...(cam.state === "live" && cam.secs >= 1 ? [{
       label: /*#__PURE__*/React.createElement("span", {
         style: {
           display: "block",
@@ -4636,20 +4684,21 @@ function Billiard({
       alignItems: "center",
       justifyContent: "center"
     }
-  }, cam.state === "live" ? /*#__PURE__*/React.createElement("img", {
-    src: cam.liveSrc,
-    alt: "",
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: camPv,
     style: {
       width: "100%",
       height: "100%",
-      objectFit: "cover"
+      objectFit: "cover",
+      display: cam.state === "live" ? "block" : "none"
     }
-  }) : /*#__PURE__*/React.createElement("span", {
+  }), cam.state !== "live" && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 9.5,
       color: "#5B7186",
       textAlign: "center",
-      lineHeight: 1.4
+      lineHeight: 1.4,
+      whiteSpace: "pre"
     }
   }, cam.state === "wait" ? "카메라\n연결 중" : "카메라\n못 찾음"), cam.state === "live" && /*#__PURE__*/React.createElement("span", {
     style: {
@@ -4672,7 +4721,7 @@ function Billiard({
       fontSize: 8.5,
       color: "#F09595"
     }
-  }, Math.floor(cam.count / CAM_FPS), "초 담김"))), replay && /*#__PURE__*/React.createElement(ReplaySheet, {
+  }, cam.secs, "초 담김"))), replay && /*#__PURE__*/React.createElement(ReplaySheet, {
     frames: replay,
     onClose: () => setReplay(null)
   }), goAsk && /*#__PURE__*/React.createElement(HomeAsk, {
