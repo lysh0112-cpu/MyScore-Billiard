@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-12 다시 보기 연결 하나로 -->
+<!-- build: 1판-13 다시 보기 가로 배치 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -3074,7 +3074,7 @@ function ReplaySheet({
 }) {
   const cv = useRef(null);
   const [i, setI] = useState(0);
-  const [rate, setRate] = useState(0.5);
+  const [rate, setRate] = useState(0.25);
   const [play, setPlay] = useState(true);
   const total = frames.length;
 
@@ -3117,13 +3117,27 @@ function ReplaySheet({
     return () => clearInterval(t);
   }, [play, rate, total]);
   const ago = total ? ((total - 1 - i) / CAM_FPS).toFixed(1) : "0.0";
-  const btn = {
+
+  /* ★ 태블릿 가로 화면에 맞춘 배치 (사용자 지시)
+        전에는 컨트롤이 세 줄이라 영상이 눌렸다.
+        컨트롤 · 배속 · 나가기를 한 줄로 합치고 그만큼 영상을 키웠다 */
+  const H = 38;
+  const key = {
+    height: H,
+    borderRadius: 9,
     background: "rgba(255,255,255,.06)",
-    borderRadius: 10,
-    padding: "11px 0",
-    textAlign: "center",
     color: "#B9CCDA",
-    fontSize: 16
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 15,
+    flexShrink: 0
+  };
+  const bar = {
+    width: 1,
+    height: 26,
+    background: "rgba(255,255,255,.12)",
+    flexShrink: 0
   };
   return /*#__PURE__*/React.createElement("div", {
     onClick: onClose,
@@ -3135,89 +3149,81 @@ function ReplaySheet({
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: 14
+      padding: 8
     }
   }, /*#__PURE__*/React.createElement("div", {
     onClick: e => e.stopPropagation(),
     style: {
       width: "100%",
-      maxWidth: 560,
-      maxHeight: "96vh",
-      overflowY: "auto",
+      maxWidth: 780,
+      maxHeight: "97vh",
+      overflow: "hidden",
       background: "#08192A",
       border: "1px solid var(--line)",
-      borderRadius: 16,
-      padding: 12
+      borderRadius: 14,
+      padding: "10px 12px 11px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 9
+      marginBottom: 7
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "baseline",
+      gap: 9
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: 700
     }
-  }, "다시 보기"), /*#__PURE__*/React.createElement("button", {
+  }, "다시 보기"), /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      fontSize: 11.5,
+      color: "#5B7186"
+    }
+  }, "－", ago, "초")), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
+      fontSize: 12.5,
       color: "#5B7186",
-      fontSize: 13,
-      padding: 6
+      padding: "4px 6px"
     }
-  }, "닫기")), /*#__PURE__*/React.createElement("div", {
+  }, "닫기 ✕")), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative",
       background: "#0B1420",
-      borderRadius: 12,
+      borderRadius: 10,
       overflow: "hidden",
-      marginBottom: 9
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
     }
   }, /*#__PURE__*/React.createElement("canvas", {
     ref: cv,
     style: {
       width: "100%",
       display: "block",
-      maxHeight: "42vh",
+      maxHeight: "calc(97vh - 150px)",
       objectFit: "contain"
     }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      position: "absolute",
-      left: 10,
-      top: 9,
-      background: "rgba(0,0,0,.55)",
-      borderRadius: 6,
-      padding: "3px 8px",
-      fontSize: 11,
-      color: "#B9CCDA"
-    }
-  }, "－", ago, "초"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      position: "absolute",
-      right: 10,
-      top: 9,
-      background: "rgba(0,0,0,.55)",
-      borderRadius: 6,
-      padding: "3px 8px",
-      fontSize: 11,
-      color: "#B9CCDA"
-    }
-  }, rate, "배")), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
       gap: 9,
-      marginBottom: 11
+      margin: "9px 0"
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 11,
+      fontSize: 10.5,
       color: "#5B7186",
-      width: 36
+      width: 32
     }
   }, "-", CAM_SEC, "초"), /*#__PURE__*/React.createElement("input", {
     type: "range",
@@ -3236,84 +3242,115 @@ function ReplaySheet({
     }
   }), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 11,
+      fontSize: 10.5,
       color: "#5B7186",
-      width: 26,
+      width: 24,
       textAlign: "right"
     }
   }, "지금")), /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "grid",
-      gridTemplateColumns: "repeat(5,1fr)",
-      gap: 7,
-      marginBottom: 10
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 5,
+      flexShrink: 0
     }
   }, /*#__PURE__*/React.createElement("button", {
-    style: btn,
+    style: {
+      ...key,
+      width: 42
+    },
+    "aria-label": "맨 앞으로",
     onClick: () => {
       setPlay(false);
       setI(0);
-    },
-    "aria-label": "맨 앞으로"
+    }
   }, "⏮"), /*#__PURE__*/React.createElement("button", {
-    style: btn,
+    style: {
+      ...key,
+      width: 42,
+      fontSize: 17
+    },
+    "aria-label": "한 장 뒤로",
     onClick: () => {
       setPlay(false);
       setI(n => Math.max(0, n - 1));
-    },
-    "aria-label": "한 장 뒤로"
+    }
   }, "‹"), /*#__PURE__*/React.createElement("button", {
     style: {
-      ...btn,
+      ...key,
+      width: 56,
       background: ACCENT,
       color: "#141200",
-      fontSize: 18
+      fontSize: 17
     },
+    "aria-label": "재생",
     onClick: () => {
       if (i >= total - 1) setI(0);
       setPlay(!play);
-    },
-    "aria-label": "재생"
+    }
   }, play ? "❚❚" : "▶"), /*#__PURE__*/React.createElement("button", {
-    style: btn,
+    style: {
+      ...key,
+      width: 42,
+      fontSize: 17
+    },
+    "aria-label": "한 장 앞으로",
     onClick: () => {
       setPlay(false);
       setI(n => Math.min(total - 1, n + 1));
-    },
-    "aria-label": "한 장 앞으로"
+    }
   }, "›"), /*#__PURE__*/React.createElement("button", {
-    style: btn,
+    style: {
+      ...key,
+      width: 42
+    },
+    "aria-label": "다시 재생",
     onClick: () => {
       setI(0);
       setPlay(true);
-    },
-    "aria-label": "다시 재생"
-  }, "↻")), /*#__PURE__*/React.createElement("div", {
+    }
+  }, "↻")), /*#__PURE__*/React.createElement("span", {
+    style: bar
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "grid",
-      gridTemplateColumns: "repeat(4,1fr)",
-      gap: 7,
-      marginBottom: 12
+      display: "flex",
+      gap: 5,
+      flex: 1,
+      minWidth: 0
     }
   }, [0.25, 0.5, 1, 2].map(r => /*#__PURE__*/React.createElement("button", {
     key: r,
     onClick: () => setRate(r),
     style: {
-      borderRadius: 999,
-      padding: "9px 0",
+      flex: 1,
+      height: H,
+      borderRadius: 9,
       fontSize: 12.5,
       fontWeight: 600,
       background: rate === r ? ACCENT : "rgba(0,0,0,.32)",
       color: rate === r ? "#141200" : "#61798C"
     }
-  }, r, "배"))), /*#__PURE__*/React.createElement("button", {
-    className: "prim",
+  }, r, "배"))), /*#__PURE__*/React.createElement("span", {
+    style: bar
+  }), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
-      padding: 12,
-      fontSize: 15
+      flexShrink: 0,
+      height: H,
+      padding: "0 18px",
+      borderRadius: 9,
+      fontSize: 13,
+      fontWeight: 700,
+      background: "rgba(232,184,56,.14)",
+      border: "1px solid rgba(232,184,56,.45)",
+      color: ACCENT
     }
-  }, "점수판으로 돌아가기")));
+  }, "점수판"))));
 }
 function Billiard({
   data,
