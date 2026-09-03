@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-15 판 세는 말 통일 -->
+<!-- build: 1판-16 점수판에서 초구 색 바꾸기 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -3437,43 +3437,12 @@ function SeatSheet({
       background: "rgba(255,255,255,.08)",
       color: i === ps.length - 1 ? "#4a5a66" : "var(--ivory)"
     }
-  }, "뒤로 ▶")), /*#__PURE__*/React.createElement("div", {
+  }, "뒤로 ▶")), /*#__PURE__*/React.createElement("span", {
+    className: "lbl",
     style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 10,
-      marginBottom: 11
+      marginBottom: 7
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12.5,
-      color: autoBall ? "var(--ivory)" : "var(--chalk)"
-    }
-  }, "수구 자동 교대"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setAutoBall(!autoBall),
-    "aria-label": "수구 자동 교대",
-    style: {
-      width: 42,
-      height: 24,
-      borderRadius: 999,
-      flexShrink: 0,
-      position: "relative",
-      background: autoBall ? "var(--accent)" : "rgba(0,0,0,.35)",
-      border: "1px solid var(--line)"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      position: "absolute",
-      top: 2,
-      left: autoBall ? 20 : 2,
-      width: 18,
-      height: 18,
-      borderRadius: "50%",
-      background: autoBall ? "#141200" : "var(--chalk)",
-      transition: ".18s"
-    }
-  }))), autoBall ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "초구 색"), autoBall ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -3625,7 +3594,10 @@ function Billiard({
   const autoEnd = !!setup.autoEnd;
   /* ★ 공은 늘 차례마다 번갈아 간다 (당구 전용). 스위치를 없앴다 */
   const autoBall = true;
-  const firstBall = Number(setup.firstBall) || 0;
+  /* ★ 치다가 사람 이름과 공 색이 어긋나는 일이 있다 (사용자 지적).
+        홈까지 나갔다 오지 않고 점수판에서 바로 고칠 수 있어야 한다.
+        ⚠ 초구 색만 바꾼다 — 그다음은 무조건 나머지 한 색이다 (7판 6-3) */
+  const [firstBall, setFirstBall] = useState(Number(setup.firstBall) || 0);
   const [turnNo, setTurnNo] = useState(0);
   const [finishOrder, setFinishOrder] = useState([]);
   const [startAt, setStartAt] = useState(null);
@@ -5037,7 +5009,14 @@ function Billiard({
     autoBall: autoBall,
     setAutoBall: () => {},
     firstBall: firstBall,
-    setFirstBall: () => {},
+    setFirstBall: b => {
+      if (b === firstBall) return;
+      setFirstBall(b);
+      /* 지금 칠 사람의 공이 무엇이 되는지 바로 알려준다 */
+      const now = (b + turnNo + (active - active + units.length) % units.length) % 2;
+      say(`${BALLNAME[b]}부터로 바꿨습니다`);
+      say2(`${callName(active, turnNo)} ${BALLNAME[(b + turnNo) % 2]}`);
+    },
     locked: turnNo > 0 || Object.values(score).some(v => v > 0),
     onClose: () => setSeat(null)
   }), handi !== null && /*#__PURE__*/React.createElement(HandiSheet, {
