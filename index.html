@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-13 다시 보기 가로 배치 -->
+<!-- build: 1판-14 QR 로 카메라 주소 -->
 <title>당구 스코어</title>
 <style>
   html{height:auto;}
@@ -894,6 +894,663 @@ const fullScreen = () => {
     document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
   } catch (e) {}
 };
+/* ── 다시 보기 (리플레이) ──────────────────────
+   ★ 2026-09-03 확인한 것 — 실제로 폰(IP Webcam)으로 재보고 정한 방식이다
+       ① MJPEG 이 크롬에서 그대로 나온다
+       ② 지연이 눈에 안 띌 만큼 짧다
+       ③ ★ 캔버스에 담을 수 있다 (CORS 통과) — 이게 막히면 리플레이가 안 된다
+
+   왜 MediaRecorder 를 안 쓰는가
+     ① 첫 조각(헤더)을 잃으면 재생이 안 된다. 링 버퍼와 상성이 나쁘다
+     ② 조각을 이어붙일 때 키프레임이 어긋나면 깨진다
+     ③ 프레임 한 장씩 다루지 못해 느리게 보기·한 장 넘기기가 어렵다
+     JPEG 은 한 장이 온전하다. 앞에서 버리고 뒤에 담으면 그만이다
+
+   메모리 어림 — 640×360 · 품질 0.55 → 한 장 약 25KB
+                12fps × 30초 = 360장 → 약 9MB. 태블릿에서 충분히 견딘다 */
+
+const CAM_FPS = 12;
+const CAM_SEC = 30;
+const CAM_W = 640;
+
+/* 카메라 주소에서 실시간 화면 주소를 만든다.
+   IP Webcam 은 /video 가 MJPEG, /shot.jpg 가 한 장이다.
+   사용자가 어디까지 넣었는지 모르니 알아서 맞춘다 */
+const camVideoUrl = u => {
+  const s = String(u || "").trim().replace(/\/+$/, "");
+  if (!s) return "";
+  if (/\.(mjpg|mjpeg|cgi)(\?|$)/i.test(s) || /\/video$/i.test(s)) return s;
+  return s + "/video";
+};
+function useReplay(url, on, preview) {
+  const frames = useRef([]);
+  const canvas = useRef(null);
+  const busy = useRef(false);
+  const [state, setState] = useState("off"); /* off · wait · live · error */
+  const [secs, setSecs] = useState(0); /* 몇 초 담겼는지 — 1초에 한 번만 고친다 */
+
+  useEffect(() => {
+    const src = camVideoUrl(url);
+    if (!on || !src) {
+      setState("off");
+      setSecs(0);
+      return;
+    }
+    let alive = true;
+    let im = null;
+    let lastOk = 0;
+    let tries = 0;
+    setState("wait");
+
+    /* ★ MJPEG 연결은 하나만 쓴다 (사용자 지적으로 찾은 진짜 버그).
+          전에는 담는 Image 와 구석 미리보기 <img> 로 두 개를 열었다.
+          IP 카메라·IP Webcam 은 동시 연결 수가 적어서, 다시 보기를 한 번 열면
+          연결이 밀려 담는 쪽이 얼어붙었다 — "한 번 보고 나면 다시 안 된다"
+          미리보기는 담을 때 캔버스에 같이 그려서 해결한다 (연결을 안 늘린다) */
+    const connect = () => {
+      if (!alive) return;
+      if (im) {
+        im.onload = im.onerror = null;
+        im.src = "";
+      }
+      im = new Image();
+      /* ★ 이게 없으면 캔버스가 잠겨 담을 수 없다 (2026-09-03 확인한 조건) */
+      im.crossOrigin = "anonymous";
+      im.decoding = "async";
+      im.onload = () => {
+        if (alive) {
+          setState("live");
+          lastOk = Date.now();
+        }
+      };
+      im.onerror = () => {
+        if (alive) setState(tries > 2 ? "error" : "wait");
+      };
+      im.src = src + (src.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now();
+      lastOk = Date.now();
+    };
+    connect();
+    const MAX = CAM_FPS * CAM_SEC;
+    const grab = () => {
+      if (!alive || busy.current || !im || !im.naturalWidth) return;
+      busy.current = true;
+      const w = CAM_W;
+      const h = Math.round(w * (im.naturalHeight / im.naturalWidth)) || 360;
+      if (!canvas.current || canvas.current.width !== w) {
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        canvas.current = c;
+      }
+      /* alpha:false — 투명도를 안 쓰면 그리기가 눈에 띄게 빠르다 */
+      const ctx = canvas.current.getContext("2d", {
+        alpha: false
+      });
+      try {
+        ctx.drawImage(im, 0, 0, w, h);
+      } catch (e) {
+        busy.current = false;
+        alive = false;
+        setState("error");
+        return;
+      }
+
+      /* 미리보기 — 연결을 늘리지 않고 담은 그림을 그대로 옮겨 그린다 */
+      const pv = preview && preview.current;
+      if (pv) {
+        if (pv.width !== 208) {
+          pv.width = 208;
+          pv.height = Math.round(208 * h / w);
+        }
+        try {
+          pv.getContext("2d", {
+            alpha: false
+          }).drawImage(canvas.current, 0, 0, pv.width, pv.height);
+        } catch (e) {}
+      }
+      canvas.current.toBlob(b => {
+        busy.current = false;
+        if (!b || !alive) return;
+        frames.current.push({
+          t: Date.now(),
+          blob: b
+        });
+        while (frames.current.length > MAX) frames.current.shift(); /* ★ 링 버퍼는 이 한 줄이 전부다 */
+        lastOk = Date.now();
+      }, "image/jpeg", 0.55);
+    };
+    const tick = setInterval(grab, Math.round(1000 / CAM_FPS));
+    /* ★ 1초에 한 번만 화면 숫자를 고친다.
+          매 장마다 고치면 점수판 전체가 1초에 12번 다시 그려져 태블릿이 버겁다 */
+    const beat = setInterval(() => {
+      if (!alive) return;
+      setSecs(Math.floor(frames.current.length / CAM_FPS));
+      /* 3초 넘게 새 장면이 없으면 연결이 끊긴 것이다 — 다시 붙는다 */
+      if (Date.now() - lastOk > 3000) {
+        tries++;
+        connect();
+      }
+    }, 1000);
+    return () => {
+      alive = false;
+      clearInterval(tick);
+      clearInterval(beat);
+      if (im) {
+        im.onload = im.onerror = null;
+        im.src = "";
+      }
+      im = null;
+      canvas.current = null;
+      /* ★ 나갈 때 반드시 비운다. 안 그러면 탭이 무거워진다 */
+      frames.current = [];
+      setSecs(0);
+      setState("off");
+    };
+  }, [url, on, preview]);
+  return {
+    state,
+    secs,
+    snapshot: () => frames.current.slice()
+  };
+}
+
+/* 담아둔 JPEG 을 차례로 그린다. 느리게 보기·한 장 넘기기가 여기서 나온다 */
+function ReplaySheet({
+  frames,
+  onClose
+}) {
+  const cv = useRef(null);
+  const [i, setI] = useState(0);
+  const [rate, setRate] = useState(0.25);
+  const [play, setPlay] = useState(true);
+  const total = frames.length;
+
+  /* ★ 한 장 그리고 곧바로 주소를 반납한다.
+        반납을 안 하면 360장이 그대로 메모리에 남는다 */
+  useEffect(() => {
+    const f = frames[i];
+    if (!f || !cv.current) return;
+    const u = URL.createObjectURL(f.blob);
+    const im = new Image();
+    im.onload = () => {
+      const c = cv.current;
+      if (!c) {
+        URL.revokeObjectURL(u);
+        return;
+      }
+      if (c.width !== im.naturalWidth) {
+        c.width = im.naturalWidth;
+        c.height = im.naturalHeight;
+      }
+      c.getContext("2d", {
+        alpha: false
+      }).drawImage(im, 0, 0);
+      URL.revokeObjectURL(u);
+    };
+    im.onerror = () => URL.revokeObjectURL(u);
+    im.src = u;
+  }, [i, frames]);
+  useEffect(() => {
+    if (!play || !total) return;
+    const t = setInterval(() => {
+      setI(n => {
+        if (n >= total - 1) {
+          setPlay(false);
+          return n;
+        }
+        return n + 1;
+      });
+    }, Math.max(30, Math.round(1000 / CAM_FPS / rate)));
+    return () => clearInterval(t);
+  }, [play, rate, total]);
+  const ago = total ? ((total - 1 - i) / CAM_FPS).toFixed(1) : "0.0";
+
+  /* ★ 태블릿 가로 화면에 맞춘 배치 (사용자 지시)
+        전에는 컨트롤이 세 줄이라 영상이 눌렸다.
+        컨트롤 · 배속 · 나가기를 한 줄로 합치고 그만큼 영상을 키웠다 */
+  const H = 38;
+  const key = {
+    height: H,
+    borderRadius: 9,
+    background: "rgba(255,255,255,.06)",
+    color: "#B9CCDA",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 15,
+    flexShrink: 0
+  };
+  const bar = {
+    width: 1,
+    height: 26,
+    background: "rgba(255,255,255,.12)",
+    flexShrink: 0
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    onClick: onClose,
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,.85)",
+      zIndex: 95,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: "100%",
+      maxWidth: 780,
+      maxHeight: "97vh",
+      overflow: "hidden",
+      background: "#08192A",
+      border: "1px solid var(--line)",
+      borderRadius: 14,
+      padding: "10px 12px 11px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 7
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "baseline",
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700
+    }
+  }, "다시 보기"), /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      fontSize: 11.5,
+      color: "#5B7186"
+    }
+  }, "－", ago, "초")), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      fontSize: 12.5,
+      color: "#5B7186",
+      padding: "4px 6px"
+    }
+  }, "닫기 ✕")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      background: "#0B1420",
+      borderRadius: 10,
+      overflow: "hidden",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: cv,
+    style: {
+      width: "100%",
+      display: "block",
+      maxHeight: "calc(97vh - 150px)",
+      objectFit: "contain"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 9,
+      margin: "9px 0"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: "#5B7186",
+      width: 32
+    }
+  }, "-", CAM_SEC, "초"), /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: 0,
+    max: Math.max(0, total - 1),
+    value: i,
+    onChange: e => {
+      setPlay(false);
+      setI(Number(e.target.value));
+    },
+    style: {
+      flex: 1,
+      padding: 0,
+      background: "transparent",
+      border: "none"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: "#5B7186",
+      width: 24,
+      textAlign: "right"
+    }
+  }, "지금")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 5,
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...key,
+      width: 42
+    },
+    "aria-label": "맨 앞으로",
+    onClick: () => {
+      setPlay(false);
+      setI(0);
+    }
+  }, "⏮"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...key,
+      width: 42,
+      fontSize: 17
+    },
+    "aria-label": "한 장 뒤로",
+    onClick: () => {
+      setPlay(false);
+      setI(n => Math.max(0, n - 1));
+    }
+  }, "‹"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...key,
+      width: 56,
+      background: ACCENT,
+      color: "#141200",
+      fontSize: 17
+    },
+    "aria-label": "재생",
+    onClick: () => {
+      if (i >= total - 1) setI(0);
+      setPlay(!play);
+    }
+  }, play ? "❚❚" : "▶"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...key,
+      width: 42,
+      fontSize: 17
+    },
+    "aria-label": "한 장 앞으로",
+    onClick: () => {
+      setPlay(false);
+      setI(n => Math.min(total - 1, n + 1));
+    }
+  }, "›"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...key,
+      width: 42
+    },
+    "aria-label": "다시 재생",
+    onClick: () => {
+      setI(0);
+      setPlay(true);
+    }
+  }, "↻")), /*#__PURE__*/React.createElement("span", {
+    style: bar
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 5,
+      flex: 1,
+      minWidth: 0
+    }
+  }, [0.25, 0.5, 1, 2].map(r => /*#__PURE__*/React.createElement("button", {
+    key: r,
+    onClick: () => setRate(r),
+    style: {
+      flex: 1,
+      height: H,
+      borderRadius: 9,
+      fontSize: 12.5,
+      fontWeight: 600,
+      background: rate === r ? ACCENT : "rgba(0,0,0,.32)",
+      color: rate === r ? "#141200" : "#61798C"
+    }
+  }, r, "배"))), /*#__PURE__*/React.createElement("span", {
+    style: bar
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      flexShrink: 0,
+      height: H,
+      padding: "0 18px",
+      borderRadius: 9,
+      fontSize: 13,
+      fontWeight: 700,
+      background: "rgba(232,184,56,.14)",
+      border: "1px solid rgba(232,184,56,.45)",
+      color: ACCENT
+    }
+  }, "점수판"))));
+}
+
+/* ── QR 로 카메라 주소 넣기 ────────────────────
+   ★ 테이블 옆에 붙여둔 QR 을 찍으면 그 대의 카메라 주소가 저절로 들어간다.
+      당구장에 열 대가 있으면 대마다 주소가 다르다. 손으로 치면 틀리기 쉽다.
+
+   쓰는 것 — BarcodeDetector (크롬이 기본으로 가지고 있다. 라이브러리가 필요 없다)
+   ⚠ https 에서만 카메라를 열 수 있다. Vercel 주소는 https 라 괜찮다
+   ⚠ 이 기능이 없는 브라우저면 안내만 하고 손으로 치게 둔다 */
+function QrScan({
+  onFound,
+  onClose
+}) {
+  const vid = useRef(null);
+  const [msg, setMsg] = useState("카메라를 켜는 중…");
+  useEffect(() => {
+    let alive = true;
+    let stream = null;
+    let timer = null;
+    (async () => {
+      if (typeof BarcodeDetector === "undefined") {
+        setMsg("이 브라우저는 QR 읽기를 지원하지 않습니다. 주소를 직접 넣어주세요");
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: {
+              ideal: "environment"
+            }
+          },
+          audio: false
+        });
+      } catch (e) {
+        setMsg(String(e && e.name) === "NotAllowedError" ? "카메라 사용을 허락해 주세요" : "카메라를 열지 못했습니다. 주소를 직접 넣어주세요");
+        return;
+      }
+      if (!alive) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+      const v = vid.current;
+      if (!v) return;
+      v.srcObject = stream;
+      v.setAttribute("playsinline", "true");
+      try {
+        await v.play();
+      } catch (e) {}
+      setMsg("");
+      const det = new BarcodeDetector({
+        formats: ["qr_code"]
+      });
+      timer = setInterval(async () => {
+        if (!alive || !v.videoWidth) return;
+        try {
+          const found = await det.detect(v);
+          if (!found || !found.length) return;
+          /* 여러 개가 잡히면 주소처럼 생긴 것을 고른다 */
+          const hit = found.map(f => String(f.rawValue || "").trim()).find(t => /^https?:\/\//i.test(t)) || String(found[0].rawValue || "").trim();
+          if (!hit) return;
+          alive = false;
+          onFound(hit);
+        } catch (e) {}
+      }, 250);
+    })();
+    return () => {
+      alive = false;
+      if (timer) clearInterval(timer);
+      /* ★ 반드시 카메라를 놓는다. 안 놓으면 불이 켜진 채로 남는다 */
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (vid.current) vid.current.srcObject = null;
+    };
+  }, []); // eslint-disable-line
+
+  const corner = (a, b) => ({
+    position: "absolute",
+    width: 34,
+    height: 34,
+    ...a,
+    borderColor: ACCENT,
+    borderStyle: "solid",
+    borderWidth: 0,
+    ...b
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#000",
+      zIndex: 97,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("video", {
+    ref: vid,
+    muted: true,
+    playsInline: true,
+    style: {
+      position: "absolute",
+      inset: 0,
+      width: "100%",
+      height: "100%",
+      objectFit: "cover"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      padding: "14px 16px",
+      zIndex: 2,
+      background: "linear-gradient(180deg,rgba(0,0,0,.75),transparent)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700
+    }
+  }, "QR 찍기"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      fontSize: 12.5,
+      color: "#B9CCDA",
+      padding: "4px 6px"
+    }
+  }, "닫기 ✕")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      width: 200,
+      height: 200,
+      zIndex: 2
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: corner({
+      top: 0,
+      left: 0
+    }, {
+      borderTopWidth: 3,
+      borderLeftWidth: 3,
+      borderRadius: "6px 0 0 0"
+    })
+  }), /*#__PURE__*/React.createElement("span", {
+    style: corner({
+      top: 0,
+      right: 0
+    }, {
+      borderTopWidth: 3,
+      borderRightWidth: 3,
+      borderRadius: "0 6px 0 0"
+    })
+  }), /*#__PURE__*/React.createElement("span", {
+    style: corner({
+      bottom: 0,
+      left: 0
+    }, {
+      borderBottomWidth: 3,
+      borderLeftWidth: 3,
+      borderRadius: "0 0 0 6px"
+    })
+  }), /*#__PURE__*/React.createElement("span", {
+    style: corner({
+      bottom: 0,
+      right: 0
+    }, {
+      borderBottomWidth: 3,
+      borderRightWidth: 3,
+      borderRadius: "0 0 6px 0"
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      padding: 16,
+      zIndex: 2,
+      background: "linear-gradient(0deg,rgba(0,0,0,.8),transparent)",
+      textAlign: "center"
+    }
+  }, msg ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      color: "#F4EEDF",
+      lineHeight: 1.6,
+      marginBottom: 11
+    }
+  }, msg), /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    onClick: onClose,
+    style: {
+      maxWidth: 260,
+      margin: "0 auto",
+      fontSize: 14
+    }
+  }, "닫고 직접 넣기")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      color: "#F4EEDF",
+      marginBottom: 4
+    }
+  }, "테이블 옆 QR을 네모 안에 맞추세요"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#8fa6b8"
+    }
+  }, "찍히면 저절로 닫힙니다"))));
+}
 /* ── 홈 = 경기 준비 ──────────────────────────
    ★ 11종목 앱의 홈은 "무엇을 할지 고르는 곳" 이었지만,
       당구만 하는 앱의 홈은 "바로 치러 들어가는 곳" 이다.
@@ -1338,6 +1995,7 @@ function Home({
   const [voice, setVoice] = useState(S0.voice ?? true);
   /* ★ 카메라 주소 — 한 번 넣으면 저장된다. 당구장을 옮기면 바꾸면 된다 */
   const [cam, setCam] = useState(S0.cam || "");
+  const [qr, setQr] = useState(false);
   const names = useMemo(() => knownNames(data.games), [data.games]);
   const me = data.nick || null;
   const canAuto = ps.length === 2 || team;
@@ -1745,28 +2403,7 @@ function Home({
   }, "소리로 이름 부르기"), /*#__PURE__*/React.createElement(Toggle, {
     on: voice,
     set: setVoice
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 13
-    }
-  }, /*#__PURE__*/React.createElement(Lbl, null, "카메라 주소 (다시 보기)"), /*#__PURE__*/React.createElement("input", {
-    value: cam,
-    onChange: e => setCam(e.target.value),
-    placeholder: "http://192.168.0.31:8080",
-    inputMode: "url",
-    style: {
-      background: "rgba(0,0,0,.35)",
-      border: "none",
-      borderRadius: 9
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#6F8598",
-      marginTop: 5,
-      lineHeight: 1.6
-    }
-  }, "넣으면 점수판에 [▶ 다시 보기] 가 생깁니다. 비워두면 안 나옵니다.")), canAuto ? /*#__PURE__*/React.createElement("div", {
+  })), canAuto ? /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -1793,7 +2430,52 @@ function Home({
       color: "rgba(159,187,208,.7)",
       lineHeight: 1.6
     }
-  }, "세 명 이상은 1등이 나와도 끝까지 칩니다. 자동 종료를 쓰지 않습니다."))), /*#__PURE__*/React.createElement("div", {
+  }, "세 명 이상은 1등이 나와도 끝까지 칩니다. 자동 종료를 쓰지 않습니다."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: "1px solid rgba(255,255,255,.1)",
+      marginTop: 16,
+      paddingTop: 14
+    }
+  }, /*#__PURE__*/React.createElement(Lbl, null, "카메라 주소 (다시 보기)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 7
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: cam,
+    onChange: e => setCam(e.target.value),
+    placeholder: "http://192.168.0.31:8080",
+    inputMode: "url",
+    style: {
+      flex: 1,
+      minWidth: 0,
+      background: "rgba(0,0,0,.35)",
+      border: "none",
+      borderRadius: 9
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setQr(true),
+    style: {
+      flexShrink: 0,
+      display: "flex",
+      alignItems: "center",
+      gap: 5,
+      padding: "0 14px",
+      borderRadius: 9,
+      fontSize: 13,
+      fontWeight: 700,
+      color: ACCENT,
+      background: "rgba(232,184,56,.14)",
+      border: "1px solid rgba(232,184,56,.45)"
+    }
+  }, "▣ QR")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#6F8598",
+      marginTop: 6,
+      lineHeight: 1.6
+    }
+  }, "테이블 옆 QR을 찍으면 자동으로 들어갑니다. 직접 쳐도 됩니다.", cam ? "" : " 비워두면 [다시 보기] 가 안 나옵니다.")))), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "0 16px 16px"
     }
@@ -1805,7 +2487,14 @@ function Home({
       fontSize: 17,
       borderRadius: 14
     }
-  }, "점수판으로 이동")));
+  }, "점수판으로 이동")), qr && /*#__PURE__*/React.createElement(QrScan, {
+    onFound: v => {
+      setCam(v);
+      setQr(false);
+      say(`카메라 주소를 넣었습니다 · ${v.replace(/^https?:\/\//, "")}`);
+    },
+    onClose: () => setQr(false)
+  }));
 }
 const Toggle = ({
   on,
@@ -2906,451 +3595,6 @@ function SeatSheet({
       marginTop: 11
     }
   }, "닫기"))));
-}
-/* ── 다시 보기 (리플레이) ──────────────────────
-   ★ 2026-09-03 확인한 것 — 실제로 폰(IP Webcam)으로 재보고 정한 방식이다
-       ① MJPEG 이 크롬에서 그대로 나온다
-       ② 지연이 눈에 안 띌 만큼 짧다
-       ③ ★ 캔버스에 담을 수 있다 (CORS 통과) — 이게 막히면 리플레이가 안 된다
-
-   왜 MediaRecorder 를 안 쓰는가
-     ① 첫 조각(헤더)을 잃으면 재생이 안 된다. 링 버퍼와 상성이 나쁘다
-     ② 조각을 이어붙일 때 키프레임이 어긋나면 깨진다
-     ③ 프레임 한 장씩 다루지 못해 느리게 보기·한 장 넘기기가 어렵다
-     JPEG 은 한 장이 온전하다. 앞에서 버리고 뒤에 담으면 그만이다
-
-   메모리 어림 — 640×360 · 품질 0.55 → 한 장 약 25KB
-                12fps × 30초 = 360장 → 약 9MB. 태블릿에서 충분히 견딘다 */
-
-const CAM_FPS = 12;
-const CAM_SEC = 30;
-const CAM_W = 640;
-
-/* 카메라 주소에서 실시간 화면 주소를 만든다.
-   IP Webcam 은 /video 가 MJPEG, /shot.jpg 가 한 장이다.
-   사용자가 어디까지 넣었는지 모르니 알아서 맞춘다 */
-const camVideoUrl = u => {
-  const s = String(u || "").trim().replace(/\/+$/, "");
-  if (!s) return "";
-  if (/\.(mjpg|mjpeg|cgi)(\?|$)/i.test(s) || /\/video$/i.test(s)) return s;
-  return s + "/video";
-};
-function useReplay(url, on, preview) {
-  const frames = useRef([]);
-  const canvas = useRef(null);
-  const busy = useRef(false);
-  const [state, setState] = useState("off"); /* off · wait · live · error */
-  const [secs, setSecs] = useState(0); /* 몇 초 담겼는지 — 1초에 한 번만 고친다 */
-
-  useEffect(() => {
-    const src = camVideoUrl(url);
-    if (!on || !src) {
-      setState("off");
-      setSecs(0);
-      return;
-    }
-    let alive = true;
-    let im = null;
-    let lastOk = 0;
-    let tries = 0;
-    setState("wait");
-
-    /* ★ MJPEG 연결은 하나만 쓴다 (사용자 지적으로 찾은 진짜 버그).
-          전에는 담는 Image 와 구석 미리보기 <img> 로 두 개를 열었다.
-          IP 카메라·IP Webcam 은 동시 연결 수가 적어서, 다시 보기를 한 번 열면
-          연결이 밀려 담는 쪽이 얼어붙었다 — "한 번 보고 나면 다시 안 된다"
-          미리보기는 담을 때 캔버스에 같이 그려서 해결한다 (연결을 안 늘린다) */
-    const connect = () => {
-      if (!alive) return;
-      if (im) {
-        im.onload = im.onerror = null;
-        im.src = "";
-      }
-      im = new Image();
-      /* ★ 이게 없으면 캔버스가 잠겨 담을 수 없다 (2026-09-03 확인한 조건) */
-      im.crossOrigin = "anonymous";
-      im.decoding = "async";
-      im.onload = () => {
-        if (alive) {
-          setState("live");
-          lastOk = Date.now();
-        }
-      };
-      im.onerror = () => {
-        if (alive) setState(tries > 2 ? "error" : "wait");
-      };
-      im.src = src + (src.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now();
-      lastOk = Date.now();
-    };
-    connect();
-    const MAX = CAM_FPS * CAM_SEC;
-    const grab = () => {
-      if (!alive || busy.current || !im || !im.naturalWidth) return;
-      busy.current = true;
-      const w = CAM_W;
-      const h = Math.round(w * (im.naturalHeight / im.naturalWidth)) || 360;
-      if (!canvas.current || canvas.current.width !== w) {
-        const c = document.createElement("canvas");
-        c.width = w;
-        c.height = h;
-        canvas.current = c;
-      }
-      /* alpha:false — 투명도를 안 쓰면 그리기가 눈에 띄게 빠르다 */
-      const ctx = canvas.current.getContext("2d", {
-        alpha: false
-      });
-      try {
-        ctx.drawImage(im, 0, 0, w, h);
-      } catch (e) {
-        busy.current = false;
-        alive = false;
-        setState("error");
-        return;
-      }
-
-      /* 미리보기 — 연결을 늘리지 않고 담은 그림을 그대로 옮겨 그린다 */
-      const pv = preview && preview.current;
-      if (pv) {
-        if (pv.width !== 208) {
-          pv.width = 208;
-          pv.height = Math.round(208 * h / w);
-        }
-        try {
-          pv.getContext("2d", {
-            alpha: false
-          }).drawImage(canvas.current, 0, 0, pv.width, pv.height);
-        } catch (e) {}
-      }
-      canvas.current.toBlob(b => {
-        busy.current = false;
-        if (!b || !alive) return;
-        frames.current.push({
-          t: Date.now(),
-          blob: b
-        });
-        while (frames.current.length > MAX) frames.current.shift(); /* ★ 링 버퍼는 이 한 줄이 전부다 */
-        lastOk = Date.now();
-      }, "image/jpeg", 0.55);
-    };
-    const tick = setInterval(grab, Math.round(1000 / CAM_FPS));
-    /* ★ 1초에 한 번만 화면 숫자를 고친다.
-          매 장마다 고치면 점수판 전체가 1초에 12번 다시 그려져 태블릿이 버겁다 */
-    const beat = setInterval(() => {
-      if (!alive) return;
-      setSecs(Math.floor(frames.current.length / CAM_FPS));
-      /* 3초 넘게 새 장면이 없으면 연결이 끊긴 것이다 — 다시 붙는다 */
-      if (Date.now() - lastOk > 3000) {
-        tries++;
-        connect();
-      }
-    }, 1000);
-    return () => {
-      alive = false;
-      clearInterval(tick);
-      clearInterval(beat);
-      if (im) {
-        im.onload = im.onerror = null;
-        im.src = "";
-      }
-      im = null;
-      canvas.current = null;
-      /* ★ 나갈 때 반드시 비운다. 안 그러면 탭이 무거워진다 */
-      frames.current = [];
-      setSecs(0);
-      setState("off");
-    };
-  }, [url, on, preview]);
-  return {
-    state,
-    secs,
-    snapshot: () => frames.current.slice()
-  };
-}
-
-/* 담아둔 JPEG 을 차례로 그린다. 느리게 보기·한 장 넘기기가 여기서 나온다 */
-function ReplaySheet({
-  frames,
-  onClose
-}) {
-  const cv = useRef(null);
-  const [i, setI] = useState(0);
-  const [rate, setRate] = useState(0.25);
-  const [play, setPlay] = useState(true);
-  const total = frames.length;
-
-  /* ★ 한 장 그리고 곧바로 주소를 반납한다.
-        반납을 안 하면 360장이 그대로 메모리에 남는다 */
-  useEffect(() => {
-    const f = frames[i];
-    if (!f || !cv.current) return;
-    const u = URL.createObjectURL(f.blob);
-    const im = new Image();
-    im.onload = () => {
-      const c = cv.current;
-      if (!c) {
-        URL.revokeObjectURL(u);
-        return;
-      }
-      if (c.width !== im.naturalWidth) {
-        c.width = im.naturalWidth;
-        c.height = im.naturalHeight;
-      }
-      c.getContext("2d", {
-        alpha: false
-      }).drawImage(im, 0, 0);
-      URL.revokeObjectURL(u);
-    };
-    im.onerror = () => URL.revokeObjectURL(u);
-    im.src = u;
-  }, [i, frames]);
-  useEffect(() => {
-    if (!play || !total) return;
-    const t = setInterval(() => {
-      setI(n => {
-        if (n >= total - 1) {
-          setPlay(false);
-          return n;
-        }
-        return n + 1;
-      });
-    }, Math.max(30, Math.round(1000 / CAM_FPS / rate)));
-    return () => clearInterval(t);
-  }, [play, rate, total]);
-  const ago = total ? ((total - 1 - i) / CAM_FPS).toFixed(1) : "0.0";
-
-  /* ★ 태블릿 가로 화면에 맞춘 배치 (사용자 지시)
-        전에는 컨트롤이 세 줄이라 영상이 눌렸다.
-        컨트롤 · 배속 · 나가기를 한 줄로 합치고 그만큼 영상을 키웠다 */
-  const H = 38;
-  const key = {
-    height: H,
-    borderRadius: 9,
-    background: "rgba(255,255,255,.06)",
-    color: "#B9CCDA",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 15,
-    flexShrink: 0
-  };
-  const bar = {
-    width: 1,
-    height: 26,
-    background: "rgba(255,255,255,.12)",
-    flexShrink: 0
-  };
-  return /*#__PURE__*/React.createElement("div", {
-    onClick: onClose,
-    style: {
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,.85)",
-      zIndex: 95,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 8
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    onClick: e => e.stopPropagation(),
-    style: {
-      width: "100%",
-      maxWidth: 780,
-      maxHeight: "97vh",
-      overflow: "hidden",
-      background: "#08192A",
-      border: "1px solid var(--line)",
-      borderRadius: 14,
-      padding: "10px 12px 11px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 7
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "baseline",
-      gap: 9
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 15,
-      fontWeight: 700
-    }
-  }, "다시 보기"), /*#__PURE__*/React.createElement("span", {
-    className: "num",
-    style: {
-      fontSize: 11.5,
-      color: "#5B7186"
-    }
-  }, "－", ago, "초")), /*#__PURE__*/React.createElement("button", {
-    onClick: onClose,
-    style: {
-      fontSize: 12.5,
-      color: "#5B7186",
-      padding: "4px 6px"
-    }
-  }, "닫기 ✕")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "relative",
-      background: "#0B1420",
-      borderRadius: 10,
-      overflow: "hidden",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center"
-    }
-  }, /*#__PURE__*/React.createElement("canvas", {
-    ref: cv,
-    style: {
-      width: "100%",
-      display: "block",
-      maxHeight: "calc(97vh - 150px)",
-      objectFit: "contain"
-    }
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 9,
-      margin: "9px 0"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10.5,
-      color: "#5B7186",
-      width: 32
-    }
-  }, "-", CAM_SEC, "초"), /*#__PURE__*/React.createElement("input", {
-    type: "range",
-    min: 0,
-    max: Math.max(0, total - 1),
-    value: i,
-    onChange: e => {
-      setPlay(false);
-      setI(Number(e.target.value));
-    },
-    style: {
-      flex: 1,
-      padding: 0,
-      background: "transparent",
-      border: "none"
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10.5,
-      color: "#5B7186",
-      width: 24,
-      textAlign: "right"
-    }
-  }, "지금")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 5,
-      flexShrink: 0
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...key,
-      width: 42
-    },
-    "aria-label": "맨 앞으로",
-    onClick: () => {
-      setPlay(false);
-      setI(0);
-    }
-  }, "⏮"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...key,
-      width: 42,
-      fontSize: 17
-    },
-    "aria-label": "한 장 뒤로",
-    onClick: () => {
-      setPlay(false);
-      setI(n => Math.max(0, n - 1));
-    }
-  }, "‹"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...key,
-      width: 56,
-      background: ACCENT,
-      color: "#141200",
-      fontSize: 17
-    },
-    "aria-label": "재생",
-    onClick: () => {
-      if (i >= total - 1) setI(0);
-      setPlay(!play);
-    }
-  }, play ? "❚❚" : "▶"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...key,
-      width: 42,
-      fontSize: 17
-    },
-    "aria-label": "한 장 앞으로",
-    onClick: () => {
-      setPlay(false);
-      setI(n => Math.min(total - 1, n + 1));
-    }
-  }, "›"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...key,
-      width: 42
-    },
-    "aria-label": "다시 재생",
-    onClick: () => {
-      setI(0);
-      setPlay(true);
-    }
-  }, "↻")), /*#__PURE__*/React.createElement("span", {
-    style: bar
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 5,
-      flex: 1,
-      minWidth: 0
-    }
-  }, [0.25, 0.5, 1, 2].map(r => /*#__PURE__*/React.createElement("button", {
-    key: r,
-    onClick: () => setRate(r),
-    style: {
-      flex: 1,
-      height: H,
-      borderRadius: 9,
-      fontSize: 12.5,
-      fontWeight: 600,
-      background: rate === r ? ACCENT : "rgba(0,0,0,.32)",
-      color: rate === r ? "#141200" : "#61798C"
-    }
-  }, r, "배"))), /*#__PURE__*/React.createElement("span", {
-    style: bar
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: onClose,
-    style: {
-      flexShrink: 0,
-      height: H,
-      padding: "0 18px",
-      borderRadius: 9,
-      fontSize: 13,
-      fontWeight: 700,
-      background: "rgba(232,184,56,.14)",
-      border: "1px solid rgba(232,184,56,.45)",
-      color: ACCENT
-    }
-  }, "점수판"))));
 }
 function Billiard({
   data,
