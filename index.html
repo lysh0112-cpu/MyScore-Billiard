@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-20 로고와 단추 자리 -->
+<!-- build: 1판-21 사진·움직이는 사진 저장 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -894,6 +894,335 @@ const fullScreen = () => {
     document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
   } catch (e) {}
 };
+/* ── 움직이는 사진 (GIF) 만들기 ────────────────
+   ★ 굿샷을 단톡방에 올리려는 것이 목적이다 (사용자 지시).
+      GIF 로 하는 이유 — 카톡·갤러리에서 아무것도 안 눌러도 저절로 움직인다.
+      webm 영상은 안드로이드 갤러리가 못 여는 경우가 있다.
+
+   ★ 라이브러리를 안 쓰고 직접 쓴다.
+      담아둔 것이 이미 JPEG 한 장씩이라, 색을 줄여 이어붙이면 된다.
+      라이브러리를 쓰면 파일이 100KB 커지는데 직접 쓰면 6KB 안에 끝난다.
+
+   만드는 순서
+      ① 프레임을 캔버스에 그려 RGB 를 꺼낸다
+      ② 색을 256개로 줄인다 (중앙 절단법)
+      ③ LZW 로 눌러 GIF 조각으로 잇는다 */
+
+const GIF_MAX_SEC = 6; /* 이보다 길면 파일이 3MB 를 넘어 카톡에서 무겁다 */
+const GIF_W = 400; /* 가로. 세로는 비율대로 */
+
+/* ── 색을 256개로 줄인다 (중앙 절단법) ── */
+function quantize(pix, maxColors) {
+  const boxes = [{
+    list: pix,
+    depth: 0
+  }];
+  while (boxes.length < maxColors) {
+    /* 가장 넓게 퍼진 상자를 고른다 */
+    let bi = -1,
+      best = -1;
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (b.list.length < 2) continue;
+      if (b.range === undefined) {
+        let mn = [255, 255, 255],
+          mx = [0, 0, 0];
+        for (const c of b.list) for (let k = 0; k < 3; k++) {
+          if (c[k] < mn[k]) mn[k] = c[k];
+          if (c[k] > mx[k]) mx[k] = c[k];
+        }
+        b.mn = mn;
+        b.mx = mx;
+        b.range = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+        b.axis = mx[0] - mn[0] >= mx[1] - mn[1] && mx[0] - mn[0] >= mx[2] - mn[2] ? 0 : mx[1] - mn[1] >= mx[2] - mn[2] ? 1 : 2;
+      }
+      if (b.range > best) {
+        best = b.range;
+        bi = i;
+      }
+    }
+    if (bi < 0 || best <= 0) break;
+    const b = boxes[bi];
+    b.list.sort((p, q) => p[b.axis] - q[b.axis]);
+    const mid = b.list.length >> 1;
+    const a = {
+      list: b.list.slice(0, mid),
+      depth: b.depth + 1
+    };
+    const c = {
+      list: b.list.slice(mid),
+      depth: b.depth + 1
+    };
+    boxes.splice(bi, 1, a, c);
+  }
+  return boxes.map(b => {
+    let r = 0,
+      g = 0,
+      bl = 0;
+    for (const c of b.list) {
+      r += c[0];
+      g += c[1];
+      bl += c[2];
+    }
+    const n = Math.max(1, b.list.length);
+    return [Math.round(r / n), Math.round(g / n), Math.round(bl / n)];
+  });
+}
+
+/* 가까운 색 찾기 — 미리 표를 만들어 빠르게 (5비트씩 32×32×32) */
+function makeLookup(pal) {
+  const L = new Uint8Array(32768);
+  for (let r = 0; r < 32; r++) for (let g = 0; g < 32; g++) for (let b = 0; b < 32; b++) {
+    const R = r * 8 + 4,
+      G = g * 8 + 4,
+      B = b * 8 + 4;
+    let best = 0,
+      bd = 1e9;
+    for (let i = 0; i < pal.length; i++) {
+      const d = (pal[i][0] - R) ** 2 + (pal[i][1] - G) ** 2 + (pal[i][2] - B) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    L[r << 10 | g << 5 | b] = best;
+  }
+  return L;
+}
+
+/* ── GIF 를 쓰는 통 ── */
+function GifWriter() {
+  const out = [];
+  const u8 = v => out.push(v & 255);
+  const u16 = v => {
+    u8(v);
+    u8(v >> 8);
+  };
+  const str = s => {
+    for (let i = 0; i < s.length; i++) u8(s.charCodeAt(i));
+  };
+  return {
+    out,
+    u8,
+    u16,
+    str,
+    blob: () => new Blob([new Uint8Array(out)], {
+      type: "image/gif"
+    })
+  };
+}
+
+/* LZW — GIF 가 쓰는 방식 */
+function lzw(idx, minCode) {
+  const clear = 1 << minCode,
+    eoi = clear + 1;
+  let size = minCode + 1,
+    next = eoi + 1;
+  let dict = new Map();
+  const reset = () => {
+    dict = new Map();
+    next = eoi + 1;
+    size = minCode + 1;
+  };
+  const bytes = [];
+  let cur = 0,
+    bits = 0;
+  const put = code => {
+    cur |= code << bits;
+    bits += size;
+    while (bits >= 8) {
+      bytes.push(cur & 255);
+      cur >>= 8;
+      bits -= 8;
+    }
+  };
+  put(clear);
+  reset();
+  let prev = idx[0];
+  for (let i = 1; i < idx.length; i++) {
+    const k = idx[i];
+    const key = prev * 4096 + k;
+    if (dict.has(key)) {
+      prev = dict.get(key);
+      continue;
+    }
+    put(prev);
+    dict.set(key, next++);
+    if (next > 1 << size) {
+      if (size < 12) size++;else {
+        put(clear);
+        reset();
+      }
+    }
+    prev = k;
+  }
+  put(prev);
+  put(eoi);
+  if (bits > 0) bytes.push(cur & 255);
+  return bytes;
+}
+
+/* ── 프레임 여러 장 → GIF ──
+   frames: [{blob}] · delayMs: 한 장당 머무는 시간 · onStep: 진행률 */
+async function makeGif(frames, delayMs, onStep) {
+  if (!frames.length) throw new Error("담긴 그림이 없습니다");
+
+  /* ① 그림을 캔버스에 그려 픽셀을 꺼낸다 */
+  const first = await blobToImage(frames[0].blob);
+  const W = GIF_W;
+  const H = Math.round(W * (first.naturalHeight / first.naturalWidth) / 2) * 2;
+  const cv = document.createElement("canvas");
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext("2d", {
+    alpha: false
+  });
+  const shots = [];
+  for (let i = 0; i < frames.length; i++) {
+    const im = i === 0 ? first : await blobToImage(frames[i].blob);
+    ctx.drawImage(im, 0, 0, W, H);
+    if (i === frames.length - 1) stampLogo(ctx, W, H); /* 마지막 장에만 이름 */
+    shots.push(ctx.getImageData(0, 0, W, H).data);
+    if (im.src && im.src.startsWith("blob:")) URL.revokeObjectURL(im.src);
+    onStep && onStep((i + 1) / (frames.length + 2));
+  }
+
+  /* ② 색을 256개로 — 몇 장만 골라 뽑아도 충분하다 */
+  const sample = [];
+  const step = Math.max(1, Math.floor(shots.length / 6));
+  for (let s = 0; s < shots.length; s += step) {
+    const d = shots[s];
+    for (let p = 0; p < d.length; p += 4 * 17) sample.push([d[p], d[p + 1], d[p + 2]]);
+  }
+  const pal = quantize(sample, 256);
+  while (pal.length < 256) pal.push([0, 0, 0]);
+  const look = makeLookup(pal);
+  onStep && onStep((frames.length + 1) / (frames.length + 2));
+
+  /* ③ GIF 로 쓴다 */
+  const g = GifWriter();
+  g.str("GIF89a");
+  g.u16(W);
+  g.u16(H);
+  g.u8(0xF7); /* 전체 색표 있음 · 256개 */
+  g.u8(0);
+  g.u8(0);
+  for (const c of pal) {
+    g.u8(c[0]);
+    g.u8(c[1]);
+    g.u8(c[2]);
+  }
+  /* 계속 도는 표시 */
+  g.u8(0x21);
+  g.u8(0xFF);
+  g.u8(11);
+  g.str("NETSCAPE2.0");
+  g.u8(3);
+  g.u8(1);
+  g.u16(0);
+  g.u8(0);
+  const delay = Math.max(2, Math.round(delayMs / 10)); /* 100분의 1초 단위 */
+  for (const d of shots) {
+    g.u8(0x21);
+    g.u8(0xF9);
+    g.u8(4);
+    g.u8(0);
+    g.u16(delay);
+    g.u8(0);
+    g.u8(0);
+    g.u8(0x2C);
+    g.u16(0);
+    g.u16(0);
+    g.u16(W);
+    g.u16(H);
+    g.u8(0);
+    const idx = new Uint8Array(W * H);
+    for (let p = 0, q = 0; p < d.length; p += 4, q++) {
+      idx[q] = look[d[p] >> 3 << 10 | d[p + 1] >> 3 << 5 | d[p + 2] >> 3];
+    }
+    g.u8(8);
+    const packed = lzw(idx, 8);
+    for (let i = 0; i < packed.length; i += 255) {
+      const chunk = packed.slice(i, i + 255);
+      g.u8(chunk.length);
+      for (const b of chunk) g.u8(b);
+    }
+    g.u8(0);
+  }
+  g.u8(0x3B);
+  onStep && onStep(1);
+  return g.blob();
+}
+const blobToImage = blob => new Promise((done, fail) => {
+  const u = URL.createObjectURL(blob);
+  const im = new Image();
+  im.onload = () => done(im);
+  im.onerror = () => {
+    URL.revokeObjectURL(u);
+    fail(new Error("그림을 못 읽었습니다"));
+  };
+  im.src = u;
+});
+
+/* ★ 오른쪽 아래에 이름을 넣는다 — 단톡방에 퍼질 때마다 함께 간다 */
+function stampLogo(ctx, W, H) {
+  const s = Math.max(10, Math.round(W * 0.032));
+  ctx.save();
+  ctx.font = `700 ${s}px system-ui, sans-serif`;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  const x = W - Math.round(W * 0.025),
+    y = H - Math.round(W * 0.022);
+  ctx.shadowColor = "rgba(0,0,0,.75)";
+  ctx.shadowBlur = Math.round(s * 0.7);
+  ctx.fillStyle = "rgba(232,184,56,.92)";
+  ctx.fillText("CUEBOARD", x, y);
+  ctx.restore();
+}
+
+/* 사진 한 장 — 담긴 JPEG 을 그대로 쓰되 이름만 얹는다 */
+async function makeShot(frame) {
+  const im = await blobToImage(frame.blob);
+  const cv = document.createElement("canvas");
+  cv.width = im.naturalWidth;
+  cv.height = im.naturalHeight;
+  const ctx = cv.getContext("2d", {
+    alpha: false
+  });
+  ctx.drawImage(im, 0, 0);
+  stampLogo(ctx, cv.width, cv.height);
+  if (im.src.startsWith("blob:")) URL.revokeObjectURL(im.src);
+  return new Promise(done => cv.toBlob(b => done(b), "image/jpeg", 0.9));
+}
+
+/* 만든 것을 카톡으로 보내거나 갤러리에 넣는다 */
+async function shareOrSave(blob, name, say) {
+  const file = new File([blob], name, {
+    type: blob.type
+  });
+  if (navigator.canShare && navigator.canShare({
+    files: [file]
+  })) {
+    try {
+      await navigator.share({
+        files: [file]
+      });
+      return "shared";
+    } catch (e) {
+      if (String(e && e.name) === "AbortError") return "cancel";
+    }
+  }
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+  say && say("갤러리(다운로드)에 저장했습니다");
+  return "saved";
+}
 /* ── 다시 보기 (리플레이) ──────────────────────
    ★ 2026-09-03 확인한 것 — 실제로 폰(IP Webcam)으로 재보고 정한 방식이다
        ① MJPEG 이 크롬에서 그대로 나온다
@@ -1057,7 +1386,8 @@ function useReplay(url, on, preview) {
 /* 담아둔 JPEG 을 차례로 그린다. 느리게 보기·한 장 넘기기가 여기서 나온다 */
 function ReplaySheet({
   frames,
-  onClose
+  onClose,
+  say
 }) {
   const cv = useRef(null);
   const [i, setI] = useState(0);
@@ -1065,8 +1395,12 @@ function ReplaySheet({
   const [play, setPlay] = useState(true);
   const total = frames.length;
 
-  /* ★ 한 장 그리고 곧바로 주소를 반납한다.
-        반납을 안 하면 360장이 그대로 메모리에 남는다 */
+  /* ★ 저장할 곳 고르기 (사용자 지시)
+        30초를 통째로 GIF 로 만들면 10MB 가 넘어 못 쓴다.
+        손잡이 두 개로 3~6초만 골라낸다 */
+  const [pick, setPick] = useState(null); /* { a, b } — 프레임 번호 */
+  const [busy, setBusy] = useState(0); /* 0~1 · 만드는 중 */
+  const MAXF = CAM_FPS * GIF_MAX_SEC;
   useEffect(() => {
     const f = frames[i];
     if (!f || !cv.current) return;
@@ -1091,7 +1425,7 @@ function ReplaySheet({
     im.src = u;
   }, [i, frames]);
   useEffect(() => {
-    if (!play || !total) return;
+    if (!play || !total || pick) return;
     const t = setInterval(() => {
       setI(n => {
         if (n >= total - 1) {
@@ -1102,12 +1436,8 @@ function ReplaySheet({
       });
     }, Math.max(30, Math.round(1000 / CAM_FPS / rate)));
     return () => clearInterval(t);
-  }, [play, rate, total]);
+  }, [play, rate, total, pick]);
   const ago = total ? ((total - 1 - i) / CAM_FPS).toFixed(1) : "0.0";
-
-  /* ★ 태블릿 가로 화면에 맞춘 배치 (사용자 지시)
-        전에는 컨트롤이 세 줄이라 영상이 눌렸다.
-        컨트롤 · 배속 · 나가기를 한 줄로 합치고 그만큼 영상을 키웠다 */
   const H = 38;
   const key = {
     height: H,
@@ -1126,8 +1456,81 @@ function ReplaySheet({
     background: "rgba(255,255,255,.12)",
     flexShrink: 0
   };
+
+  /* 저장하기 — 지금 보고 있는 자리를 가운데 두고 4초쯤을 잡아준다 */
+  const openPick = () => {
+    setPlay(false);
+    const half = Math.round(CAM_FPS * 2);
+    let a = Math.max(0, i - half);
+    let b = Math.min(total - 1, a + CAM_FPS * 4);
+    a = Math.max(0, b - CAM_FPS * 4);
+    setPick({
+      a,
+      b
+    });
+    setI(a);
+  };
+  const secOf = p => ((p.b - p.a + 1) / CAM_FPS).toFixed(1);
+  const saveShot = async () => {
+    try {
+      setBusy(0.5);
+      const blob = await makeShot(frames[i]);
+      setBusy(0);
+      await shareOrSave(blob, `cueboard-${Date.now()}.jpg`, say);
+    } catch (e) {
+      setBusy(0);
+      say && say("사진을 만들지 못했습니다");
+    }
+  };
+  const saveGif = async () => {
+    if (!pick) return;
+    try {
+      const cut = frames.slice(pick.a, pick.b + 1);
+      setBusy(0.01);
+      const blob = await makeGif(cut, Math.round(1000 / CAM_FPS / 0.7), p => setBusy(p));
+      setBusy(0);
+      await shareOrSave(blob, `cueboard-${Date.now()}.gif`, say);
+    } catch (e) {
+      setBusy(0);
+      say && say("만들지 못했습니다 — " + String(e.message || e).slice(0, 40));
+    }
+  };
+
+  /* 손잡이를 끌 때 */
+  const drag = which => e => {
+    e.preventDefault();
+    const track = e.currentTarget.parentElement;
+    const move = ev => {
+      const r = track.getBoundingClientRect();
+      const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+      let n = Math.round(x / r.width * (total - 1));
+      n = Math.max(0, Math.min(total - 1, n));
+      setPick(p => {
+        if (!p) return p;
+        if (which === "a") {
+          const a = Math.min(n, p.b - CAM_FPS); /* 최소 1초 */
+          return {
+            a: Math.max(a, p.b - MAXF + 1),
+            b: p.b
+          };
+        }
+        const b = Math.max(n, p.a + CAM_FPS);
+        return {
+          a: p.a,
+          b: Math.min(b, p.a + MAXF - 1, total - 1)
+        };
+      });
+      setI(n);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   return /*#__PURE__*/React.createElement("div", {
-    onClick: onClose,
+    onClick: busy ? undefined : onClose,
     style: {
       position: "fixed",
       inset: 0,
@@ -1148,7 +1551,8 @@ function ReplaySheet({
       background: "#08192A",
       border: "1px solid var(--line)",
       borderRadius: 14,
-      padding: "10px 12px 11px"
+      padding: "10px 12px 11px",
+      position: "relative"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1166,22 +1570,23 @@ function ReplaySheet({
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 15,
-      fontWeight: 700
+      fontWeight: 700,
+      color: pick ? ACCENT : "var(--ivory)"
     }
-  }, "다시 보기"), /*#__PURE__*/React.createElement("span", {
+  }, pick ? "저장할 곳 고르기" : "다시 보기"), /*#__PURE__*/React.createElement("span", {
     className: "num",
     style: {
       fontSize: 11.5,
       color: "#5B7186"
     }
-  }, "－", ago, "초")), /*#__PURE__*/React.createElement("button", {
-    onClick: onClose,
+  }, pick ? `${secOf(pick)}초` : `－${ago}초`)), /*#__PURE__*/React.createElement("button", {
+    onClick: pick ? () => setPick(null) : onClose,
     style: {
       fontSize: 12.5,
       color: "#5B7186",
       padding: "4px 6px"
     }
-  }, "닫기 ✕")), /*#__PURE__*/React.createElement("div", {
+  }, pick ? "취소" : "닫기 ✕")), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative",
       background: "#0B1420",
@@ -1199,7 +1604,119 @@ function ReplaySheet({
       maxHeight: "calc(97vh - 150px)",
       objectFit: "contain"
     }
-  })), /*#__PURE__*/React.createElement("div", {
+  })), pick ?
+  /*#__PURE__*/
+  /* ── 구간 고르기 ── */
+  React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 9,
+      margin: "10px 0"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: "#5B7186",
+      width: 32
+    }
+  }, "-", CAM_SEC, "초"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: 24,
+      background: "rgba(255,255,255,.07)",
+      borderRadius: 6,
+      position: "relative",
+      touchAction: "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: `${pick.a / Math.max(1, total - 1) * 100}%`,
+      right: `${100 - pick.b / Math.max(1, total - 1) * 100}%`,
+      background: "rgba(232,184,56,.28)",
+      borderLeft: "2px solid " + ACCENT,
+      borderRight: "2px solid " + ACCENT
+    }
+  }), ["a", "b"].map(k => /*#__PURE__*/React.createElement("div", {
+    key: k,
+    onPointerDown: drag(k),
+    style: {
+      position: "absolute",
+      top: -4,
+      width: 20,
+      height: 32,
+      cursor: "ew-resize",
+      left: `${pick[k] / Math.max(1, total - 1) * 100}%`,
+      transform: "translateX(-50%)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 13,
+      height: 32,
+      borderRadius: 5,
+      background: ACCENT
+    }
+  })))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: "#5B7186",
+      width: 24,
+      textAlign: "right"
+    }
+  }, "지금")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      fontSize: 11,
+      color: "#6F8598",
+      marginBottom: 9
+    }
+  }, "노란 손잡이를 끌어 저장할 곳을 맞추세요 · 최대 ", GIF_MAX_SEC, "초"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 7,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: saveShot,
+    disabled: !!busy,
+    style: {
+      height: H,
+      padding: "0 15px",
+      borderRadius: 9,
+      flexShrink: 0,
+      border: "1px solid rgba(255,255,255,.22)",
+      color: "#B9CCDA",
+      fontSize: 12.5
+    }
+  }, "🖼 사진 한 장"), /*#__PURE__*/React.createElement("button", {
+    onClick: saveGif,
+    disabled: !!busy,
+    style: {
+      flex: 1,
+      height: H,
+      borderRadius: 9,
+      background: ACCENT,
+      color: "#141200",
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, "▶ 움직이는 사진 만들기", /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 400,
+      fontSize: 11,
+      color: "#5C4A0F",
+      marginLeft: 6
+    }
+  }, "약 ", Math.max(1, Math.round((pick.b - pick.a + 1) * 34 / 100) / 10), "MB")))) :
+  /*#__PURE__*/
+  /* ── 평소 ── */
+  React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -1249,7 +1766,7 @@ function ReplaySheet({
   }, /*#__PURE__*/React.createElement("button", {
     style: {
       ...key,
-      width: 42
+      width: 40
     },
     "aria-label": "맨 앞으로",
     onClick: () => {
@@ -1259,7 +1776,7 @@ function ReplaySheet({
   }, "⏮"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...key,
-      width: 42,
+      width: 40,
       fontSize: 17
     },
     "aria-label": "한 장 뒤로",
@@ -1270,7 +1787,7 @@ function ReplaySheet({
   }, "‹"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...key,
-      width: 56,
+      width: 52,
       background: ACCENT,
       color: "#141200",
       fontSize: 17
@@ -1283,7 +1800,7 @@ function ReplaySheet({
   }, play ? "❚❚" : "▶"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...key,
-      width: 42,
+      width: 40,
       fontSize: 17
     },
     "aria-label": "한 장 앞으로",
@@ -1291,17 +1808,7 @@ function ReplaySheet({
       setPlay(false);
       setI(n => Math.min(total - 1, n + 1));
     }
-  }, "›"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...key,
-      width: 42
-    },
-    "aria-label": "다시 재생",
-    onClick: () => {
-      setI(0);
-      setPlay(true);
-    }
-  }, "↻")), /*#__PURE__*/React.createElement("span", {
+  }, "›")), /*#__PURE__*/React.createElement("span", {
     style: bar
   }), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1325,19 +1832,68 @@ function ReplaySheet({
   }, r, "배"))), /*#__PURE__*/React.createElement("span", {
     style: bar
   }), /*#__PURE__*/React.createElement("button", {
+    onClick: openPick,
+    style: {
+      flexShrink: 0,
+      height: H,
+      padding: "0 14px",
+      borderRadius: 9,
+      fontSize: 12.5,
+      fontWeight: 700,
+      background: "rgba(232,184,56,.16)",
+      border: "1px solid rgba(232,184,56,.5)",
+      color: ACCENT
+    }
+  }, "⏬ 저장"), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
       flexShrink: 0,
       height: H,
-      padding: "0 18px",
+      padding: "0 14px",
       borderRadius: 9,
-      fontSize: 13,
-      fontWeight: 700,
-      background: "rgba(232,184,56,.14)",
-      border: "1px solid rgba(232,184,56,.45)",
-      color: ACCENT
+      fontSize: 12.5,
+      background: "rgba(255,255,255,.06)",
+      color: "#B9CCDA"
     }
-  }, "점수판"))));
+  }, "점수판"))), busy > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(8,25,42,.88)",
+      borderRadius: 14,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 13
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700
+    }
+  }, "움직이는 사진을 만드는 중…"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "60%",
+      maxWidth: 300,
+      height: 6,
+      background: "rgba(255,255,255,.12)",
+      borderRadius: 3
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: `${Math.round(busy * 100)}%`,
+      height: "100%",
+      background: ACCENT,
+      borderRadius: 3,
+      transition: ".2s"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598"
+    }
+  }, "몇 초 걸립니다. 그대로 두세요"))));
 }
 
 /* ── QR 로 카메라 주소 넣기 ────────────────────
@@ -4964,6 +5520,7 @@ function Billiard({
     }
   }, cam.secs, "초 담김"))), replay && /*#__PURE__*/React.createElement(ReplaySheet, {
     frames: replay,
+    say: say,
     onClose: () => setReplay(null)
   }), goAsk && /*#__PURE__*/React.createElement(HomeAsk, {
     line: log.length ? `${bestOf > 1 ? `${bestOf}판 중 ${nthOf(gameNo)}` : "치는 중"} · 앞의 ${log.length}판은 이미 끝났습니다` : `${bestOf > 1 ? nthOf(gameNo) : "치는 중"} · 아직 저장하지 않았습니다`
