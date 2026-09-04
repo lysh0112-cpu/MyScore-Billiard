@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#0A2438">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="당구 스코어">
+<meta name="apple-mobile-web-app-title" content="큐보드">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-16 점수판에서 초구 색 바꾸기 -->
-<title>당구 스코어</title>
+<!-- build: 1판-17 큐보드 로고 -->
+<title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
   body{margin:0;padding:0;background:#0A2438;min-height:100%;width:100%;
@@ -22,7 +22,7 @@
 </style>
 </head>
 <body>
-<div id="root"><div id="boot">당구 스코어 불러오는 중…</div></div>
+<div id="root"><div id="boot">큐보드 불러오는 중…</div></div>
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -50,7 +50,7 @@ const {
 } = React;
 
 /* ══════════════════════════════════════════════
-   당구 스코어 — 당구 전용 (My Score 에서 갈라져 나옴)
+   큐보드 CUEBOARD — 당구 전용 (My Score 에서 갈라져 나옴)
    원본: score-hub.jsx 8판 (11종목)
    ══════════════════════════════════════════════ */
 
@@ -1557,73 +1557,57 @@ function QrScan({
       종목 고르기 · 요금 · 정산 · 통계 · 회원은 전부 없앴다 (사용자 지시).
       위에서 아래로 읽으면 그대로 세팅이 끝나고 맨 아래 단추로 점수판에 들어간다 */
 
-/* 사진 넘김 — 동영상이 아니라 사진 몇 장이다.
-   동영상은 용량이 크고 폰에서 자동재생이 막히는 일이 많다 */
-const SHOTS = ["https://images.unsplash.com/photo-1591491634026-77cd4cf1e9a5?w=900&q=70", "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=900&q=70", "https://images.unsplash.com/photo-1615722440048-da4fd9e5f7bd?w=900&q=70"];
-function Slides() {
-  const [i, setI] = useState(0);
+/* ── 머리 그림 ──────────────────────────────
+   ★ 서비스 이름을 "큐보드(CUEBOARD)" 로 정했다 (2026-09-04).
+      사진 넘김 자리를 로고 하나로 바꿨다.
+      제목 글자 "당구 스코어" 는 없앴다 — 로고에 이름이 이미 있다.
+   ⚠ logo.png 를 index.html 과 같은 자리에 올려야 한다 */
+function Banner() {
   const [ok, setOk] = useState(true);
-  useEffect(() => {
-    const t = setInterval(() => setI(n => (n + 1) % SHOTS.length), 5000);
-    return () => clearInterval(t);
-  }, []);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative",
-      height: "clamp(120px,22vh,190px)",
-      background: "#123047",
-      overflow: "hidden"
+      padding: "16px 16px 14px",
+      background: "radial-gradient(ellipse at 50% 62%, #16293c 0%, #0B1826 62%, #08131F 100%)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "clamp(120px,20vh,190px)",
+      borderBottom: "1px solid rgba(232,184,56,.28)"
     }
-  }, ok && SHOTS.map((u, n) => /*#__PURE__*/React.createElement("img", {
-    key: u,
-    src: u,
-    alt: "",
+  }, ok ? /*#__PURE__*/React.createElement("img", {
+    src: "logo.png",
+    alt: "큐보드",
     onError: () => setOk(false),
     style: {
-      position: "absolute",
-      inset: 0,
-      width: "100%",
-      height: "100%",
-      objectFit: "cover",
-      opacity: n === i ? 1 : 0,
-      transition: "opacity .7s"
+      maxWidth: "min(320px,82%)",
+      maxHeight: "clamp(104px,17vh,168px)",
+      objectFit: "contain",
+      display: "block"
     }
-  })), /*#__PURE__*/React.createElement("div", {
+  }) :
+  /*#__PURE__*/
+  /* 그림을 못 받으면 글자로라도 보이게 한다 */
+  React.createElement("div", {
     style: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      bottom: 0,
-      padding: "11px 14px 9px",
-      background: "rgba(10,36,56,.72)"
+      textAlign: "center"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 16,
-      fontWeight: 700
+      fontSize: 24,
+      letterSpacing: ".22em",
+      color: "#F6E7C8"
     }
-  }, "당구 스코어")), ok && /*#__PURE__*/React.createElement("div", {
+  }, "CUEBOARD"), /*#__PURE__*/React.createElement("div", {
     style: {
-      position: "absolute",
-      bottom: 46,
-      left: "50%",
-      transform: "translateX(-50%)",
-      display: "flex",
-      gap: 5
+      fontSize: 9.5,
+      letterSpacing: ".3em",
+      color: "#C99B4E",
+      marginTop: 6
     }
-  }, SHOTS.map((u, n) => /*#__PURE__*/React.createElement("span", {
-    key: u,
-    style: {
-      width: n === i ? 14 : 4,
-      height: 4,
-      borderRadius: 2,
-      transition: ".3s",
-      background: n === i ? ACCENT : "rgba(244,238,223,.45)"
-    }
-  }))));
+  }, "SMART BILLIARDS SYSTEM")));
 }
 
-/* 알약 한 줄 */
 /* 알약 한 줄 — 고른 것은 노랑, 안 고른 것은 어두운 바탕에 흐린 글씨.
    ★ 테두리만 두면 대비가 약해 무엇을 골랐는지 한눈에 안 들어온다 */
 const Pills = ({
@@ -2130,7 +2114,7 @@ function Home({
     borderRadius: 14,
     padding: 16
   };
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Slides, null), /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Banner, null), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       top: 12,
@@ -6096,7 +6080,7 @@ function Ask({
       color: "var(--chalk)"
     }
   }, "쓰시다가 이상한 곳이 있거나 고쳤으면 하는 것이 있으면 알려주십시오. 어느 화면에서 어떻게 눌렀을 때 그랬는지 함께 적어주시면 훨씬 빨리 고칩니다.")), /*#__PURE__*/React.createElement("a", {
-    href: `mailto:${MAIL}?subject=${encodeURIComponent("당구 스코어 문의")}`,
+    href: `mailto:${MAIL}?subject=${encodeURIComponent("큐보드 문의")}`,
     style: {
       textDecoration: "none"
     }
