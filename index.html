@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-19 가로 로고 꽉 채움 -->
+<!-- build: 1판-20 로고와 단추 자리 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -1566,36 +1566,34 @@ function QrScan({
        앱을 열 때마다 받는 그림이라 크기가 중요하다 */
 function Banner() {
   const [ok, setOk] = useState(true);
-  /* ★ 가로형 로고를 화면 폭에 꽉 채운다 (사용자 지시).
-        전에는 세로형이라 가운데에 작게 떠서 위아래가 허전했다.
-        로고 비율이 약 3.76:1 이라 폭을 채우면 높이가 저절로 잡힌다 */
+  /* ★ 로고가 오른쪽 위 단추 두 개를 가리고 있었다 (사용자 지적).
+        단추 자리를 위에 따로 두고, 로고는 그 아래에 조금 작게 놓는다.
+        좌우 여백도 줘서 답답하지 않게 한다 */
   return /*#__PURE__*/React.createElement("div", {
     style: {
-      position: "relative",
       background: "#0B1826",
       borderBottom: "1px solid rgba(232,184,56,.28)",
-      lineHeight: 0
+      padding: "0 0 12px"
     }
   }, ok ? /*#__PURE__*/React.createElement("img", {
     src: "logo.jpg",
     alt: "큐보드",
     onError: () => setOk(false),
     style: {
-      width: "100%",
-      display: "block"
+      width: "86%",
+      maxWidth: 460,
+      display: "block",
+      margin: "0 auto"
     }
-  }) :
-  /*#__PURE__*/
-  /* 그림을 못 받으면 글자로라도 보이게 한다 */
-  React.createElement("div", {
+  }) : /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "26px 16px",
+      padding: "14px 16px",
       textAlign: "center",
       lineHeight: 1.4
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 24,
+      fontSize: 22,
       letterSpacing: ".22em",
       color: "#F6E7C8"
     }
@@ -1604,7 +1602,7 @@ function Banner() {
       fontSize: 9.5,
       letterSpacing: ".3em",
       color: "#C99B4E",
-      marginTop: 6
+      marginTop: 5
     }
   }, "SMART BILLIARDS SYSTEM")));
 }
@@ -2115,39 +2113,40 @@ function Home({
     borderRadius: 14,
     padding: 16
   };
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Banner, null), /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
-      position: "absolute",
-      top: 12,
-      right: 12,
+      background: "#0B1826",
       display: "flex",
-      gap: 8,
+      justifyContent: "flex-end",
       alignItems: "center",
-      zIndex: 5
+      gap: 8,
+      padding: "8px 12px 0"
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setTv(!tv),
     title: "큰 화면 모드",
     style: {
+      width: 34,
+      height: 34,
+      borderRadius: 9,
       fontSize: 16,
-      padding: "4px 7px",
-      borderRadius: 8,
-      opacity: tv ? 1 : .6,
-      border: "1px solid " + (tv ? ACCENT : "var(--line)")
+      opacity: tv ? 1 : .7,
+      border: "1px solid " + (tv ? ACCENT : "rgba(255,255,255,.2)")
     }
   }, "🖥"), /*#__PURE__*/React.createElement("button", {
     onClick: onLogin,
+    title: me ? "내 계정" : "로그인",
     style: {
-      width: 28,
-      height: 28,
+      width: 34,
+      height: 34,
       borderRadius: "50%",
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: 700,
       background: me ? ACCENT : "rgba(0,0,0,.3)",
       color: me ? "#141200" : "var(--chalk)",
-      border: "1px solid var(--line)"
+      border: "1px solid rgba(255,255,255,.2)"
     }
-  }, me ? me.slice(0, 1) : "＋")), /*#__PURE__*/React.createElement("div", {
+  }, me ? me.slice(0, 1) : "＋")), /*#__PURE__*/React.createElement(Banner, null), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "20px 16px 0"
     }
