@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-22 서버에서 당구만 받기 -->
+<!-- build: 1판-23 부를 이름 순서 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -299,11 +299,19 @@ const sbSignUp = (email, password, meta) => sbFetch("/auth/v1/signup", {
     data: meta || {}
   })
 });
+
+/* ★ profiles 는 명카페가 만든 표다. 큐보드는 읽기만 한다 (이름을 가져오려고).
+      ⚠ 줄이 아예 없는 회원이 있다 — 없으면 null 을 돌려주고 앱은 그대로 돈다
+        (maybeSingle 과 같은 뜻이다. REST 로는 배열이 비어 오는 것이 그 자리다) */
 const sbProfile = async (token, uid) => {
-  const rows = await sbFetch(`/rest/v1/profiles?id=eq.${uid}&select=id,nickname,hangul_name,email,role`, {
-    token
-  });
-  return Array.isArray(rows) && rows.length ? rows[0] : null;
+  try {
+    const rows = await sbFetch(`/rest/v1/profiles?id=eq.${uid}&select=id,nickname,hangul_name,email,role&limit=1`, {
+      token
+    });
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  } catch (e) {
+    return null;
+  }
 };
 const sbReset = email => sbFetch("/auth/v1/recover", {
   method: "POST",
@@ -6308,12 +6316,16 @@ function Account({
     try {
       const t = await sbSignIn(e, pw);
       const uid = t?.user?.id;
-      let nm = t?.user?.user_metadata?.nickname || "";
-      try {
-        const pf = await sbProfile(t.access_token, uid);
-        if (pf) nm = pf.nickname || pf.hangul_name || nm;
-      } catch (err) {}
-      if (!nm) nm = e.split("@")[0];
+      /* ★ 부를 이름을 정하는 순서 (2026-09-05 대표님 결정)
+              nickname → hangul_name → '회원'
+         ⚠ 카카오가 붙으면 email 이 빈다 (이메일을 안 받기로 정함).
+           전에는 "이메일 앞부분" 을 썼는데, 그러면 이름이 빈칸이 된다 */
+      let nm = "";
+      const pf = await sbProfile(t.access_token, uid);
+      if (pf) nm = pf.nickname || pf.hangul_name || "";
+      if (!nm) nm = t?.user?.user_metadata?.nickname || "";
+      if (!nm && e) nm = e.split("@")[0];
+      if (!nm) nm = "회원";
       const {
         games,
         vault
