@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-23 부를 이름 순서 -->
+<!-- build: 1판-24 카카오 로그인 · 부를 이름 메타 넓힘 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -206,6 +206,24 @@ const normalize = d0 => {
     games: (d.games || []).filter(g => g && Array.isArray(g.players))
   };
 };
+
+/* ★ 로그인한 사람의 기록만 골라낸다 — 남의 것은 vault 로 치운다.
+      ⚠ 2026-09-10 에 계정 창 «안» 에서 밖으로 꺼냈다.
+        카카오 로그인은 앱이 뜰 때 일어나므로 계정 창을 안 거친다.
+        두 군데에 같은 계산을 두면 반드시 어긋난다 (9장 ①) */
+const splitGames = (data, uid) => {
+  const pool = [...(data.games || []), ...(data.vault || [])];
+  const isMine = g => !g.acc || g.acc === uid;
+  const mine = pool.filter(isMine).map(g => g.acc || !(data.me && data.me !== uid) ? g : {
+    ...g,
+    sid: undefined,
+    upAt: undefined
+  });
+  return {
+    games: mine.sort(recentFirst),
+    vault: pool.filter(g => !isMine(g))
+  };
+};
 /* ── 음성 안내 ── */
 let VOICES = [];
 let PRIMED = false;
@@ -367,6 +385,63 @@ async function sbToken(sess, onNew) {
   if (onNew) onNew(n);
   return n.token;
 }
+
+/* ★ 부를 이름 정하는 순서 (2026-09-05 대표님 결정 — ★다섯 줄을 바꾸지 말 것)
+      ① profiles.nickname  ② profiles.hangul_name
+      ③ ★카카오 메타       ④ 이메일 앞부분      ⑤ '회원'
+   ⚠ 2026-09-10 — 카카오는 `nickname` 칸을 «주지 않는다» (명카페가 auth.users 를 실제로 재봄).
+     오는 것은 name · full_name · user_name · preferred_username 쪽이다.
+     ⇒ 차례는 그대로 두고 ③이 «읽는 자리» 만 넓혔다.
+   ⚠ 셋(당구·골프·명카페)이 같은 차례를 쓴다. 어긋나면 한 사람이 앱마다 다른 이름이 된다 */
+const metaNick = m => m && (m.nickname || m.name || m.full_name || m.user_name || m.preferred_username) || "";
+const pickName = (pf, meta, email) => {
+  let nm = "";
+  if (pf) nm = pf.nickname || pf.hangul_name || "";
+  if (!nm) nm = metaNick(meta);
+  if (!nm && email) nm = String(email).split("@")[0];
+  if (!nm) nm = "회원";
+  return nm;
+};
+
+/* ── ★ 카카오 로그인 (2026-09-10) ──
+      큐보드는 supabase-js 를 쓰지 않는다 (라이브러리가 react 둘뿐이다).
+      그래서 주소로 «보내고», 돌아온 조각을 손으로 받는다.
+   ⛔ 카카오 열쇠(REST 키·시크릿)는 여기 «없다». Supabase 가 갖고 있고
+      앱은 provider 이름만 말한다. 열쇠를 코드에 넣으면 그대로 샌다 */
+const sbKakaoGo = () => {
+  const back = location.origin + location.pathname;
+  location.href = `${SB_URL}/auth/v1/authorize?provider=kakao&redirect_to=${encodeURIComponent(back)}`;
+};
+
+/* 돌아올 때 #access_token=… 이 ★우물정 뒤에 붙어 온다 */
+const sbHashSess = () => {
+  try {
+    const h = String(location.hash || "").replace(/^#/, "");
+    if (h.indexOf("access_token=") < 0) return null;
+    const p = new URLSearchParams(h);
+    const t = p.get("access_token");
+    if (!t) return null;
+    return sessOf({
+      access_token: t,
+      refresh_token: p.get("refresh_token"),
+      expires_in: p.get("expires_in")
+    });
+  } catch (e) {
+    return null;
+  }
+};
+
+/* ⛔ 담았으면 «반드시» 지운다 — 그 주소가 남에게 넘어가면 그대로 세션이다 */
+const sbHashClear = () => {
+  try {
+    history.replaceState(null, "", location.pathname + location.search);
+  } catch (e) {}
+};
+
+/* 조각에는 토큰만 온다. 누구인지는 따로 묻는다 */
+const sbUser = token => sbFetch("/auth/v1/user", {
+  token
+});
 
 /* ── 경기 한 건 → 서버 두 표 ──
    score_games   원본 통째로 (data jsonb)
@@ -6295,19 +6370,9 @@ function Account({
   /* 계정이 바뀌면 앞 사람 기록은 창고로, 이 계정 기록은 창고에서 꺼낸다.
      지우지 않는 이유 — 그 사람이 다시 들어오면 그대로 돌려줘야 한다.
      주인이 안 적힌 것은 지금 들어온 사람이 가져간다 */
-  const splitGames = uid => {
-    const pool = [...data.games, ...(data.vault || [])];
-    const isMine = g => !g.acc || g.acc === uid;
-    const mine = pool.filter(isMine).map(g => g.acc || !(data.me && data.me !== uid) ? g : {
-      ...g,
-      sid: undefined,
-      upAt: undefined
-    });
-    return {
-      games: mine.sort(recentFirst),
-      vault: pool.filter(g => !isMine(g))
-    };
-  };
+  /* ★ splitGames 는 00-head 로 옮겼다 (2026-09-10).
+        카카오는 앱이 뜰 때 로그인되므로 이 창을 안 거친다 — 같은 계산이 두 곳에 있으면 어긋난다 */
+
   const signIn = async () => {
     const e = email.trim().toLowerCase();
     if (!e || !pw) return say("이메일과 비밀번호를 넣어주세요");
@@ -6316,20 +6381,13 @@ function Account({
     try {
       const t = await sbSignIn(e, pw);
       const uid = t?.user?.id;
-      /* ★ 부를 이름을 정하는 순서 (2026-09-05 대표님 결정)
-              nickname → hangul_name → '회원'
-         ⚠ 카카오가 붙으면 email 이 빈다 (이메일을 안 받기로 정함).
-           전에는 "이메일 앞부분" 을 썼는데, 그러면 이름이 빈칸이 된다 */
-      let nm = "";
+      /* ★ 부를 이름은 pickName 하나로 정한다 (20-sb.jsx · 차례 다섯 줄) */
       const pf = await sbProfile(t.access_token, uid);
-      if (pf) nm = pf.nickname || pf.hangul_name || "";
-      if (!nm) nm = t?.user?.user_metadata?.nickname || "";
-      if (!nm && e) nm = e.split("@")[0];
-      if (!nm) nm = "회원";
+      const nm = pickName(pf, t?.user?.user_metadata, e);
       const {
         games,
         vault
-      } = splitGames(uid);
+      } = splitGames(data, uid);
       save({
         ...data,
         games,
@@ -6532,7 +6590,49 @@ function Account({
     style: {
       fontSize: 13.5
     }
-  }, "로그아웃")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+  }, "로그아웃")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    onClick: sbKakaoGo,
+    style: {
+      width: "100%",
+      padding: 15,
+      fontSize: 15,
+      fontWeight: 700,
+      background: "#FEE500",
+      color: "#191600",
+      borderRadius: 10
+    }
+  }, "카카오로 3초 만에 시작"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      lineHeight: 1.7,
+      margin: "9px 0 14px"
+    }
+  }, "명카페 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      height: 1,
+      background: "var(--line)"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--chalk)"
+    }
+  }, "또는 이메일로"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      height: 1,
+      background: "var(--line)"
+    }
+  })), /*#__PURE__*/React.createElement("span", {
     className: "lbl"
   }, "이메일"), /*#__PURE__*/React.createElement("input", {
     value: email,
@@ -6750,14 +6850,62 @@ function App() {
         dataRef.current = n;
         setData(n);
       };
+
+      /* 저장칸을 «읽기만» 한다 — 아직 return 하지 않는다 */
+      let saved = null;
       try {
         const r = await window.storage.get(KEY);
-        if (r?.value) {
-          put(normalize(JSON.parse(r.value)));
-          setLoading(false);
-          return;
-        }
+        if (r?.value) saved = normalize(JSON.parse(r.value));
       } catch (e) {}
+
+      /* ★★ 카카오에서 돌아온 조각을 «먼저» 받는다 (2026-09-10 · 골프온이 찾아준 것)
+             ⚠ 저장칸을 읽고 곧바로 return 하면, ★이미 쓰던 폰은 여기까지 못 온다.
+               화면은 멀쩡히 뜨고 «로그인만 조용히» 안 된다 — 검사도 못 잡는다.
+               그래서 조각 확인이 반드시 앞이다 */
+      const ks = sbHashSess();
+      if (ks) {
+        sbHashClear(); /* ⛔ 담자마자 지운다 */
+        try {
+          const u = await sbUser(ks.token);
+          const uid = u?.id;
+          if (uid) {
+            const pf = await sbProfile(ks.token, uid);
+            const nm = pickName(pf, u?.user_metadata, u?.email);
+            const base = saved || normalize({
+              games: []
+            });
+            const {
+              games,
+              vault
+            } = splitGames(base, uid);
+            const n = normalize({
+              ...base,
+              games,
+              vault,
+              me: uid,
+              nick: nm,
+              session: ks,
+              profile: {
+                id: uid,
+                email: u?.email || "",
+                nickname: nm
+              }
+            });
+            put(n);
+            try {
+              await window.storage.set(KEY, JSON.stringify(n));
+            } catch (e) {}
+            setLoading(false);
+            return;
+          }
+        } catch (e) {}
+        /* 조각이 상했으면 그냥 하던 대로 간다 — 앱이 안 열리는 일은 없어야 한다 */
+      }
+      if (saved) {
+        put(saved);
+        setLoading(false);
+        return;
+      }
       /* ★ 처음 켤 때 My Score 자료에서 당구만 가져온다 (같은 폰에서 쓰던 경우) */
       try {
         const o = await window.storage.get(HUB);
