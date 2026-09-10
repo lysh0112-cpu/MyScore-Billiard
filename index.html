@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-27 주소 복사 단추 없앰 -->
+<!-- build: 1판-28 로그인 알약 단추 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -2906,16 +2906,32 @@ function Home({
     onClick: onLogin,
     title: me ? "내 계정" : "로그인",
     style: {
-      width: 34,
       height: 34,
-      borderRadius: "50%",
-      fontSize: 13,
-      fontWeight: 700,
-      background: me ? ACCENT : "rgba(0,0,0,.3)",
-      color: me ? "#141200" : "var(--chalk)",
-      border: "1px solid rgba(255,255,255,.2)"
+      borderRadius: 17,
+      padding: "0 14px 0 5px",
+      fontSize: 13.5,
+      display: "flex",
+      alignItems: "center",
+      gap: 7,
+      whiteSpace: "nowrap",
+      background: "rgba(0,0,0,.3)",
+      color: "var(--ivory)",
+      border: "1px solid " + (me ? "rgba(232,184,56,.55)" : "rgba(255,255,255,.28)")
     }
-  }, me ? me.slice(0, 1) : "＋")), /*#__PURE__*/React.createElement(Banner, null), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 24,
+      height: 24,
+      borderRadius: "50%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: me ? 12 : 14,
+      fontWeight: me ? 700 : 400,
+      background: me ? ACCENT : "rgba(255,255,255,.12)",
+      color: me ? "#141200" : "var(--chalk)"
+    }
+  }, me ? me.slice(0, 1) : "👤"), me ? "내 정보" : "로그인")), /*#__PURE__*/React.createElement(Banner, null), /*#__PURE__*/React.createElement("div", {
     style: {
       paddingTop: 14
     }
