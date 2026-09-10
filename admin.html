@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<!-- build: admin 1판-3 화면 다듬기 -->
+<!-- build: admin 1판-4 토큰 갱신 · 바뀐 줄 세기 -->
 <title>당구 스코어 · 관리자</title>
 <style>
   :root{
@@ -100,7 +100,8 @@
 const {
   useState,
   useEffect,
-  useMemo
+  useMemo,
+  useRef
 } = React;
 const SB_URL = "https://auvuwytatfcoawdrgunl.supabase.co";
 const SB_KEY = "sb_publishable_9-cLLZC0YETjFq4XpAZCog_X9ofa2FZ";
@@ -165,6 +166,57 @@ const leftView = until => {
 };
 
 /* ── 서버 ── */
+
+/* 🔴 2026-09-11 — 여기가 뚫려 있었다.
+      로그인할 때 받은 토큰을 «그대로 들고» 썼다. Supabase 토큰은 ★1시간이다.
+      한 시간 넘게 켜 두면 authenticated 가 아니게 되고, RLS 가 막아
+      ★고쳐도 «0줄» 이 바뀐다. 오류도 안 나고 알림창도 안 뜬다.
+      ⇒ 명연재가 09-10 에 겪은 그 일이다 (상담사 정보가 조용히 저장 안 됨).
+      ⇒ ★부르기 «직전» 에 새로 받는다. 앱(20-sb.jsx)과 같은 방식이다. */
+const SESS_PAD = 60 * 1000; /* 만료 1분 전에 미리 받는다 */
+let REFRESHING = null;
+const expOf = t => Number(t?.exp_at) || (Number(t?.got_at) || 0) + (Number(t?.expires_in) || 3600) * 1000;
+const alive = t => !!t?.access_token && Date.now() < expOf(t) - SESS_PAD;
+
+/* 받은 그대로 두면 언제 만료되는지 알 수 없다 — 받은 시각을 함께 적어 둔다 */
+const stamp = t => t && t.access_token ? {
+  ...t,
+  got_at: Date.now(),
+  exp_at: Date.now() + (Number(t.expires_in) || 3600) * 1000
+} : null;
+
+/* 쓸 수 있는 토큰을 준다. 만료가 가까우면 조용히 새로 받는다.
+   여럿이 동시에 불러도 갱신은 한 번만 — 갱신표는 한 번밖에 못 쓴다 */
+const liveTok = async (tok, onNew) => {
+  if (!tok?.access_token) return null;
+  if (alive(tok)) return tok.access_token;
+  const rt = tok.refresh_token || localStorage.getItem(KEY + ":rt");
+  if (!rt) return null;
+  if (!REFRESHING) REFRESHING = refresh(rt).then(stamp);
+  const p = REFRESHING;
+  let n = null;
+  try {
+    n = await p;
+  } catch (e) {
+    n = null;
+  }
+  if (REFRESHING === p) REFRESHING = null;
+  if (!n?.access_token) return null;
+  try {
+    localStorage.setItem(KEY + ":rt", n.refresh_token || rt);
+  } catch (e) {}
+  if (onNew) onNew(n);
+  return n.access_token;
+};
+
+/* ★ 서버가 «거절한 것» 과 신호가 «끊긴 것» 을 갈라서 말한다.
+      둘을 뭉뚱그리면 사장님이 무엇을 해야 할지 모른다 */
+const netMsg = e => {
+  const m = String(e?.message || e || "");
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "인터넷이 끊긴 것 같습니다. 연결을 확인하고 다시 눌러주세요";
+  if (/JWT|expired|401/i.test(m)) return "로그인이 만료됐습니다. 로그아웃 후 다시 로그인해 주세요";
+  return m.slice(0, 90);
+};
 const sb = async (path, opt = {}, token) => {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
     ...opt,
@@ -172,7 +224,8 @@ const sb = async (path, opt = {}, token) => {
       apikey: SB_KEY,
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
-      Prefer: opt.method === "POST" ? "return=representation" : opt.method === "PATCH" ? "return=representation" : "",
+      /* ★ DELETE 에도 붙인다 — 없으면 «몇 줄 지워졌는지» 알 길이 없다 */
+      Prefer: /^(POST|PATCH|DELETE)$/.test(opt.method || "") ? "return=representation" : "",
       ...(opt.headers || {})
     }
   });
@@ -655,8 +708,9 @@ function App() {
         const t = await refresh(rt);
         if (t && t.access_token) {
           try {
+            /* ★ 받은 시각을 «찍어서» 담는다 — 안 찍으면 언제 만료되는지 알 수 없다 */
             if (await rpc("is_bil_admin", t.access_token)) {
-              setTok(t);
+              setTok(stamp(t));
             }
           } catch (e) {}
         }
@@ -664,16 +718,34 @@ function App() {
       setReady(true);
     })();
   }, []);
+
+  /* ★ 지금 쓸 수 있는 토큰을 준다. 만료가 가까우면 «부르기 직전» 에 새로 받는다 */
+  const tokRef = useRef(tok);
+  useEffect(() => {
+    tokRef.current = tok;
+  }, [tok]);
+  const T = async () => {
+    const t = await liveTok(tokRef.current, n => {
+      tokRef.current = n;
+      setTok(n);
+    });
+    if (!t) {
+      say("로그인이 만료됐습니다. 다시 로그인해 주세요");
+      throw new Error("no_token");
+    }
+    return t;
+  };
   useEffect(() => {
     if (!tok) return;
     localStorage.setItem(KEY + ":rt", tok.refresh_token || "");
     (async () => {
       try {
-        const [v, s] = await Promise.all([sb("bil_venue?select=*", {}, tok.access_token), sb("bil_sub?select=*", {}, tok.access_token)]);
+        const t = await T();
+        const [v, s] = await Promise.all([sb("bil_venue?select=*", {}, t), sb("bil_sub?select=*", {}, t)]);
         setVenues(v || []);
         setSubs(s || []);
       } catch (e) {
-        say("자료를 못 읽었습니다 — " + String(e.message || e).slice(0, 70));
+        if (String(e.message) !== "no_token") say("자료를 못 읽었습니다 — " + netMsg(e));
       }
     })();
   }, [tok]);
@@ -684,38 +756,56 @@ function App() {
     };
     delete clean.created_at;
     delete clean.updated_at;
-    if (clean.id) {
-      const id = clean.id;
-      delete clean.id;
-      const out = await sb(`${table(kind)}?id=eq.${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(clean)
-      }, tok.access_token);
-      const row = out && out[0] || {
-        ...f
-      };
-      (kind === "venue" ? setVenues : setSubs)(L => L.map(x => x.id === id ? row : x));
-    } else {
-      const out = await sb(table(kind), {
-        method: "POST",
-        body: JSON.stringify(clean)
-      }, tok.access_token);
-      const row = out && out[0] || clean;
-      (kind === "venue" ? setVenues : setSubs)(L => [...L, row]);
+    try {
+      const t = await T();
+      if (clean.id) {
+        const id = clean.id;
+        delete clean.id;
+        const out = await sb(`${table(kind)}?id=eq.${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(clean)
+        }, t);
+        /* 🔴 ★몇 줄이 바뀌었는지 «센다». 0이면 조용히 넘어가면 안 된다.
+              전에는 out 이 비면 «화면에 친 값» 을 그대로 쓰고 「저장했습니다」라고 했다.
+              사장님 눈에는 저장된 것처럼 보이는데 서버에는 안 들어간 상태였다 */
+        if (!out || !out.length) {
+          say("저장되지 않았습니다 — 권한이 없거나 그 줄이 없습니다");
+          return;
+        }
+        (kind === "venue" ? setVenues : setSubs)(L => L.map(x => x.id === id ? out[0] : x));
+      } else {
+        const out = await sb(table(kind), {
+          method: "POST",
+          body: JSON.stringify(clean)
+        }, t);
+        if (!out || !out.length) {
+          say("저장되지 않았습니다 — 권한이 없습니다");
+          return;
+        }
+        (kind === "venue" ? setVenues : setSubs)(L => [...L, out[0]]);
+      }
+      setEdit(null);
+      say("저장했습니다");
+    } catch (e) {
+      if (String(e.message) !== "no_token") say(netMsg(e));
     }
-    setEdit(null);
-    say("저장했습니다");
   };
   const del = async (kind, row) => {
     try {
-      await sb(`${table(kind)}?id=eq.${row.id}`, {
+      const t = await T();
+      const out = await sb(`${table(kind)}?id=eq.${row.id}`, {
         method: "DELETE"
-      }, tok.access_token);
+      }, t);
+      /* ★ 지운 줄이 없으면 화면에서만 사라지고 서버에는 남는다 */
+      if (!out || !out.length) {
+        say("지워지지 않았습니다 — 권한이 없거나 이미 없는 줄입니다");
+        return;
+      }
       (kind === "venue" ? setVenues : setSubs)(L => L.filter(x => x.id !== row.id));
       setEdit(null);
       say("지웠습니다");
     } catch (e) {
-      say(String(e.message || e).slice(0, 90));
+      if (String(e.message) !== "no_token") say(netMsg(e));
     }
   };
   if (!ready) return /*#__PURE__*/React.createElement("div", {
@@ -724,7 +814,7 @@ function App() {
     className: "note"
   }, "불러오는 중…"));
   if (!tok) return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Login, {
-    onDone: setTok,
+    onDone: t => setTok(stamp(t)),
     say: say
   }), msg && /*#__PURE__*/React.createElement("div", {
     className: "msg"
