@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-28 로그인 알약 단추 -->
+<!-- build: 1판-29 이메일 로그인 걷어냄 · 카카오 하나 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -6502,13 +6502,9 @@ function Account({
   syncNow,
   onClose
 }) {
-  const [tab, setTab] = useState(data.me ? "me" : "in");
-  const [email, setEmail] = useState(data.lastEmail || "");
-  const [pw, setPw] = useState("");
-  const [pw2, setPw2] = useState("");
-  const [nick, setNick] = useState("");
-  const [show, setShow] = useState(false);
-  const [busy, setBusy] = useState(false);
+  /* ★ 2026-09-10 밤 — 이메일 가입·로그인을 걷어내면서 딸린 상태도 함께 지웠다.
+        남은 것은 「내 계정」이냐 「로그인」이냐 두 갈래뿐이다 */
+  const [tab] = useState(data.me ? "me" : "in");
   const acc = data.profile || null;
   const pend = data.games.filter(g => !g.sid).length;
 
@@ -6518,79 +6514,12 @@ function Account({
   /* ★ splitGames 는 00-head 로 옮겼다 (2026-09-10).
         카카오는 앱이 뜰 때 로그인되므로 이 창을 안 거친다 — 같은 계산이 두 곳에 있으면 어긋난다 */
 
-  const signIn = async () => {
-    const e = email.trim().toLowerCase();
-    if (!e || !pw) return say("이메일과 비밀번호를 넣어주세요");
-    if (busy) return;
-    setBusy(true);
-    try {
-      const t = await sbSignIn(e, pw);
-      const uid = t?.user?.id;
-      /* ★ 부를 이름은 pickName 하나로 정한다 (20-sb.jsx · 차례 다섯 줄) */
-      const pf = await sbProfile(t.access_token, uid);
-      const nm = pickName(pf, t?.user?.user_metadata, e);
-      const {
-        games,
-        vault
-      } = splitGames(data, uid);
-      save({
-        ...data,
-        games,
-        vault,
-        me: uid,
-        nick: nm,
-        lastEmail: e,
-        profile: {
-          id: uid,
-          email: e,
-          nickname: nm
-        },
-        session: sessOf(t)
-      });
-      say(`${nm}님, 반갑습니다`);
-      setBusy(false);
-      onClose();
-    } catch (err) {
-      setBusy(false);
-      const m = String(err.message || "");
-      if (/Invalid login/i.test(m)) return say("이메일이나 비밀번호가 맞지 않습니다");
-      if (/Email not confirmed/i.test(m)) return say("이메일 인증을 먼저 마쳐주세요");
-      if (/fetch|network/i.test(m)) return say("연결에 실패했습니다. 인터넷을 확인해 주세요");
-      say(m);
-    }
-  };
-  const signUp = async () => {
-    const e = email.trim().toLowerCase();
-    if (!e || !pw) return say("이메일과 비밀번호를 넣어주세요");
-    if (pw.length < 6) return say("비밀번호는 여섯 자 이상이어야 합니다");
-    if (pw !== pw2) return say("비밀번호가 서로 다릅니다");
-    if (!nick.trim()) return say("이름을 넣어주세요");
-    if (busy) return;
-    setBusy(true);
-    try {
-      await sbSignUp(e, pw, {
-        nickname: nick.trim()
-      });
-      setBusy(false);
-      say("가입 메일을 보냈습니다. 메일에서 인증을 마친 뒤 로그인해 주세요");
-      setTab("in");
-    } catch (err) {
-      setBusy(false);
-      const m = String(err.message || "");
-      if (/already/i.test(m)) return say("이미 가입된 이메일입니다");
-      say(m);
-    }
-  };
-  const reset = async () => {
-    const e = email.trim().toLowerCase();
-    if (!e) return say("이메일을 먼저 넣어주세요");
-    try {
-      await sbReset(e);
-      say("비밀번호 재설정 메일을 보냈습니다");
-    } catch (err) {
-      say(String(err.message || "보내지 못했습니다"));
-    }
-  };
+  /* ⛔ signIn · signUp · reset 을 지웠다 (2026-09-10 밤).
+        이메일 길을 남겨두면 같은 분이 카카오와 이메일로 «두 계정» 이 되고
+        ★지갑이 갈라진다. 관리자는 admin.html 에 자기 로그인이 따로 있다.
+        ⛔ 20-sb.jsx 의 sbSignIn · sbSignUp · sbReset 은 «남겨 둔다» —
+          되살릴 일이 생기면 화면만 다시 붙이면 된다 */
+
   const signOut = () => {
     if (!confirm("로그아웃할까요? 폰에 있는 기록은 그대로 남습니다")) return;
     save({
@@ -6644,7 +6573,7 @@ function Account({
       fontSize: 16,
       fontWeight: 700
     }
-  }, tab === "me" ? "내 계정" : tab === "up" ? "가입하기" : "로그인"), /*#__PURE__*/React.createElement("button", {
+  }, tab === "me" ? "내 계정" : "로그인"), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
       color: "var(--chalk)",
@@ -6748,130 +6677,26 @@ function Account({
     }
   }, "카카오로 3초 만에 시작"), /*#__PURE__*/React.createElement("div", {
     style: {
+      fontSize: 12.5,
+      color: "var(--ivory)",
+      lineHeight: 1.7,
+      marginTop: 13
+    }
+  }, "처음 오셨어도 이 단추 하나면 됩니다. 따로 가입하실 것이 없어요."), /*#__PURE__*/React.createElement("div", {
+    style: {
       fontSize: 11.5,
       color: "#6F8598",
       lineHeight: 1.7,
-      margin: "9px 0 14px"
+      marginTop: 8
     }
   }, "명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      marginBottom: 14
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      flex: 1,
-      height: 1,
-      background: "var(--line)"
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--chalk)"
-    }
-  }, "또는 이메일로"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      flex: 1,
-      height: 1,
-      background: "var(--line)"
-    }
-  })), /*#__PURE__*/React.createElement("span", {
-    className: "lbl"
-  }, "이메일"), /*#__PURE__*/React.createElement("input", {
-    value: email,
-    onChange: e => setEmail(e.target.value),
-    inputMode: "email",
-    placeholder: "name@example.com",
-    style: {
-      marginBottom: 11
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "lbl"
-  }, "비밀번호"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "relative",
-      marginBottom: 11
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    type: show ? "text" : "password",
-    value: pw,
-    onChange: e => setPw(e.target.value),
-    placeholder: "여섯 자 이상",
-    style: {
-      paddingRight: 54
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShow(!show),
-    style: {
-      position: "absolute",
-      right: 8,
-      top: "50%",
-      transform: "translateY(-50%)",
-      fontSize: 11.5,
-      color: "var(--chalk)",
-      padding: "6px 8px"
-    }
-  }, show ? "숨김" : "보기")), tab === "up" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    className: "lbl"
-  }, "비밀번호 다시"), /*#__PURE__*/React.createElement("input", {
-    type: "password",
-    value: pw2,
-    onChange: e => setPw2(e.target.value),
-    style: {
-      marginBottom: 11
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "lbl"
-  }, "이름"), /*#__PURE__*/React.createElement("input", {
-    value: nick,
-    onChange: e => setNick(e.target.value),
-    placeholder: "동호회에서 부르는 이름",
-    style: {
-      marginBottom: 11
-    }
-  })), /*#__PURE__*/React.createElement("button", {
-    className: "prim",
-    disabled: busy,
-    onClick: tab === "up" ? signUp : signIn,
-    style: {
-      padding: 15,
-      fontSize: 15,
-      marginTop: 4
-    }
-  }, busy ? "잠시만요…" : tab === "up" ? "가입하기" : "로그인"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      marginTop: 12
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setTab(tab === "up" ? "in" : "up");
-      setPw("");
-      setPw2("");
-    },
-    style: {
-      fontSize: 12.5,
-      color: "var(--accent)",
-      padding: 6
-    }
-  }, tab === "up" ? "이미 계정이 있습니다" : "처음이신가요? 가입하기"), tab === "in" && /*#__PURE__*/React.createElement("button", {
-    onClick: reset,
-    style: {
-      fontSize: 12.5,
-      color: "var(--chalk)",
-      padding: 6
-    }
-  }, "비밀번호를 잊었어요")), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "#6F8598",
       lineHeight: 1.7,
       marginTop: 14
     }
-  }, "로그인하지 않아도 앱은 그대로 쓸 수 있습니다. 다만 기록이 이 폰 안에만 남습니다. 명연재 계정이 있으면 그대로 쓰시면 됩니다."))));
+  }, "로그인하지 않아도 앱은 그대로 쓸 수 있습니다. 다만 기록이 이 폰 안에만 남습니다."))));
 }
 
 /* ── 문의하기 ── */
@@ -7045,6 +6870,10 @@ function App() {
               }
             });
             put(n);
+            /* ★ 카카오로 돌아왔을 때 아무 말도 없으면 로그인이 된 줄 모른다.
+                  이메일 길에는 이 인사가 있었는데 카카오 길에는 없었다 */
+            setToast(`${nm}님, 반갑습니다`);
+            setTimeout(() => setToast(""), 2400);
             try {
               await window.storage.set(KEY, JSON.stringify(n));
             } catch (e) {}
