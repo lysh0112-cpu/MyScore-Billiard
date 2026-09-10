@@ -1,0 +1,4439 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+
+/* ══════════════════════════════════════════════
+   큐보드 CUEBOARD — 당구 전용 (My Score 에서 갈라져 나옴)
+   원본: score-hub.jsx 8판 (11종목)
+   ══════════════════════════════════════════════ */
+
+const KEY = "billiard:app:v1";      /* 이 앱의 자료 */
+
+/* ★ 자매 앱 · 약관 · 회사 정보 (2026-09-10 · 명카페 전달문 03)
+      ⛔ 세 앱이 «한 벌» 을 쓴다. 큐보드에 약관 화면을 따로 만들지 않는다.
+      ⛔ from=bil 을 빼면 손님이 명카페에 남는다 — 돌아올 단추가 안 나온다.
+        낱말(bil)은 지갑 주소에 쓰는 것과 «같은 것» 이다 */
+const FROM = "bil";
+const MYJAE = "https://myjae.kr";
+const TERMS = `${MYJAE}/terms?from=${FROM}`;
+const PRIVACY = `${MYJAE}/privacy?from=${FROM}`;
+const SISTERS = [
+  /* ⚠ 2026-09-10 — 손님에게 보이는 이름이 「명카페」→ ★「명연재」 로 바뀌었다.
+       ⛔ 코드·DB 안쪽은 그대로다 (myc · myjae · profiles). 바꾸면 지갑이 갈라진다 */
+  { icon: "☕", name: "명연재", url: MYJAE },
+  { icon: "⛳", name: "골프온", url: "https://golf.myjae.kr" },
+];
+/* ⚠ 사업자등록증(2026-09-04 발급) 그대로다. ★글자 하나도 바꾸지 말 것 —
+     PG 심사가 신청서와 대조한다. ★세 앱이 «같은 값» 을 써야 한다.
+   ⛔ 통신판매업 신고번호는 ★아직 없다. 가짜로 채우지 말고 «줄을 안 낸다» */
+const CO = {
+  name: "(주)명연재", ceo: "오연희", biz: "296-86-04182",
+  addr: "서울특별시 강북구 솔매로45길 95, 2층 (미아동)",
+  tel: "010-6493-2252",   /* ★2026-09-10 개통 · 세 앱이 같은 번호 */
+};
+const HUB = "score:hub:v1";         /* ★ My Score 가 쓰던 자료. 처음 켤 때 당구만 가져온다 */
+
+const ACCENT = "#E8B838";
+const BALL = ["#F4EEDF", "#E8B838"];              /* ★ 흰공 · 노란공 두 가지뿐 */
+const BALLNAME = ["흰공", "노란공"];
+const DIM = ["#4a4436", "#4a4028"];
+const B_LABEL = { "3": "3쿠션", "4": "4구" };
+const B_INN = { "3": 25, "4": 30 };
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap');
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+.sq {
+  --bg:#0A2438; --card:#0F3A56; --line:rgba(244,238,223,.13);
+  --ivory:#F4EEDF; --chalk:#9FBBD0; --red:#CC3B31; --yellow:#E8B838; --green:#4FB286;
+  font-family:'IBM Plex Sans KR',system-ui,sans-serif;
+  background:var(--bg); color:var(--ivory); min-height:100vh;
+  max-width:520px; margin:0 auto; position:relative; padding-bottom:110px;
+  overflow:visible;
+}
+.sq.bare { padding-bottom:0; background:#000; max-width:none; width:100%; }
+.sq.tv { max-width:100%; }
+.sq.tv .zoomable { zoom:1.45; }
+.sq .num { font-family:'Oswald',sans-serif; font-weight:500; font-variant-numeric:tabular-nums; }
+.sq button { font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; }
+.sq input, .sq textarea {
+  width:100%; background:rgba(0,0,0,.28); border:1px solid var(--line);
+  border-radius:8px; padding:11px 12px; color:var(--ivory); font-size:15px; font-family:inherit;
+}
+.sq input::placeholder, .sq textarea::placeholder { color:rgba(159,187,208,.5); }
+/* ★ 8판 — type="range" 를 쓰던 곳이 없어졌다 (사진 크기는 손으로 벌려 맞춘다).
+      다만 위 .sq input 규칙이 range 에도 걸려 빈 입력칸처럼 보이는 문제가 있었으므로,
+      나중에 막대를 쓸 일이 생기면 이 규칙을 되살릴 것. 지금은 쓰는 곳이 없어 뺀다 */
+.sq .lbl { font-size:11px; letter-spacing:.14em; color:var(--chalk); text-transform:uppercase; margin-bottom:6px; display:block; font-weight:600; }
+.sq .card { background:var(--card); border:1px solid var(--line); border-radius:12px; }
+.sq .dia { width:8px; height:8px; transform:rotate(45deg); background:var(--ivory); opacity:.4; border-radius:1px; }
+.sq .chip { padding:9px 0; border-radius:8px; font-size:14px; font-weight:600; border:1px solid var(--line); background:rgba(0,0,0,.22); transition:.15s; }
+.sq .chip.on { background:var(--ivory); color:var(--bg); border-color:var(--ivory); }
+.sq .prim { background:var(--accent,#E8B838); color:#141200; font-weight:700; border-radius:10px; padding:15px; width:100%; font-size:16px; }
+.sq .prim:disabled { opacity:.32; }
+.sq .ghost { border:1px solid var(--line); border-radius:10px; padding:13px; width:100%; font-size:15px; font-weight:600; background:rgba(0,0,0,.22); }
+.flipwrap { position:absolute; inset:0; perspective:820px; perspective-origin:50% 50%; }
+.fh { position:absolute; left:0; right:0; height:50%; overflow:hidden; backface-visibility:hidden; will-change:transform; }
+.fh.t { top:0; border-radius:14px 14px 0 0; }
+.fh.b { bottom:0; border-radius:0 0 14px 14px; }
+.fi { position:absolute; left:0; right:0; height:200%; display:flex; align-items:center; justify-content:center;
+      font-family:'Oswald',sans-serif; font-weight:600; line-height:1; font-variant-numeric:tabular-nums;
+      font-size:min(40vh, 26vw, 380px); }
+@supports (container-type: size) {
+  .fi { font-size:min(118cqh, 46cqw); }
+}
+.fh.t .fi { top:0; }
+.fh.b .fi { bottom:0; }
+.sh { position:absolute; inset:0; background:#000; opacity:0; pointer-events:none; will-change:opacity; }
+.gl { position:absolute; inset:0; pointer-events:none;
+      background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,0) 62%); opacity:0; }
+.hinge { position:absolute; left:0; right:0; top:50%; height:2px; margin-top:-1px; z-index:6;
+         background:rgba(0,0,0,.6); pointer-events:none; }
+.ft { transform-origin:center bottom; z-index:4;
+      animation:flipFall .17s cubic-bezier(.5,.02,.72,.3) forwards; }
+.fb { transform-origin:center top; z-index:5; transform:rotateX(92deg);
+      animation:flipRise .21s .12s cubic-bezier(.2,.9,.35,1) forwards; }
+.ft .sh { animation:shDark .17s linear forwards; }
+.fb .sh { opacity:.52; animation:shLight .21s .12s linear forwards; }
+.ft .gl { animation:glOut .17s linear forwards; opacity:.2; }
+.fb .gl { animation:glIn .21s .12s linear forwards; }
+@keyframes flipFall { to { transform:rotateX(-92deg); } }
+@keyframes flipRise { 0% { transform:rotateX(92deg); } 76% { transform:rotateX(-4.5deg); } 100% { transform:rotateX(0deg); } }
+@keyframes shDark { to { opacity:.52; } }
+@keyframes shLight { to { opacity:0; } }
+@keyframes glOut { to { opacity:0; } }
+@keyframes glIn { 0% { opacity:0; } 70% { opacity:.22; } 100% { opacity:0; } }
+@media (max-height:430px) { .statrow { padding:1px 0 0 !important; } }
+@media (orientation: landscape) { .rot { display:none !important; } }
+@media (prefers-reduced-motion:reduce){ .sq * { transition:none !important; } .ft,.fb { animation:none !important; display:none !important; } }
+`;
+
+/* ── 유틸 ─────────────────────────────────── */
+const uid = () => Math.random().toString(36).slice(2, 9);
+const uuid = () => (crypto?.randomUUID ? crypto.randomUUID()
+  : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    }));
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const dow = (s) => ["일", "월", "화", "수", "목", "금", "토"][new Date(s + "T00:00:00").getDay()] || "";
+const md = (s) => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`;
+const recentFirst = (a, b) => {
+  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  return (b.endAt || 0) - (a.endAt || 0);
+};
+const avg = (s, i) => (i > 0 ? s / i : 0);
+const fmtAvg = (v, m) => (m === "3" ? v.toFixed(3) : v.toFixed(2));
+const clock = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+/* ★ 회원 명부를 없앴다 (당구 전용). 이름은 홈에서 직접 친다.
+      ★ 기록 형식은 My Score 8판 그대로다 — 지금까지 친 당구 기록이 그대로 보이고
+        서버 동기화(score_games)도 손댈 것이 없다. 바꾸지 말 것 */
+const bilGames = (games) => (games || []).filter((g) => g && g.sport === "billiard" && Array.isArray(g.players));
+
+/* 지난 기록에서 그 이름의 마지막 핸디를 찾아 자동으로 채운다 */
+const lastHandiOf = (games, name, mode) => {
+  for (const g of bilGames(games).sort(recentFirst)) {
+    if (g.mode !== mode) continue;
+    const p = g.players.find((x) => x.name === name);
+    if (p && Number(p.handicap) > 0) return Number(p.handicap);
+  }
+  return null;
+};
+
+/* 지난 기록에 나온 이름들 — 이름을 칠 때 후보로 띄운다 */
+const knownNames = (games) => {
+  const seen = [];
+  bilGames(games).sort(recentFirst).forEach((g) => g.players.forEach((p) => {
+    if (p.name && !seen.includes(p.name)) seen.push(p.name);
+  }));
+  return seen;
+};
+
+/* 지난 경기 그대로 채우기 — 가장 최근 경기의 사람 · 장소 · 방식 */
+const lastSetup = (games) => {
+  const g = bilGames(games).sort(recentFirst)[0];
+  if (!g) return null;
+  const seen = [];
+  g.players.forEach((p) => { if (!seen.some((x) => x.name === p.name)) seen.push({ name: p.name, handi: Number(p.handicap) || 0 }); });
+  return { mode: g.mode || "3", place: g.place || "", team: !!g.team, players: seen };
+};
+
+const normalize = (d0) => {
+  const d = d0 && typeof d0 === "object" ? d0 : {};
+  return { ...d, games: (d.games || []).filter((g) => g && Array.isArray(g.players)) };
+};
+
+/* ★ 로그인한 사람의 기록만 골라낸다 — 남의 것은 vault 로 치운다.
+      ⚠ 2026-09-10 에 계정 창 «안» 에서 밖으로 꺼냈다.
+        카카오 로그인은 앱이 뜰 때 일어나므로 계정 창을 안 거친다.
+        두 군데에 같은 계산을 두면 반드시 어긋난다 (9장 ①) */
+const splitGames = (data, uid) => {
+  const pool = [...(data.games || []), ...(data.vault || [])];
+  const isMine = (g) => !g.acc || g.acc === uid;
+  const mine = pool.filter(isMine).map((g) => (g.acc || !(data.me && data.me !== uid)
+    ? g : { ...g, sid: undefined, upAt: undefined }));
+  return { games: mine.sort(recentFirst), vault: pool.filter((g) => !isMine(g)) };
+};
+/* ── 음성 안내 ── */
+let VOICES = [];
+let PRIMED = false;
+const loadVoices = () => { try { VOICES = window.speechSynthesis.getVoices() || []; } catch (e) { VOICES = []; } };
+
+const ttsOK = () => typeof window !== "undefined" && !!window.speechSynthesis && typeof SpeechSynthesisUtterance !== "undefined";
+const koVoice = () => {
+  if (!VOICES.length) loadVoices();
+  return VOICES.find((v) => /^ko/i.test(v.lang)) || VOICES.find((v) => /korea|한국/i.test(v.name)) || null;
+};
+function primeTTS() {
+  if (PRIMED || !ttsOK()) return;
+  PRIMED = true;
+  loadVoices();
+  try {
+    const u = new SpeechSynthesisUtterance("");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+    window.speechSynthesis.cancel();
+  } catch (e) {}
+}
+function speakKo(text) {
+  if (!ttsOK() || !text) return false;
+  const S = window.speechSynthesis;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    const v = koVoice();
+    if (v) u.voice = v;
+    u.lang = "ko-KR"; u.rate = 1.12; u.volume = 1; u.pitch = 1;
+    S.cancel();
+    S.resume();
+    S.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+function ttsReport() {
+  if (!ttsOK()) return "이 브라우저는 음성을 지원하지 않습니다. 크롬으로 열어주세요";
+  loadVoices();
+  if (!VOICES.length) return "목소리를 찾지 못했습니다. 잠시 후 다시 눌러보세요";
+  const v = koVoice();
+  if (!v) return `한국어 목소리가 없습니다 (설치된 목소리 ${VOICES.length}개). 폰 설정에서 한국어 음성을 받아주세요`;
+  return `준비됨 · ${v.name}`;
+}
+const SB_URL = "https://auvuwytatfcoawdrgunl.supabase.co";
+const SB_KEY = "sb_publishable_9-cLLZC0YETjFq4XpAZCog_X9ofa2FZ";
+const SB_ON = !!(SB_URL && SB_KEY);
+
+const sbFetch = async (path, opt = {}) => {
+  const res = await fetch(SB_URL + path, {
+    ...opt,
+    headers: {
+      apikey: SB_KEY,
+      "Content-Type": "application/json",
+      ...(opt.token ? { Authorization: `Bearer ${opt.token}` } : {}),
+      ...(opt.headers || {}),
+    },
+  });
+  let body = null;
+  try { body = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const msg = body?.error_description || body?.msg || body?.message || `오류 ${res.status}`;
+    throw new Error(msg);
+  }
+  return body;
+};
+
+const sbSignIn = (email, password) =>
+  sbFetch("/auth/v1/token?grant_type=password", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
+const sbSignUp = (email, password, meta) =>
+  sbFetch("/auth/v1/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, password, data: meta || {} }),
+  });
+
+/* ★ profiles 는 명카페가 만든 표다. 큐보드는 읽기만 한다 (이름을 가져오려고).
+      ⚠ 줄이 아예 없는 회원이 있다 — 없으면 null 을 돌려주고 앱은 그대로 돈다
+        (maybeSingle 과 같은 뜻이다. REST 로는 배열이 비어 오는 것이 그 자리다) */
+const sbProfile = async (token, uid) => {
+  try {
+    const rows = await sbFetch(
+      `/rest/v1/profiles?id=eq.${uid}&select=id,nickname,hangul_name,email,role&limit=1`, { token });
+    return Array.isArray(rows) && rows.length ? rows[0] : null;
+  } catch (e) { return null; }
+};
+
+const sbReset = (email) =>
+  sbFetch("/auth/v1/recover", { method: "POST", body: JSON.stringify({ email }) });
+
+/* ══ 서버 기록 (score_ 표) ═══════════════════════════
+   기본 원칙: 기록은 폰에 먼저 저장한다. 서버는 그 다음이다.
+   당구장·골프장은 신호가 약하다. 올리기가 실패해도
+   경기 저장 자체는 절대 막히면 안 된다.        */
+
+/* ── 토큰 ──
+   Supabase 토큰은 한 시간이면 만료된다.
+   갱신이 없으면 로그인 한 시간 뒤부터 저장이 조용히 실패한다. */
+const SESS_PAD = 60 * 1000;                       // 만료 1분 전에 미리 갱신
+const sessOf = (t) => (t?.access_token ? {
+  token: t.access_token,
+  refresh: t.refresh_token,
+  at: Date.now(),
+  exp: Date.now() + (Number(t.expires_in) || 3600) * 1000,
+} : null);
+/* exp 가 없는 옛 세션은 55분으로 본다 */
+const sessExp = (s) => Number(s?.exp) || (Number(s?.at) || 0) + 55 * 60 * 1000;
+const sessAlive = (s) => !!s?.token && Date.now() < sessExp(s) - SESS_PAD;
+
+const sbRefresh = (rt) =>
+  sbFetch("/auth/v1/token?grant_type=refresh_token", {
+    method: "POST", body: JSON.stringify({ refresh_token: rt }),
+  });
+
+/* 쓸 수 있는 토큰을 준다. 만료됐으면 조용히 새로 받는다.
+   새로 받으면 onNew(세션) 으로 알려 저장하게 한다.
+   여러 곳에서 동시에 불러도 갱신은 한 번만 (REFRESHING) */
+let REFRESHING = null;
+async function sbToken(sess, onNew) {
+  if (!sess?.token) return null;
+  if (sessAlive(sess)) return sess.token;
+  if (!sess.refresh) return null;
+  if (!REFRESHING) {
+    REFRESHING = sbRefresh(sess.refresh).then(sessOf);
+  }
+  let n = null;
+  try { n = await REFRESHING; } catch (e) { n = null; }
+  REFRESHING = null;
+  if (!n?.token) return null;
+  if (onNew) onNew(n);
+  return n.token;
+}
+
+/* ★ 부를 이름 정하는 순서 (2026-09-05 대표님 결정 — ★다섯 줄을 바꾸지 말 것)
+      ① profiles.nickname  ② profiles.hangul_name
+      ③ ★카카오 메타       ④ 이메일 앞부분      ⑤ '회원'
+   ⚠ 2026-09-10 — 카카오는 `nickname` 칸을 «주지 않는다» (명카페가 auth.users 를 실제로 재봄).
+     오는 것은 name · full_name · user_name · preferred_username 쪽이다.
+     ⇒ 차례는 그대로 두고 ③이 «읽는 자리» 만 넓혔다.
+   ⚠ 셋(당구·골프·명카페)이 같은 차례를 쓴다. 어긋나면 한 사람이 앱마다 다른 이름이 된다 */
+const metaNick = (m) =>
+  (m && (m.nickname || m.name || m.full_name || m.user_name || m.preferred_username)) || "";
+
+const pickName = (pf, meta, email) => {
+  let nm = "";
+  if (pf) nm = pf.nickname || pf.hangul_name || "";
+  if (!nm) nm = metaNick(meta);
+  if (!nm && email) nm = String(email).split("@")[0];
+  if (!nm) nm = "회원";
+  return nm;
+};
+
+/* ── ★ 카카오 로그인 (2026-09-10) ──
+      큐보드는 supabase-js 를 쓰지 않는다 (라이브러리가 react 둘뿐이다).
+      그래서 주소로 «보내고», 돌아온 조각을 손으로 받는다.
+   ⛔ 카카오 열쇠(REST 키·시크릿)는 여기 «없다». Supabase 가 갖고 있고
+      앱은 provider 이름만 말한다. 열쇠를 코드에 넣으면 그대로 샌다 */
+const sbKakaoGo = () => {
+  const back = location.origin + location.pathname;
+  location.href = `${SB_URL}/auth/v1/authorize?provider=kakao&redirect_to=${encodeURIComponent(back)}`;
+};
+
+/* 돌아올 때 #access_token=… 이 ★우물정 뒤에 붙어 온다 */
+const sbHashSess = () => {
+  try {
+    const h = String(location.hash || "").replace(/^#/, "");
+    if (h.indexOf("access_token=") < 0) return null;
+    const p = new URLSearchParams(h);
+    const t = p.get("access_token");
+    if (!t) return null;
+    return sessOf({ access_token: t, refresh_token: p.get("refresh_token"), expires_in: p.get("expires_in") });
+  } catch (e) { return null; }
+};
+
+/* ⛔ 담았으면 «반드시» 지운다 — 그 주소가 남에게 넘어가면 그대로 세션이다 */
+const sbHashClear = () => {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+};
+
+/* 조각에는 토큰만 온다. 누구인지는 따로 묻는다 */
+const sbUser = (token) => sbFetch("/auth/v1/user", { token });
+
+/* ── 경기 한 건 → 서버 두 표 ──
+   score_games   원본 통째로 (data jsonb)
+   score_results 랭킹에 쓸 숫자만 (jsonb 를 뒤지면 느리다) */
+
+/* 서버로 보낼 알맹이 — 서버 쪽 표시는 다시 안 보낸다 */
+const gameBody = (g) => {
+  const d = { ...g };
+  delete d.sid; delete d.upAt;              // 서버 쪽 표시는 다시 안 보낸다
+  return d;
+};
+
+/* 랭킹용 성적. me 는 로그인한 사람의 아이디 —
+   score_results.user_id 는 진짜 계정에만 채운다.
+   폰 안에서만 만든 회원 아이디를 넣으면 서버가 튕긴다 */
+function resultRows(g, me) {
+  /* ★ 당구 전용 — 다른 종목 갈래를 뺐다. 서버 표(score_results)는 그대로다 */
+  return (g.players || []).map((p) => ({
+    name: p.name || "",
+    sport: "billiard",
+    mode: g.mode || null,
+    played_on: g.date,
+    confirmed: !!g.confirmed,
+    user_id: p.memberId && p.memberId === me ? me : null,
+    score: Number(p.score) || 0,
+    innings: (Number(p.inn) || Number(g.innings) || 0) || null,
+    par: null,
+    won: typeof p.won === "boolean" ? p.won : null,
+    extra: {
+      handicap: Number(p.handicap) || 0,
+      high: Number(p.high) || 0,
+      side: p.side || "", team: !!g.team, guest: !!p.guest,
+      gameNo: g.gameNo || null, bestOf: g.bestOf || 1,
+    },
+  }));
+}
+
+/* 한 건 올리기. 이미 올린 것이면 덮어쓴다 (client_id 로 찾는다).
+   서버가 준 id 를 돌려주면, 폰 기록에 sid 로 적어 두 번 안 올린다 */
+async function pushGame(g, token, me) {
+  const body = {
+    client_id: g.id,
+    owner: me,
+    sport: g.sport,
+    mode: g.mode || null,
+    played_on: g.date,
+    place: g.place || null,
+    confirmed: !!g.confirmed,
+    data: gameBody(g),
+  };
+  const found = await sbFetch(
+    `/rest/v1/score_games?owner=eq.${me}&client_id=eq.${encodeURIComponent(g.id)}&select=id`, { token });
+  let sid = Array.isArray(found) && found.length ? found[0].id : null;
+
+  if (sid) {
+    await sbFetch(`/rest/v1/score_games?id=eq.${sid}`, {
+      method: "PATCH", token, body: JSON.stringify(body),
+    });
+    try { await sbFetch(`/rest/v1/score_results?game_id=eq.${sid}`, { method: "DELETE", token }); } catch (e) {}
+  } else {
+    const rows = await sbFetch("/rest/v1/score_games", {
+      method: "POST", token,
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(body),
+    });
+    sid = Array.isArray(rows) && rows.length ? rows[0].id : null;
+    if (!sid) throw new Error("서버가 경기 번호를 주지 않았습니다");
+  }
+
+  const rows = resultRows(g, me).map((r) => ({ ...r, game_id: sid }));
+  if (rows.length) {
+    await sbFetch("/rest/v1/score_results", {
+      method: "POST", token, headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(rows),
+    });
+  }
+  return sid;
+}
+
+/* 서버에 있는 내 기록 내려받기 (기기를 바꿨을 때) */
+async function pullGames(token, me, limit) {
+  /* ★ 서버에서 당구만 받는다 (2026-09-05 · 골프온 작업 중에 찾음).
+        score_games 는 명카페·My Score·큐보드·골프온이 함께 쓰는 표다.
+
+     ⚠ 전에는 종목을 안 거르고 500줄을 받아 브라우저에서 버렸다.
+        저장은 안 됐지만 더 나쁜 문제가 있었다 —
+        limit 500 이 모든 종목을 통틀어 세기 때문에,
+        골프를 400판 친 사람은 최근 500줄 안에 당구가 100판밖에 안 들어와
+        ★ 나머지 당구 기록이 영영 안 내려왔다.
+        받는 양도 그만큼 헛되이 컸다 (data 는 경기 한 판이 통째로 들어 있다). */
+  const rows = await sbFetch(
+    `/rest/v1/score_games?owner=eq.${me}&sport=eq.billiard` +
+    `&select=id,client_id,data&order=played_on.desc&limit=${limit || 500}`,
+    { token });
+  return (Array.isArray(rows) ? rows : [])
+    .map((r) => {
+      const g = r.data && typeof r.data === "object" ? r.data : null;
+      /* 서버가 걸러줘도 여기서 한 번 더 본다 — 옛 줄에 sport 칸이 비어 있을 수 있다 */
+      if (!g || !Array.isArray(g.players) || g.sport !== "billiard") return null;
+      return { ...g, id: r.client_id || g.id, sid: r.id };
+    })
+    .filter(Boolean);
+}
+
+function syncMsg(e) {
+  const m = String(e?.message || e || "");
+  if (/JWT|token|expired|401/i.test(m)) return "로그인이 만료됐습니다. 다시 로그인해 주세요";
+  if (/row-level security|policy|42501|permission/i.test(m)) return "서버가 저장을 막고 있습니다 (권한 설정 확인 필요)";
+  if (/column|PGRST|does not exist|42703/i.test(m)) return "서버 표 모양이 앱과 다릅니다 (" + m.slice(0, 60) + ")";
+  if (/fetch|network|Failed/i.test(m)) return "인터넷이 끊겼습니다. 나중에 저절로 올라갑니다";
+  return m.slice(0, 80) || "올리지 못했습니다";
+}const FLIP_MS = 340;
+
+function Flip({ value, bg, fg, size }) {
+  const last = useRef({ v: value, bg, fg });
+  const [st, setSt] = useState({ prev: null, seq: 0, moving: false });
+  useEffect(() => {
+    const p = last.current;
+    if (p.v === value && p.bg === bg) return;
+    last.current = { v: value, bg, fg };
+    setSt((x) => ({ prev: p, seq: x.seq + 1, moving: true }));
+    const t = setTimeout(() => setSt((x) => ({ ...x, moving: false })), FLIP_MS);
+    return () => clearTimeout(t);
+  }, [value, bg]); // eslint-disable-line
+
+  const half = (cls, n, b, f, fx) => (
+    <div className={"fh " + cls} style={{ background: b }}>
+      <div className="fi" style={{ color: f, fontSize: size }}>{n}</div>
+      {fx && <><div className="sh" /><div className="gl" /></>}
+    </div>
+  );
+  const p = st.prev;
+  const show = st.moving && p;
+
+  return (
+    <div className="flipwrap">
+      {half("t", value, bg, fg)}
+      {half("b", show ? p.v : value, show ? p.bg : bg, show ? p.fg : fg)}
+      {show && (
+        <React.Fragment key={st.seq}>
+          {half("t ft", p.v, p.bg, p.fg, true)}
+          {half("b fb", value, bg, fg, true)}
+        </React.Fragment>
+      )}
+      <div className="hinge" />
+    </div>
+  );
+}
+
+const PAD_NAME = "clamp(15px, 3vh, 34px)";
+const PAD_LBL  = "clamp(9.5px, 1.5vh, 16px)";
+
+/* ★ 원래 쓰임이 폰이 아니라 태블릿이다 — 모니터에 걸어 여럿이 멀리서 본다.
+      폰 가로는 세로가 좁아 지금이 한계라 아래(min)는 그대로 두고 위(max)만 올린다.
+      그래서 폰에서는 지금과 똑같고, 태블릿에서만 커진다.
+      PAD_LBL·PAD_VAL 은 번호판 밑 지표에 그대로 쓰고, 가운데 칸은 따로 크게 잡는다 */
+const MID_LBL  = "clamp(11px, 2.2vh, 26px)";
+const MID_VAL  = "clamp(16px, 4.4vh, 46px)";
+/* 지표 한 줄 — 하이런 0 · 에버 0.000 · 목표 12 */
+const ST_LBL   = "clamp(10px, 2vh, 20px)";
+const ST_VAL   = "clamp(14px, 3.3vh, 32px)";
+/* 점수 단추 (−2 −1 +1 +2) — 알약 모양 */
+const PT_PAD   = "clamp(8px, 2.1vh, 22px) 0";
+const PT_FS    = "clamp(14px, 3.2vh, 38px)";
+
+/* 자릿수가 늘어나도 칸을 안 넘도록 글자 크기를 줄인다 */
+const padSize = (maxLen) => `min(104cqh, ${Math.round(86 / (0.74 * Math.max(1, maxLen)))}cqw)`;
+
+/*  name    이름
+    value   큰 숫자
+    bg/fg   번호판 바탕색·글자색
+    accent  이름과 지표 값 색
+    dim     지금 차례가 아니다 (이름을 흐리게)
+    badge   이름 밑 한 줄        { text, color }
+    dot     이름 밑 동그라미 한 줄 { color, text, on }  on:false 면 자리만 잡고 감춤
+    stats   맨 밑 지표 줄        [[라벨, 값, 색?], ...]
+    onTap   번호판을 눌렀을 때                                     */
+function ScorePad({ name, value, size, bg, fg, accent = "#F4EEDF", dim = false,
+                    badge = null, dot = null, stats = [], onTap, onName, ariaLabel }) {
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+      {/* ★ 이름을 누르면 순서·공 색을 바꾸는 작은 창이 뜬다.
+             판이 끝날 때마다 순서를 바꾸는데, 그때마다 설정 서랍을 여는 건 번거롭다.
+             눌러도 되는 줄 알도록 ⇄ 를 붙인다 */}
+      <button onClick={onName} disabled={!onName} aria-label={onName ? `${name} 순서와 공 색 바꾸기` : undefined}
+        style={{
+          fontSize: PAD_NAME, fontWeight: 700, textAlign: "center", padding: "2px 4px 6px",
+          color: dim ? "#6a6a6a" : accent, background: "transparent",
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%",
+        }}>
+        {name}
+        {onName && <span style={{ fontSize: ST_LBL, color: "#6f6f6f", marginLeft: 7 }}>⇄</span>}
+      </button>
+
+      {badge && (
+        <div style={{
+          fontSize: PAD_LBL, color: badge.color || "#E8B838", fontWeight: 700,
+          textAlign: "center", paddingBottom: 3,
+        }}>{badge.text}</div>
+      )}
+
+      {dot && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          paddingBottom: 5, opacity: dot.on === false ? 0 : 1,
+        }}>
+          <span style={{
+            width: "clamp(11px,1.7vh,18px)", height: "clamp(11px,1.7vh,18px)", borderRadius: "50%",
+            background: dot.color, border: "1px solid rgba(0,0,0,.5)", opacity: dim ? .45 : 1,
+          }} />
+          {dot.text && (
+            <span style={{ fontSize: PAD_LBL, color: dim ? "#6a6a6a" : dot.color, fontWeight: 600 }}>
+              {dot.text}
+            </span>
+          )}
+        </div>
+      )}
+
+      <button onClick={onTap} aria-label={ariaLabel} style={{
+        flex: 1, position: "relative", borderRadius: 14, background: "transparent",
+        overflow: "hidden", minHeight: 0, containerType: "size",
+      }}>
+        <Flip value={value} size={size} bg={bg} fg={fg} />
+      </button>
+
+      {stats.length > 0 && (
+        /* ★ 위아래 두 줄이던 것을 한 줄로 폈다.
+               당구대에서 고개를 들어 보는 값이라 줄을 나누면 글자가 반으로 작아진다.
+               "하이런 0  에버 0.000  목표 12" 처럼 라벨과 값을 나란히 둔다 */
+        <div className="statrow" style={{
+          display: "flex", justifyContent: "center", alignItems: "baseline",
+          gap: "clamp(9px,2.2vw,30px)", padding: "7px 2px 5px",
+          flexWrap: "nowrap", whiteSpace: "nowrap", overflow: "hidden",
+        }}>
+          {stats.map(([l, v, c, onStat]) => (
+            /* ★ 네 번째 값이 있으면 그 지표만 누를 수 있다 (목표 → 핸디 고치기).
+                   이 줄은 번호판 단추 바깥이라, 눌러도 점수가 오르지 않는다.
+                   눌러도 되는 줄 알도록 점선 밑줄을 깐다 */
+            <span key={l} style={{ display: "inline-flex", alignItems: "baseline", gap: "clamp(4px,.8vw,9px)" }}>
+              {onStat ? (
+                <button onClick={onStat} aria-label={`${l} ${v}, 누르면 고치기`} style={{
+                  display: "inline-flex", alignItems: "baseline", gap: "clamp(4px,.8vw,9px)",
+                  background: "transparent", padding: "0 2px 2px", borderBottom: "1px dashed #5f7488",
+                }}>
+                  <span style={{ fontSize: ST_LBL, color: "#7d7d7d" }}>{l}</span>
+                  <span className="num" style={{ fontSize: ST_VAL, color: "#9fbbd0" }}>{v}</span>
+                </button>
+              ) : (
+                <>
+                  <span style={{ fontSize: ST_LBL, color: "#7d7d7d" }}>{l}</span>
+                  <span className="num" style={{ fontSize: ST_VAL, color: c || accent }}>{v}</span>
+                </>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* 번호판을 감싸는 검은 전체화면 */
+function BoardShell({ children, onPointerDown }) {
+  return (
+    <div onPointerDown={onPointerDown} style={{
+      position: "fixed", inset: 0, zIndex: 60,
+      display: "flex", background: "#000", color: "#fff", overflow: "hidden",
+      paddingLeft: "env(safe-area-inset-left)", paddingRight: "max(env(safe-area-inset-right), 6px)",
+      paddingBottom: "env(safe-area-inset-bottom)", paddingTop: "env(safe-area-inset-top)",
+    }}>{children}</div>
+  );
+}
+
+/* 좌측 기둥 크기 규칙  ─  ★ 6판까지는 전부 고정 픽셀이라 폰에서 잘렸다
+
+   폰을 가로로 눕히면 상태표시줄을 뺀 앱 높이가 356px 밖에 안 되는데
+   기둥은 378px 가 필요했다. BoardShell 이 overflow:hidden 이라 스크롤도 안 되고
+   그냥 잘려서, [크게] 와 [홈] 두 개가 화면 밖으로 밀려나 아예 안 보였다.
+   (사용자 사진으로 확인 — 여섯 개만 보이고 ⚙ 와 [종료] 는 반쯤 잘려 있었다)
+
+   ⚠ 2장 크기 규칙("min 은 그대로, max 만 올린다")의 예외입니다.
+      점수판 글씨는 폰에서도 멀쩡했지만 기둥은 폰에서 이미 넘치고 있어서,
+      여기만은 min 도 내려야 합니다. max 는 규칙대로 태블릿에서 더 커집니다.
+
+   폰 가로 356px → 1vh=3.56px 이라 전부 min 값으로 붙는다  (여덟 칸 302px · 54px 남음)
+   태블릿  836px → 1vh=8.36px 이라 전부 max 값으로 붙는다  (지금보다 오히려 시원해진다)
+   글씨는 11px 아래로 내려가지 않게 min 을 잡았다 */
+const RAIL_PAD  = "clamp(6px, 1.6vh, 13px) 0";   /* 단추 위아래 여백  9  → 6 (폰) · 13 (태블릿) */
+const RAIL_GAP  = "clamp(5px, 1.4vh, 11px)";     /* 단추 사이 간격    6  → 5 (폰) · 11 (태블릿) */
+const RAIL_BOX  = "clamp(6px, 1.6vh, 10px) 0";   /* 기둥 자체의 위아래 여백 */
+const RAIL_ICON = "clamp(17px, 2.6vh, 22px)";    /* ⚙ */
+const RAIL_TXT  = "clamp(12px, 1.8vh, 15px)";    /* 시작 · 중지 · 정산 · 종료 */
+const RAIL_TWO  = "clamp(11px, 1.7vh, 14px)";    /* 되돌리기 · 점수지움 (두 줄) */
+const RAIL_SYM  = "clamp(13px, 2.15vh, 18px)";   /* ⤢ 크게 · 🏠 홈 (그림+글자 두 줄) */
+
+/* 왼쪽 버튼 기둥 — top 은 위에, bottom 은 아래에 붙는다
+   ★ 단추 폭 46px 은 그대로다. 세로만 줄이고 누르는 가로 폭은 안 건드린다
+   ★ lineHeight 를 반드시 못박는다. 안 정하면 한글 글꼴이 1.5 쯤으로 잡아서
+      여덟 칸이 34px 더 길어진다 — 7판에서 [홈] 이 잘린 진짜 이유였다 (8장 ⑰) */
+function BoardRail({ top = [], bottom = [] }) {
+  const btn = (b, i) => (
+    <button key={i} onClick={b.onClick} disabled={b.disabled} title={b.title} style={{
+      width: 46, padding: RAIL_PAD, borderRadius: 9, fontWeight: 700, lineHeight: 1.15,
+      fontSize: b.size || RAIL_TXT, background: b.bg || "#1f1f1f",
+      border: b.disabled ? "1px solid #4d4d4d" : (b.border || "none"),
+      color: b.disabled ? "#7a7a7a" : (b.color || "#ccc"),
+    }}>{b.label}</button>
+  );
+  const col = (list) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: RAIL_GAP, alignItems: "center" }}>
+      {list.map(btn)}
+    </div>
+  );
+  return (
+    <div style={{
+      width: 58, flexShrink: 0, background: "#171717", borderRight: "1px solid #262626",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "space-between", padding: RAIL_BOX, gap: RAIL_GAP,
+    }}>{col(top)}{col(bottom)}</div>
+  );
+}
+
+/* 번호판들이 늘어서는 가운데 칸 */
+function BoardArea({ children }) {
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+      {children}
+    </div>
+  );
+}
+
+/* 번호판 사이에 끼는 가운데 표시 (이닝 · 세트 · 전후반)
+   ★ 좁게 눌려 깨알만 해지지 않도록 최소 폭을 잡아 둔다 */
+function BoardMid({ top, big, cap, bottom, width }) {
+  return (
+    <div style={{
+      flexShrink: 0, minWidth: width || "clamp(56px,9vw,150px)", width: width || undefined,
+      display: "flex", flexDirection: "column", alignItems: "center", padding: "0 6px",
+    }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        {top}
+        <div className="num" style={{ fontSize: "min(13vh,7vw,112px)", lineHeight: 1.1, marginTop: 8 }}>{big}</div>
+        <div style={{ fontSize: MID_LBL, color: "#999", whiteSpace: "nowrap" }}>{cap}</div>
+      </div>
+      {bottom}
+    </div>
+  );
+}
+
+/* 화면 전체 보기 */
+const fullScreen = () => {
+  try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); } catch (e) {}
+};
+/* ── 움직이는 사진 (GIF) 만들기 ────────────────
+   ★ 굿샷을 단톡방에 올리려는 것이 목적이다 (사용자 지시).
+      GIF 로 하는 이유 — 카톡·갤러리에서 아무것도 안 눌러도 저절로 움직인다.
+      webm 영상은 안드로이드 갤러리가 못 여는 경우가 있다.
+
+   ★ 라이브러리를 안 쓰고 직접 쓴다.
+      담아둔 것이 이미 JPEG 한 장씩이라, 색을 줄여 이어붙이면 된다.
+      라이브러리를 쓰면 파일이 100KB 커지는데 직접 쓰면 6KB 안에 끝난다.
+
+   만드는 순서
+      ① 프레임을 캔버스에 그려 RGB 를 꺼낸다
+      ② 색을 256개로 줄인다 (중앙 절단법)
+      ③ LZW 로 눌러 GIF 조각으로 잇는다 */
+
+const GIF_MAX_SEC = 6;      /* 이보다 길면 파일이 3MB 를 넘어 카톡에서 무겁다 */
+const GIF_W = 400;          /* 가로. 세로는 비율대로 */
+
+/* ── 색을 256개로 줄인다 (중앙 절단법) ── */
+function quantize(pix, maxColors) {
+  const boxes = [{ list: pix, depth: 0 }];
+  while (boxes.length < maxColors) {
+    /* 가장 넓게 퍼진 상자를 고른다 */
+    let bi = -1, best = -1;
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (b.list.length < 2) continue;
+      if (b.range === undefined) {
+        let mn = [255, 255, 255], mx = [0, 0, 0];
+        for (const c of b.list) for (let k = 0; k < 3; k++) {
+          if (c[k] < mn[k]) mn[k] = c[k];
+          if (c[k] > mx[k]) mx[k] = c[k];
+        }
+        b.mn = mn; b.mx = mx;
+        b.range = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+        b.axis = (mx[0] - mn[0]) >= (mx[1] - mn[1]) && (mx[0] - mn[0]) >= (mx[2] - mn[2]) ? 0
+          : ((mx[1] - mn[1]) >= (mx[2] - mn[2]) ? 1 : 2);
+      }
+      if (b.range > best) { best = b.range; bi = i; }
+    }
+    if (bi < 0 || best <= 0) break;
+    const b = boxes[bi];
+    b.list.sort((p, q) => p[b.axis] - q[b.axis]);
+    const mid = b.list.length >> 1;
+    const a = { list: b.list.slice(0, mid), depth: b.depth + 1 };
+    const c = { list: b.list.slice(mid), depth: b.depth + 1 };
+    boxes.splice(bi, 1, a, c);
+  }
+  return boxes.map((b) => {
+    let r = 0, g = 0, bl = 0;
+    for (const c of b.list) { r += c[0]; g += c[1]; bl += c[2]; }
+    const n = Math.max(1, b.list.length);
+    return [Math.round(r / n), Math.round(g / n), Math.round(bl / n)];
+  });
+}
+
+/* 가까운 색 찾기 — 미리 표를 만들어 빠르게 (5비트씩 32×32×32) */
+function makeLookup(pal) {
+  const L = new Uint8Array(32768);
+  for (let r = 0; r < 32; r++) for (let g = 0; g < 32; g++) for (let b = 0; b < 32; b++) {
+    const R = r * 8 + 4, G = g * 8 + 4, B = b * 8 + 4;
+    let best = 0, bd = 1e9;
+    for (let i = 0; i < pal.length; i++) {
+      const d = (pal[i][0] - R) ** 2 + (pal[i][1] - G) ** 2 + (pal[i][2] - B) ** 2;
+      if (d < bd) { bd = d; best = i; }
+    }
+    L[(r << 10) | (g << 5) | b] = best;
+  }
+  return L;
+}
+
+/* ── GIF 를 쓰는 통 ── */
+function GifWriter() {
+  const out = [];
+  const u8 = (v) => out.push(v & 255);
+  const u16 = (v) => { u8(v); u8(v >> 8); };
+  const str = (s) => { for (let i = 0; i < s.length; i++) u8(s.charCodeAt(i)); };
+  return {
+    out, u8, u16, str,
+    blob: () => new Blob([new Uint8Array(out)], { type: "image/gif" }),
+  };
+}
+
+/* LZW — GIF 가 쓰는 방식 */
+function lzw(idx, minCode) {
+  const clear = 1 << minCode, eoi = clear + 1;
+  let size = minCode + 1, next = eoi + 1;
+  let dict = new Map();
+  const reset = () => { dict = new Map(); next = eoi + 1; size = minCode + 1; };
+  const bytes = [];
+  let cur = 0, bits = 0;
+  const put = (code) => {
+    cur |= code << bits; bits += size;
+    while (bits >= 8) { bytes.push(cur & 255); cur >>= 8; bits -= 8; }
+  };
+  put(clear); reset();
+  let prev = idx[0];
+  for (let i = 1; i < idx.length; i++) {
+    const k = idx[i];
+    const key = prev * 4096 + k;
+    if (dict.has(key)) { prev = dict.get(key); continue; }
+    put(prev);
+    dict.set(key, next++);
+    if (next > (1 << size)) {
+      if (size < 12) size++;
+      else { put(clear); reset(); }
+    }
+    prev = k;
+  }
+  put(prev); put(eoi);
+  if (bits > 0) bytes.push(cur & 255);
+  return bytes;
+}
+
+/* ── 프레임 여러 장 → GIF ──
+   frames: [{blob}] · delayMs: 한 장당 머무는 시간 · onStep: 진행률 */
+async function makeGif(frames, delayMs, onStep) {
+  if (!frames.length) throw new Error("담긴 그림이 없습니다");
+
+  /* ① 그림을 캔버스에 그려 픽셀을 꺼낸다 */
+  const first = await blobToImage(frames[0].blob);
+  const W = GIF_W;
+  const H = Math.round(W * (first.naturalHeight / first.naturalWidth) / 2) * 2;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d", { alpha: false });
+
+  const shots = [];
+  for (let i = 0; i < frames.length; i++) {
+    const im = i === 0 ? first : await blobToImage(frames[i].blob);
+    ctx.drawImage(im, 0, 0, W, H);
+    if (i === frames.length - 1) stampLogo(ctx, W, H);   /* 마지막 장에만 이름 */
+    shots.push(ctx.getImageData(0, 0, W, H).data);
+    if (im.src && im.src.startsWith("blob:")) URL.revokeObjectURL(im.src);
+    onStep && onStep((i + 1) / (frames.length + 2));
+  }
+
+  /* ② 색을 256개로 — 몇 장만 골라 뽑아도 충분하다 */
+  const sample = [];
+  const step = Math.max(1, Math.floor(shots.length / 6));
+  for (let s = 0; s < shots.length; s += step) {
+    const d = shots[s];
+    for (let p = 0; p < d.length; p += 4 * 17) sample.push([d[p], d[p + 1], d[p + 2]]);
+  }
+  const pal = quantize(sample, 256);
+  while (pal.length < 256) pal.push([0, 0, 0]);
+  const look = makeLookup(pal);
+  onStep && onStep((frames.length + 1) / (frames.length + 2));
+
+  /* ③ GIF 로 쓴다 */
+  const g = GifWriter();
+  g.str("GIF89a");
+  g.u16(W); g.u16(H);
+  g.u8(0xF7);            /* 전체 색표 있음 · 256개 */
+  g.u8(0); g.u8(0);
+  for (const c of pal) { g.u8(c[0]); g.u8(c[1]); g.u8(c[2]); }
+  /* 계속 도는 표시 */
+  g.u8(0x21); g.u8(0xFF); g.u8(11); g.str("NETSCAPE2.0");
+  g.u8(3); g.u8(1); g.u16(0); g.u8(0);
+
+  const delay = Math.max(2, Math.round(delayMs / 10));   /* 100분의 1초 단위 */
+  for (const d of shots) {
+    g.u8(0x21); g.u8(0xF9); g.u8(4); g.u8(0); g.u16(delay); g.u8(0); g.u8(0);
+    g.u8(0x2C); g.u16(0); g.u16(0); g.u16(W); g.u16(H); g.u8(0);
+
+    const idx = new Uint8Array(W * H);
+    for (let p = 0, q = 0; p < d.length; p += 4, q++) {
+      idx[q] = look[((d[p] >> 3) << 10) | ((d[p + 1] >> 3) << 5) | (d[p + 2] >> 3)];
+    }
+    g.u8(8);
+    const packed = lzw(idx, 8);
+    for (let i = 0; i < packed.length; i += 255) {
+      const chunk = packed.slice(i, i + 255);
+      g.u8(chunk.length);
+      for (const b of chunk) g.u8(b);
+    }
+    g.u8(0);
+  }
+  g.u8(0x3B);
+  onStep && onStep(1);
+  return g.blob();
+}
+
+const blobToImage = (blob) => new Promise((done, fail) => {
+  const u = URL.createObjectURL(blob);
+  const im = new Image();
+  im.onload = () => done(im);
+  im.onerror = () => { URL.revokeObjectURL(u); fail(new Error("그림을 못 읽었습니다")); };
+  im.src = u;
+});
+
+/* ★ 오른쪽 아래에 이름을 넣는다 — 단톡방에 퍼질 때마다 함께 간다 */
+function stampLogo(ctx, W, H) {
+  const s = Math.max(10, Math.round(W * 0.032));
+  ctx.save();
+  ctx.font = `700 ${s}px system-ui, sans-serif`;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  const x = W - Math.round(W * 0.025), y = H - Math.round(W * 0.022);
+  ctx.shadowColor = "rgba(0,0,0,.75)";
+  ctx.shadowBlur = Math.round(s * 0.7);
+  ctx.fillStyle = "rgba(232,184,56,.92)";
+  ctx.fillText("CUEBOARD", x, y);
+  ctx.restore();
+}
+
+/* 사진 한 장 — 담긴 JPEG 을 그대로 쓰되 이름만 얹는다 */
+async function makeShot(frame) {
+  const im = await blobToImage(frame.blob);
+  const cv = document.createElement("canvas");
+  cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+  const ctx = cv.getContext("2d", { alpha: false });
+  ctx.drawImage(im, 0, 0);
+  stampLogo(ctx, cv.width, cv.height);
+  if (im.src.startsWith("blob:")) URL.revokeObjectURL(im.src);
+  return new Promise((done) => cv.toBlob((b) => done(b), "image/jpeg", 0.9));
+}
+
+/* 만든 것을 카톡으로 보내거나 갤러리에 넣는다 */
+async function shareOrSave(blob, name, say) {
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return "shared"; }
+    catch (e) { if (String(e && e.name) === "AbortError") return "cancel"; }
+  }
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+  say && say("갤러리(다운로드)에 저장했습니다");
+  return "saved";
+}
+/* ── 다시 보기 (리플레이) ──────────────────────
+   ★ 2026-09-03 확인한 것 — 실제로 폰(IP Webcam)으로 재보고 정한 방식이다
+       ① MJPEG 이 크롬에서 그대로 나온다
+       ② 지연이 눈에 안 띌 만큼 짧다
+       ③ ★ 캔버스에 담을 수 있다 (CORS 통과) — 이게 막히면 리플레이가 안 된다
+
+   왜 MediaRecorder 를 안 쓰는가
+     ① 첫 조각(헤더)을 잃으면 재생이 안 된다. 링 버퍼와 상성이 나쁘다
+     ② 조각을 이어붙일 때 키프레임이 어긋나면 깨진다
+     ③ 프레임 한 장씩 다루지 못해 느리게 보기·한 장 넘기기가 어렵다
+     JPEG 은 한 장이 온전하다. 앞에서 버리고 뒤에 담으면 그만이다
+
+   메모리 어림 — 640×360 · 품질 0.55 → 한 장 약 25KB
+                12fps × 30초 = 360장 → 약 9MB. 태블릿에서 충분히 견딘다 */
+
+const CAM_FPS = 12;
+const CAM_SEC = 30;
+const CAM_W = 640;
+
+/* 카메라 주소에서 실시간 화면 주소를 만든다.
+   IP Webcam 은 /video 가 MJPEG, /shot.jpg 가 한 장이다.
+   사용자가 어디까지 넣었는지 모르니 알아서 맞춘다 */
+const camVideoUrl = (u) => {
+  const s = String(u || "").trim().replace(/\/+$/, "");
+  if (!s) return "";
+  if (/\.(mjpg|mjpeg|cgi)(\?|$)/i.test(s) || /\/video$/i.test(s)) return s;
+  return s + "/video";
+};
+
+function useReplay(url, on, preview) {
+  const frames = useRef([]);
+  const canvas = useRef(null);
+  const busy = useRef(false);
+  const [state, setState] = useState("off");   /* off · wait · live · error */
+  const [secs, setSecs] = useState(0);         /* 몇 초 담겼는지 — 1초에 한 번만 고친다 */
+
+  useEffect(() => {
+    const src = camVideoUrl(url);
+    if (!on || !src) { setState("off"); setSecs(0); return; }
+
+    let alive = true;
+    let im = null;
+    let lastOk = 0;
+    let tries = 0;
+    setState("wait");
+
+    /* ★ MJPEG 연결은 하나만 쓴다 (사용자 지적으로 찾은 진짜 버그).
+          전에는 담는 Image 와 구석 미리보기 <img> 로 두 개를 열었다.
+          IP 카메라·IP Webcam 은 동시 연결 수가 적어서, 다시 보기를 한 번 열면
+          연결이 밀려 담는 쪽이 얼어붙었다 — "한 번 보고 나면 다시 안 된다"
+          미리보기는 담을 때 캔버스에 같이 그려서 해결한다 (연결을 안 늘린다) */
+    const connect = () => {
+      if (!alive) return;
+      if (im) { im.onload = im.onerror = null; im.src = ""; }
+      im = new Image();
+      /* ★ 이게 없으면 캔버스가 잠겨 담을 수 없다 (2026-09-03 확인한 조건) */
+      im.crossOrigin = "anonymous";
+      im.decoding = "async";
+      im.onload = () => { if (alive) { setState("live"); lastOk = Date.now(); } };
+      im.onerror = () => { if (alive) setState(tries > 2 ? "error" : "wait"); };
+      im.src = src + (src.indexOf("?") < 0 ? "?" : "&") + "t=" + Date.now();
+      lastOk = Date.now();
+    };
+    connect();
+
+    const MAX = CAM_FPS * CAM_SEC;
+    const grab = () => {
+      if (!alive || busy.current || !im || !im.naturalWidth) return;
+      busy.current = true;
+      const w = CAM_W;
+      const h = Math.round(w * (im.naturalHeight / im.naturalWidth)) || 360;
+      if (!canvas.current || canvas.current.width !== w) {
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        canvas.current = c;
+      }
+      /* alpha:false — 투명도를 안 쓰면 그리기가 눈에 띄게 빠르다 */
+      const ctx = canvas.current.getContext("2d", { alpha: false });
+      try { ctx.drawImage(im, 0, 0, w, h); }
+      catch (e) { busy.current = false; alive = false; setState("error"); return; }
+
+      /* 미리보기 — 연결을 늘리지 않고 담은 그림을 그대로 옮겨 그린다 */
+      const pv = preview && preview.current;
+      if (pv) {
+        if (pv.width !== 208) { pv.width = 208; pv.height = Math.round(208 * h / w); }
+        try { pv.getContext("2d", { alpha: false }).drawImage(canvas.current, 0, 0, pv.width, pv.height); } catch (e) {}
+      }
+
+      canvas.current.toBlob((b) => {
+        busy.current = false;
+        if (!b || !alive) return;
+        frames.current.push({ t: Date.now(), blob: b });
+        while (frames.current.length > MAX) frames.current.shift();   /* ★ 링 버퍼는 이 한 줄이 전부다 */
+        lastOk = Date.now();
+      }, "image/jpeg", 0.55);
+    };
+
+    const tick = setInterval(grab, Math.round(1000 / CAM_FPS));
+    /* ★ 1초에 한 번만 화면 숫자를 고친다.
+          매 장마다 고치면 점수판 전체가 1초에 12번 다시 그려져 태블릿이 버겁다 */
+    const beat = setInterval(() => {
+      if (!alive) return;
+      setSecs(Math.floor(frames.current.length / CAM_FPS));
+      /* 3초 넘게 새 장면이 없으면 연결이 끊긴 것이다 — 다시 붙는다 */
+      if (Date.now() - lastOk > 3000) { tries++; connect(); }
+    }, 1000);
+
+    return () => {
+      alive = false;
+      clearInterval(tick); clearInterval(beat);
+      if (im) { im.onload = im.onerror = null; im.src = ""; }
+      im = null; canvas.current = null;
+      /* ★ 나갈 때 반드시 비운다. 안 그러면 탭이 무거워진다 */
+      frames.current = [];
+      setSecs(0); setState("off");
+    };
+  }, [url, on, preview]);
+
+  return { state, secs, snapshot: () => frames.current.slice() };
+}
+
+/* 담아둔 JPEG 을 차례로 그린다. 느리게 보기·한 장 넘기기가 여기서 나온다 */
+function ReplaySheet({ frames, onClose, say }) {
+  const cv = useRef(null);
+  const [i, setI] = useState(0);
+  const [rate, setRate] = useState(0.25);
+  const [play, setPlay] = useState(true);
+  const total = frames.length;
+
+  /* ★ 저장할 곳 고르기 (사용자 지시)
+        30초를 통째로 GIF 로 만들면 10MB 가 넘어 못 쓴다.
+        손잡이 두 개로 3~6초만 골라낸다 */
+  const [pick, setPick] = useState(null);          /* { a, b } — 프레임 번호 */
+  const [busy, setBusy] = useState(0);             /* 0~1 · 만드는 중 */
+  const MAXF = CAM_FPS * GIF_MAX_SEC;
+
+  useEffect(() => {
+    const f = frames[i];
+    if (!f || !cv.current) return;
+    const u = URL.createObjectURL(f.blob);
+    const im = new Image();
+    im.onload = () => {
+      const c = cv.current;
+      if (!c) { URL.revokeObjectURL(u); return; }
+      if (c.width !== im.naturalWidth) { c.width = im.naturalWidth; c.height = im.naturalHeight; }
+      c.getContext("2d", { alpha: false }).drawImage(im, 0, 0);
+      URL.revokeObjectURL(u);
+    };
+    im.onerror = () => URL.revokeObjectURL(u);
+    im.src = u;
+  }, [i, frames]);
+
+  useEffect(() => {
+    if (!play || !total || pick) return;
+    const t = setInterval(() => {
+      setI((n) => { if (n >= total - 1) { setPlay(false); return n; } return n + 1; });
+    }, Math.max(30, Math.round((1000 / CAM_FPS) / rate)));
+    return () => clearInterval(t);
+  }, [play, rate, total, pick]);
+
+  const ago = total ? ((total - 1 - i) / CAM_FPS).toFixed(1) : "0.0";
+  const H = 38;
+  const key = {
+    height: H, borderRadius: 9, background: "rgba(255,255,255,.06)",
+    color: "#B9CCDA", display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 15, flexShrink: 0,
+  };
+  const bar = { width: 1, height: 26, background: "rgba(255,255,255,.12)", flexShrink: 0 };
+
+  /* 저장하기 — 지금 보고 있는 자리를 가운데 두고 4초쯤을 잡아준다 */
+  const openPick = () => {
+    setPlay(false);
+    const half = Math.round(CAM_FPS * 2);
+    let a = Math.max(0, i - half);
+    let b = Math.min(total - 1, a + CAM_FPS * 4);
+    a = Math.max(0, b - CAM_FPS * 4);
+    setPick({ a, b });
+    setI(a);
+  };
+  const secOf = (p) => ((p.b - p.a + 1) / CAM_FPS).toFixed(1);
+
+  const saveShot = async () => {
+    try {
+      setBusy(0.5);
+      const blob = await makeShot(frames[i]);
+      setBusy(0);
+      await shareOrSave(blob, `cueboard-${Date.now()}.jpg`, say);
+    } catch (e) { setBusy(0); say && say("사진을 만들지 못했습니다"); }
+  };
+
+  const saveGif = async () => {
+    if (!pick) return;
+    try {
+      const cut = frames.slice(pick.a, pick.b + 1);
+      setBusy(0.01);
+      const blob = await makeGif(cut, Math.round(1000 / CAM_FPS / 0.7), (p) => setBusy(p));
+      setBusy(0);
+      await shareOrSave(blob, `cueboard-${Date.now()}.gif`, say);
+    } catch (e) { setBusy(0); say && say("만들지 못했습니다 — " + String(e.message || e).slice(0, 40)); }
+  };
+
+  /* 손잡이를 끌 때 */
+  const drag = (which) => (e) => {
+    e.preventDefault();
+    const track = e.currentTarget.parentElement;
+    const move = (ev) => {
+      const r = track.getBoundingClientRect();
+      const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+      let n = Math.round((x / r.width) * (total - 1));
+      n = Math.max(0, Math.min(total - 1, n));
+      setPick((p) => {
+        if (!p) return p;
+        if (which === "a") {
+          const a = Math.min(n, p.b - CAM_FPS);           /* 최소 1초 */
+          return { a: Math.max(a, p.b - MAXF + 1), b: p.b };
+        }
+        const b = Math.max(n, p.a + CAM_FPS);
+        return { a: p.a, b: Math.min(b, p.a + MAXF - 1, total - 1) };
+      });
+      setI(n);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  return (
+    <div onClick={busy ? undefined : onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 95,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 8,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 780, maxHeight: "97vh", overflow: "hidden",
+        background: "#08192A", border: "1px solid var(--line)", borderRadius: 14,
+        padding: "10px 12px 11px", position: "relative",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: pick ? ACCENT : "var(--ivory)" }}>
+              {pick ? "저장할 곳 고르기" : "다시 보기"}
+            </span>
+            <span className="num" style={{ fontSize: 11.5, color: "#5B7186" }}>
+              {pick ? `${secOf(pick)}초` : `－${ago}초`}
+            </span>
+          </div>
+          <button onClick={pick ? () => setPick(null) : onClose}
+            style={{ fontSize: 12.5, color: "#5B7186", padding: "4px 6px" }}>
+            {pick ? "취소" : "닫기 ✕"}
+          </button>
+        </div>
+
+        <div style={{
+          position: "relative", background: "#0B1420", borderRadius: 10,
+          overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <canvas ref={cv} style={{
+            width: "100%", display: "block",
+            maxHeight: "calc(97vh - 150px)", objectFit: "contain",
+          }} />
+        </div>
+
+        {pick ? (
+          /* ── 구간 고르기 ── */
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "10px 0" }}>
+              <span style={{ fontSize: 10.5, color: "#5B7186", width: 32 }}>-{CAM_SEC}초</span>
+              <div style={{
+                flex: 1, height: 24, background: "rgba(255,255,255,.07)",
+                borderRadius: 6, position: "relative", touchAction: "none",
+              }}>
+                <div style={{
+                  position: "absolute", top: 0, bottom: 0,
+                  left: `${(pick.a / Math.max(1, total - 1)) * 100}%`,
+                  right: `${100 - (pick.b / Math.max(1, total - 1)) * 100}%`,
+                  background: "rgba(232,184,56,.28)",
+                  borderLeft: "2px solid " + ACCENT, borderRight: "2px solid " + ACCENT,
+                }} />
+                {["a", "b"].map((k) => (
+                  <div key={k} onPointerDown={drag(k)} style={{
+                    position: "absolute", top: -4, width: 20, height: 32, cursor: "ew-resize",
+                    left: `${(pick[k] / Math.max(1, total - 1)) * 100}%`, transform: "translateX(-50%)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ width: 13, height: 32, borderRadius: 5, background: ACCENT }} />
+                  </div>
+                ))}
+              </div>
+              <span style={{ fontSize: 10.5, color: "#5B7186", width: 24, textAlign: "right" }}>지금</span>
+            </div>
+            <div style={{ textAlign: "center", fontSize: 11, color: "#6F8598", marginBottom: 9 }}>
+              노란 손잡이를 끌어 저장할 곳을 맞추세요 · 최대 {GIF_MAX_SEC}초
+            </div>
+
+            {/* ★ 한 줄로 · 컨트롤 줄과 같은 높이 (A안) */}
+            <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+              <button onClick={saveShot} disabled={!!busy} style={{
+                height: H, padding: "0 15px", borderRadius: 9, flexShrink: 0,
+                border: "1px solid rgba(255,255,255,.22)", color: "#B9CCDA", fontSize: 12.5,
+              }}>🖼 사진 한 장</button>
+              <button onClick={saveGif} disabled={!!busy} style={{
+                flex: 1, height: H, borderRadius: 9, background: ACCENT, color: "#141200",
+                fontSize: 13, fontWeight: 700,
+              }}>
+                ▶ 움직이는 사진 만들기
+                <span style={{ fontWeight: 400, fontSize: 11, color: "#5C4A0F", marginLeft: 6 }}>
+                  약 {Math.max(1, Math.round((pick.b - pick.a + 1) * 34 / 100) / 10)}MB
+                </span>
+              </button>
+            </div>
+          </>
+        ) : (
+          /* ── 평소 ── */
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "9px 0" }}>
+              <span style={{ fontSize: 10.5, color: "#5B7186", width: 32 }}>-{CAM_SEC}초</span>
+              <input type="range" min={0} max={Math.max(0, total - 1)} value={i}
+                onChange={(e) => { setPlay(false); setI(Number(e.target.value)); }}
+                style={{ flex: 1, padding: 0, background: "transparent", border: "none" }} />
+              <span style={{ fontSize: 10.5, color: "#5B7186", width: 24, textAlign: "right" }}>지금</span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                <button style={{ ...key, width: 40 }} aria-label="맨 앞으로"
+                  onClick={() => { setPlay(false); setI(0); }}>⏮</button>
+                <button style={{ ...key, width: 40, fontSize: 17 }} aria-label="한 장 뒤로"
+                  onClick={() => { setPlay(false); setI((n) => Math.max(0, n - 1)); }}>‹</button>
+                <button style={{ ...key, width: 52, background: ACCENT, color: "#141200", fontSize: 17 }} aria-label="재생"
+                  onClick={() => { if (i >= total - 1) setI(0); setPlay(!play); }}>{play ? "❚❚" : "▶"}</button>
+                <button style={{ ...key, width: 40, fontSize: 17 }} aria-label="한 장 앞으로"
+                  onClick={() => { setPlay(false); setI((n) => Math.min(total - 1, n + 1)); }}>›</button>
+              </div>
+
+              <span style={bar} />
+
+              <div style={{ display: "flex", gap: 5, flex: 1, minWidth: 0 }}>
+                {[0.25, 0.5, 1, 2].map((r) => (
+                  <button key={r} onClick={() => setRate(r)} style={{
+                    flex: 1, height: H, borderRadius: 9, fontSize: 12.5, fontWeight: 600,
+                    background: rate === r ? ACCENT : "rgba(0,0,0,.32)",
+                    color: rate === r ? "#141200" : "#61798C",
+                  }}>{r}배</button>
+                ))}
+              </div>
+
+              <span style={bar} />
+
+              <button onClick={openPick} style={{
+                flexShrink: 0, height: H, padding: "0 14px", borderRadius: 9, fontSize: 12.5, fontWeight: 700,
+                background: "rgba(232,184,56,.16)", border: "1px solid rgba(232,184,56,.5)", color: ACCENT,
+              }}>⏬ 저장</button>
+              <button onClick={onClose} style={{
+                flexShrink: 0, height: H, padding: "0 14px", borderRadius: 9, fontSize: 12.5,
+                background: "rgba(255,255,255,.06)", color: "#B9CCDA",
+              }}>점수판</button>
+            </div>
+          </>
+        )}
+
+        {/* 만드는 중 */}
+        {busy > 0 && (
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(8,25,42,.88)", borderRadius: 14,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 13,
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>움직이는 사진을 만드는 중…</div>
+            <div style={{ width: "60%", maxWidth: 300, height: 6, background: "rgba(255,255,255,.12)", borderRadius: 3 }}>
+              <div style={{
+                width: `${Math.round(busy * 100)}%`, height: "100%",
+                background: ACCENT, borderRadius: 3, transition: ".2s",
+              }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: "#6F8598" }}>몇 초 걸립니다. 그대로 두세요</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── QR 로 카메라 주소 넣기 ────────────────────
+   ★ 테이블 옆에 붙여둔 QR 을 찍으면 그 대의 카메라 주소가 저절로 들어간다.
+      당구장에 열 대가 있으면 대마다 주소가 다르다. 손으로 치면 틀리기 쉽다.
+
+   쓰는 것 — BarcodeDetector (크롬이 기본으로 가지고 있다. 라이브러리가 필요 없다)
+   ⚠ https 에서만 카메라를 열 수 있다. Vercel 주소는 https 라 괜찮다
+   ⚠ 이 기능이 없는 브라우저면 안내만 하고 손으로 치게 둔다 */
+function QrScan({ onFound, onClose }) {
+  const vid = useRef(null);
+  const [msg, setMsg] = useState("카메라를 켜는 중…");
+
+  useEffect(() => {
+    let alive = true;
+    let stream = null;
+    let timer = null;
+
+    (async () => {
+      if (typeof BarcodeDetector === "undefined") {
+        setMsg("이 브라우저는 QR 읽기를 지원하지 않습니다. 주소를 직접 넣어주세요");
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } }, audio: false,
+        });
+      } catch (e) {
+        setMsg(String(e && e.name) === "NotAllowedError"
+          ? "카메라 사용을 허락해 주세요"
+          : "카메라를 열지 못했습니다. 주소를 직접 넣어주세요");
+        return;
+      }
+      if (!alive) { stream.getTracks().forEach((t) => t.stop()); return; }
+      const v = vid.current;
+      if (!v) return;
+      v.srcObject = stream;
+      v.setAttribute("playsinline", "true");
+      try { await v.play(); } catch (e) {}
+      setMsg("");
+
+      const det = new BarcodeDetector({ formats: ["qr_code"] });
+      timer = setInterval(async () => {
+        if (!alive || !v.videoWidth) return;
+        try {
+          const found = await det.detect(v);
+          if (!found || !found.length) return;
+          /* 여러 개가 잡히면 주소처럼 생긴 것을 고른다 */
+          const hit = found.map((f) => String(f.rawValue || "").trim())
+            .find((t) => /^https?:\/\//i.test(t)) || String(found[0].rawValue || "").trim();
+          if (!hit) return;
+          alive = false;
+          onFound(hit);
+        } catch (e) {}
+      }, 250);
+    })();
+
+    return () => {
+      alive = false;
+      if (timer) clearInterval(timer);
+      /* ★ 반드시 카메라를 놓는다. 안 놓으면 불이 켜진 채로 남는다 */
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (vid.current) vid.current.srcObject = null;
+    };
+  }, []); // eslint-disable-line
+
+  const corner = (a, b) => ({
+    position: "absolute", width: 34, height: 34, ...a,
+    borderColor: ACCENT, borderStyle: "solid", borderWidth: 0, ...b,
+  });
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "#000", zIndex: 97,
+      display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+    }}>
+      <video ref={vid} muted playsInline style={{
+        position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+      }} />
+
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, padding: "14px 16px", zIndex: 2,
+        background: "linear-gradient(180deg,rgba(0,0,0,.75),transparent)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <span style={{ fontSize: 15, fontWeight: 700 }}>QR 찍기</span>
+        <button onClick={onClose} style={{ fontSize: 12.5, color: "#B9CCDA", padding: "4px 6px" }}>닫기 ✕</button>
+      </div>
+
+      <div style={{ position: "relative", width: 200, height: 200, zIndex: 2 }}>
+        <span style={corner({ top: 0, left: 0 }, { borderTopWidth: 3, borderLeftWidth: 3, borderRadius: "6px 0 0 0" })} />
+        <span style={corner({ top: 0, right: 0 }, { borderTopWidth: 3, borderRightWidth: 3, borderRadius: "0 6px 0 0" })} />
+        <span style={corner({ bottom: 0, left: 0 }, { borderBottomWidth: 3, borderLeftWidth: 3, borderRadius: "0 0 0 6px" })} />
+        <span style={corner({ bottom: 0, right: 0 }, { borderBottomWidth: 3, borderRightWidth: 3, borderRadius: "0 0 6px 0" })} />
+      </div>
+
+      <div style={{
+        position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, zIndex: 2,
+        background: "linear-gradient(0deg,rgba(0,0,0,.8),transparent)", textAlign: "center",
+      }}>
+        {msg ? (
+          <>
+            <div style={{ fontSize: 13.5, color: "#F4EEDF", lineHeight: 1.6, marginBottom: 11 }}>{msg}</div>
+            <button className="ghost" onClick={onClose} style={{ maxWidth: 260, margin: "0 auto", fontSize: 14 }}>
+              닫고 직접 넣기
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13.5, color: "#F4EEDF", marginBottom: 4 }}>테이블 옆 QR을 네모 안에 맞추세요</div>
+            <div style={{ fontSize: 11.5, color: "#8fa6b8" }}>찍히면 저절로 닫힙니다</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+/* ── 홈 = 경기 준비 ──────────────────────────
+   ★ 11종목 앱의 홈은 "무엇을 할지 고르는 곳" 이었지만,
+      당구만 하는 앱의 홈은 "바로 치러 들어가는 곳" 이다.
+      종목 고르기 · 요금 · 정산 · 통계 · 회원은 전부 없앴다 (사용자 지시).
+      위에서 아래로 읽으면 그대로 세팅이 끝나고 맨 아래 단추로 점수판에 들어간다 */
+
+/* ── 머리 그림 ──────────────────────────────
+   ★ 서비스 이름을 "큐보드(CUEBOARD)" 로 정했다 (2026-09-04).
+      사진 넘김 자리를 로고 하나로 바꿨다.
+      제목 글자 "당구 스코어" 는 없앴다 — 로고에 이름이 이미 있다.
+   ⚠ logo.jpg 를 index.html 과 같은 자리에 올려야 한다.
+     ★ png 는 688KB 였다. 그러데이션이 부드러워 jpg 로 바꾸니 70KB 가 됐다.
+       앱을 열 때마다 받는 그림이라 크기가 중요하다 */
+function Banner() {
+  const [ok, setOk] = useState(true);
+  /* ★ 로고가 오른쪽 위 단추 두 개를 가리고 있었다 (사용자 지적).
+        단추 자리를 위에 따로 두고, 로고는 그 아래에 조금 작게 놓는다.
+        좌우 여백도 줘서 답답하지 않게 한다 */
+  return (
+    <div style={{
+      background: "#0B1826", borderBottom: "1px solid rgba(232,184,56,.28)",
+      padding: "0 0 12px",
+    }}>
+      {ok ? (
+        <img src="logo.jpg" alt="큐보드" onError={() => setOk(false)} style={{
+          width: "86%", maxWidth: 460, display: "block", margin: "0 auto",
+        }} />
+      ) : (
+        <div style={{ padding: "14px 16px", textAlign: "center", lineHeight: 1.4 }}>
+          <div style={{ fontSize: 22, letterSpacing: ".22em", color: "#F6E7C8" }}>CUEBOARD</div>
+          <div style={{ fontSize: 9.5, letterSpacing: ".3em", color: "#C99B4E", marginTop: 5 }}>
+            SMART BILLIARDS SYSTEM
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ★ 자매 앱 바로가기 (2026-09-10)
+      ⛔ 아이콘 · 이름 · 화살표가 «옆으로» 한 줄이다. 위아래로 쌓지 말 것 [대표님].
+      ⛔ 설명은 칸 «밖» 아래 한 줄로 모은다 — 좁은 폰(320px)에서 칸 안에 넣으면 겹친다.
+      ⚠ 9장 ⑤ — 좁은 칸에 글자를 넣으면 한 자씩 세로로 접힌다. nowrap 으로 막는다.
+      ⛔ 새 색을 짓지 않았다. 이 앱의 --line · --card 를 그대로 쓴다 */
+const Sisters = () => (
+  <div style={{ padding: "0 16px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      {SISTERS.map((s) => (
+        <a key={s.name} href={s.url} style={{ textDecoration: "none", color: "inherit" }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap",
+            background: "rgba(0,0,0,.22)", border: "1px solid var(--line)",
+            borderRadius: 12, padding: "12px 11px",
+          }}>
+            <span style={{ fontSize: 14 }}>{s.icon}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>{s.name}</span>
+            <span style={{ marginLeft: "auto", fontSize: 15, color: "var(--chalk)" }}>›</span>
+          </div>
+        </a>
+      ))}
+    </div>
+    <div style={{ fontSize: 10.5, color: "var(--chalk)", textAlign: "center", marginTop: 7, lineHeight: 1.6 }}>
+      사주·상담 · 골프 스코어 — 지갑은 세 곳이 함께 씁니다
+    </div>
+  </div>
+);
+
+/* ★ 약관 두 줄 — ⛔ 큐보드에 만들지 않는다. 명카페 한 벌로 보낸다 (00-head 의 TERMS·PRIVACY)
+      ★ 같은 창으로 연다 (이 앱에 target="_blank" 가 한 곳도 없다) */
+const LegalLinks = ({ style }) => (
+  <div style={{
+    display: "flex", justifyContent: "center", alignItems: "center", gap: 10,
+    fontSize: 11.5, color: "var(--chalk)", ...(style || {}),
+  }}>
+    <a href={TERMS} style={{ color: "inherit", textDecoration: "underline" }}>이용약관</a>
+    <span style={{ opacity: .5 }}>·</span>
+    <a href={PRIVACY} style={{ color: "inherit", textDecoration: "underline" }}>개인정보처리방침</a>
+  </div>
+);
+
+/* 알약 한 줄 — 고른 것은 노랑, 안 고른 것은 어두운 바탕에 흐린 글씨.
+   ★ 테두리만 두면 대비가 약해 무엇을 골랐는지 한눈에 안 들어온다 */
+const Pills = ({ value, set, items, cols }) => (
+  /* ★ cols 는 CSS 값이다. 숫자를 넣으면 "grid-template-columns: 4" 가 되어
+        칸 폭이 0이 되고 글자가 세로로 접힌다 (실제로 기록 화면에서 그랬다).
+        숫자로 와도 돌아가게 여기서 받아준다 */
+  <div style={{
+    display: "grid", gap: 6,
+    gridTemplateColumns: typeof cols === "number"
+      ? `repeat(${cols},1fr)`
+      : (cols || `repeat(${items.length},1fr)`),
+  }}>
+    {items.map(([v, label, dim]) => (
+      <button key={String(v)} onClick={() => set(v)} style={{
+        borderRadius: 10, padding: "11px 0", fontSize: 13.5, fontWeight: 600, lineHeight: 1.15,
+        background: value === v ? ACCENT : "rgba(0,0,0,.32)",
+        color: value === v ? "#141200" : (dim ? "#40566B" : "#61798C"),
+      }}>{label}</button>
+    ))}
+  </div>
+);
+
+const Lbl = ({ children }) => (
+  <div style={{ fontSize: 11, color: "#7E9AB0", letterSpacing: ".12em", marginBottom: 8, fontWeight: 600 }}>
+    {children}
+  </div>
+);
+
+/* 핸디 — 숫자 상자에 ▲▼. 자판을 안 열고도 고칠 수 있다 */
+const HandiBox = ({ value, set, step }) => (
+  <div style={{
+    display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+    background: "rgba(0,0,0,.3)", borderRadius: 9, padding: "4px 7px",
+  }}>
+    <input value={value} inputMode="numeric"
+      onChange={(e) => set(e.target.value.replace(/[^0-9]/g, ""))}
+      style={{
+        width: 36, padding: 0, textAlign: "center", fontSize: 15, fontWeight: 700,
+        background: "transparent", border: "none", color: ACCENT,
+      }} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      <button onClick={() => set(String((Number(value) || 0) + step))} aria-label="목표 올리기"
+        style={{ fontSize: 9, lineHeight: 1, color: "#7E9AB0", padding: "2px 3px" }}>▲</button>
+      <button onClick={() => set(String(Math.max(0, (Number(value) || 0) - step)))} aria-label="목표 내리기"
+        style={{ fontSize: 9, lineHeight: 1, color: "#7E9AB0", padding: "2px 3px" }}>▼</button>
+    </div>
+  </div>
+);
+
+/* 공 두 개 — 어두운 알약 위에 얹어 "누르는 것" 으로 보이게 한다.
+   ★ 쓰는 쪽에 노란 테두리. 아래 설명 문구는 없앴다 (모양으로 알 수 있어야 한다) */
+const Balls = ({ on, onPick, size = 25 }) => (
+  <div style={{
+    display: "flex", gap: 5, flexShrink: 0, padding: 4,
+    borderRadius: 999, background: "rgba(0,0,0,.3)",
+  }}>
+    {[0, 1].map((b) => (
+      <button key={b} onClick={() => onPick(b)} aria-label={BALLNAME[b]} title={BALLNAME[b]} style={{
+        width: size, height: size, borderRadius: "50%", background: BALL[b], boxSizing: "border-box",
+        opacity: on === b ? 1 : .22,
+        boxShadow: on === b ? "0 0 0 2px " + ACCENT : "none",
+      }} />
+    ))}
+  </div>
+);
+
+/* ── 단식 — 사람마다 한 줄 ── */
+function PlayerRow({ p, i, ball, mode, names, onName, onHandi, onBall, onDel, canDel, onUp }) {
+  const [tip, setTip] = useState(false);
+  const cand = tip && p.name
+    ? names.filter((n) => n !== p.name && n.indexOf(p.name) === 0).slice(0, 4)
+    : [];
+  return (
+    <div style={{ position: "relative", marginBottom: 9 }}>
+      <div style={{
+        background: "#0F2A42", borderRadius: 14, padding: 13,
+        display: "flex", alignItems: "center", gap: 11,
+      }}>
+        <Balls on={ball} onPick={onBall} />
+        <input value={p.name} placeholder="이름"
+          onChange={(e) => onName(e.target.value)}
+          onFocus={() => setTip(true)}
+          onBlur={() => setTimeout(() => setTip(false), 180)}
+          style={{
+            flex: 1, minWidth: 0, background: "transparent", border: "none",
+            padding: 0, fontSize: 15.5, fontWeight: 600,
+          }} />
+        <HandiBox value={p.handi} set={(v) => onHandi(v)} step={mode === "4" ? 10 : 1} />
+        <button onClick={onUp} disabled={i === 0} aria-label="위로 옮기기" style={{
+          width: 28, height: 28, borderRadius: 8, flexShrink: 0, fontSize: 12,
+          border: "1px solid rgba(255,255,255,.18)",
+          color: i === 0 ? "#2E4358" : "#7E9AB0",
+        }}>▲</button>
+        {canDel && (
+          <button onClick={onDel} aria-label="빼기" style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0, fontSize: 12,
+            border: "1px solid rgba(255,255,255,.18)", color: "#7E9AB0",
+          }}>✕</button>
+        )}
+      </div>
+      {cand.length > 0 && (
+        <div style={{
+          position: "absolute", left: 60, right: 80, top: "100%", zIndex: 30, marginTop: 2,
+          background: "#123047", border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden",
+        }}>
+          {cand.map((n) => (
+            <button key={n} onMouseDown={(e) => { e.preventDefault(); onName(n, true); setTip(false); }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 11px", fontSize: 13.5 }}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── 복식 — 편 한 장 ──
+   ★ 공은 편마다 하나다. 사람마다가 아니다 (7판 6-3)
+   ★ ▲▼ 는 편 안에서 누가 먼저 칠지를 정한다 — 소리로 그 순서대로 부른다
+   ★ ⇄ 는 상대 편의 같은 자리 사람과 맞바꾼다. 한 사람만 건너보내면 3:1 이 된다 */
+function TeamCard({ si, idxs, ps, ball, first, mode, onName, onHandi, onBall, onUp, onCross }) {
+  const sum = idxs.reduce((t, j) => t + (Number(ps[j]?.handi) || 0), 0);
+  return (
+    <div style={{ background: "#0F2A42", borderRadius: 14, padding: 13, marginBottom: 9 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
+        <Balls on={ball} onPick={onBall} size={22} />
+        <span style={{ flex: 1, fontSize: 11, letterSpacing: ".1em", fontWeight: 700,
+          color: first ? ACCENT : "#7E9AB0" }}>
+          {si + 1}편{first ? " · 선공" : ""}
+        </span>
+        <span style={{ fontSize: 11.5, color: "#7E9AB0" }}>편 핸디 {sum}</span>
+      </div>
+      {idxs.map((j, at) => (
+        <div key={ps[j]?.key || j} style={{
+          display: "flex", alignItems: "center", gap: 8,
+          marginBottom: at === idxs.length - 1 ? 0 : 8,
+        }}>
+          <input value={ps[j]?.name || ""} placeholder="이름"
+            onChange={(e) => onName(j, e.target.value)}
+            style={{
+              flex: 1, minWidth: 0, background: "transparent", border: "none",
+              padding: 0, fontSize: 15.5, fontWeight: 600,
+            }} />
+          <HandiBox value={ps[j]?.handi} set={(v) => onHandi(j, v)} step={mode === "4" ? 10 : 1} />
+          <button onClick={() => onUp(si, at)} disabled={at === 0} aria-label="먼저 치게" style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0, fontSize: 12,
+            border: "1px solid rgba(255,255,255,.18)",
+            color: at === 0 ? "#2E4358" : "#7E9AB0",
+          }}>▲</button>
+          <button onClick={() => onCross(si, at)} aria-label="상대 편과 맞바꾸기" style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0, fontSize: 13,
+            border: "1px solid rgba(232,184,56,.4)", color: ACCENT,
+          }}>⇄</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Home({ data, save, say, go, onLogin, tv, setTv }) {
+  const S0 = data.setup || {};
+  const [mode, setMode] = useState(S0.mode || "3");
+  const [team, setTeam] = useState(!!S0.team);
+  const [bestOf, setBestOf] = useState(S0.bestOf || 3);
+  const [place, setPlace] = useState(S0.place || "");
+  const [ps, setPs] = useState(S0.ps || [
+    { key: "g" + uid(), name: "", handi: 15 },
+    { key: "g" + uid(), name: "", handi: 15 },
+  ]);
+  /* 편 — 사람 번호 두 개씩. 넣은 순서대로 나눈 뒤 여기서 고친다 (사용자 지시) */
+  const [sides, setSides] = useState(S0.sides || [[0, 1], [2, 3]]);
+  const [firstBall, setFirstBall] = useState(S0.firstBall ?? 0);
+  const [more, setMore] = useState(false);
+  const [clockSec, setClockSec] = useState(S0.clockSec ?? 40);
+  const [useClock, setUseClock] = useState(S0.useClock ?? true);
+  const [limitMin, setLimitMin] = useState(S0.limitMin ?? 40);
+  const [autoEnd, setAutoEnd] = useState(S0.autoEnd ?? true);
+  const [voice, setVoice] = useState(S0.voice ?? true);
+  /* ★ 카메라 주소 — 한 번 넣으면 저장된다. 당구장을 옮기면 바꾸면 된다 */
+  const [cam, setCam] = useState(S0.cam || "");
+  const [qr, setQr] = useState(false);
+
+  const names = useMemo(() => knownNames(data.games), [data.games]);
+  const me = data.nick || null;
+  const canAuto = ps.length === 2 || team;
+
+  const setP = (i, patch) => setPs((L) => L.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const putName = (i, v, picked) => {
+    setP(i, { name: v });
+    if (!picked) return;
+    const h = lastHandiOf(data.games, v, mode);
+    if (h) setP(i, { name: v, handi: h });
+  };
+  const addP = () => ps.length < 4 && setPs([...ps, { key: "g" + uid(), name: "", handi: mode === "3" ? 15 : 150 }]);
+  const delP = (i) => ps.length > 2 && setPs(ps.filter((_, j) => j !== i));
+  const up = (i) => {
+    if (i === 0) return;
+    const L = [...ps]; const t = L[i]; L[i] = L[i - 1]; L[i - 1] = t;
+    setPs(L); say(`${t.name || "선수"}님을 앞으로 옮겼습니다`);
+  };
+  const changeMode = (m) => {
+    setMode(m);
+    setPs((L) => L.map((p) => {
+      const h = p.name ? lastHandiOf(data.games, p.name, m) : null;
+      return { ...p, handi: h || (m === "3" ? 15 : 150) };
+    }));
+  };
+
+  /* ★ 복식으로 바꿀 때 — 인원이 안 맞으면 알리기만 하고 바꾸지 않는다.
+        인원이 안 맞는데 복식으로 켜 두면 그다음이 다 어긋난다 */
+  const toDoubles = () => {
+    if (ps.length !== 4) {
+      const need = 4 - ps.length;
+      return say(need > 0
+        ? `복식은 네 명이 필요합니다. ${need}명을 더 넣어주세요`
+        : "복식은 네 명까지입니다");
+    }
+    /* 넣은 순서대로 둘씩 나눈다. 고치는 것은 아래 ⇄ · ▲▼ 로 (사용자 지시) */
+    setSides([[0, 1], [2, 3]]);
+    setTeam(true);
+  };
+
+  /* 편 안에서 앞사람·뒷사람 — 소리로 부르는 순서가 이것으로 정해진다 */
+  const upInTeam = (si, at) => {
+    if (at === 0) return;
+    const L = sides.map((x) => [...x]);
+    const t = L[si][at]; L[si][at] = L[si][at - 1]; L[si][at - 1] = t;
+    setSides(L);
+    say(`${ps[t]?.name || "선수"}님이 먼저 칩니다`);
+  };
+  /* 상대 편의 같은 자리 사람과 맞바꾼다 */
+  const cross = (si, at) => {
+    const L = sides.map((x) => [...x]);
+    const other = 1 - si;
+    const pos = Math.min(at, L[other].length - 1);
+    const a = L[si][at], b = L[other][pos];
+    L[si][at] = b; L[other][pos] = a;
+    setSides(L);
+    say(`${ps[a]?.name}님과 ${ps[b]?.name}님을 맞바꿨습니다`);
+  };
+  const swapSides = () => {
+    setSides([sides[1], sides[0]]);
+    say("선공을 바꿨습니다");
+  };
+
+  const fillLast = () => {
+    const s = lastSetup(data.games);
+    if (!s) return say("지난 기록이 없습니다");
+    setMode(s.mode); setPlace(s.place);
+    const L = s.players.slice(0, 4).map((x) => ({
+      key: "g" + uid(), name: x.name, handi: x.handi || (s.mode === "3" ? 15 : 150),
+    }));
+    setPs(L);
+    if (s.team && L.length === 4) { setSides([[0, 1], [2, 3]]); setTeam(true); } else setTeam(false);
+    say("지난 경기 그대로 채웠습니다");
+  };
+
+  const start = () => {
+    const named = ps.filter((p) => p.name.trim());
+    if (named.length < 2) return say("선수 이름을 두 명 이상 넣어주세요");
+    if (team && ps.length !== 4) return say("복식은 네 명이 필요합니다");
+    const clean = ps.map((p, i) => ({
+      key: p.key, name: p.name.trim() || `선수${i + 1}`,
+      handi: Number(p.handi) || (mode === "3" ? 15 : 150),
+    }));
+    const setup = {
+      mode, team, bestOf, place: place.trim(), ps: clean, sides, firstBall,
+      useClock, clockSec: Number(clockSec) || 40, limitMin: Number(limitMin) || 0, cam: cam.trim(),
+      autoEnd: canAuto ? autoEnd : false, voice,
+    };
+    save({ ...data, setup });
+    go(setup);
+  };
+
+  const card = { background: "#0F2A42", borderRadius: 14, padding: 16 };
+
+  return (
+    <div>
+      {/* ★ 로고 위에 자기 자리를 준다. 겹치지 않는다 */}
+      <div style={{
+        background: "#0B1826", display: "flex", justifyContent: "flex-end",
+        alignItems: "center", gap: 8, padding: "8px 12px 0",
+      }}>
+        <button onClick={() => setTv(!tv)} title="큰 화면 모드" style={{
+          width: 34, height: 34, borderRadius: 9, fontSize: 16, opacity: tv ? 1 : .7,
+          border: "1px solid " + (tv ? ACCENT : "rgba(255,255,255,.2)"),
+        }}>🖥</button>
+        <button onClick={onLogin} title={me ? "내 계정" : "로그인"} style={{
+          width: 34, height: 34, borderRadius: "50%", fontSize: 13, fontWeight: 700,
+          background: me ? ACCENT : "rgba(0,0,0,.3)", color: me ? "#141200" : "var(--chalk)",
+          border: "1px solid rgba(255,255,255,.2)",
+        }}>{me ? me.slice(0, 1) : "＋"}</button>
+      </div>
+
+      <Banner />
+
+      {/* ★ 자매 바로가기 — 로고 «바로 아래» (골프온과 같은 자리) */}
+      <div style={{ paddingTop: 14 }}><Sisters /></div>
+
+      <div style={{ padding: "20px 16px 0" }}>
+
+        {/* ── 게임 설정 ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>새 게임 설정</div>
+          <button onClick={fillLast} style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            border: "1px solid rgba(255,255,255,.22)", borderRadius: 999,
+            padding: "6px 11px", fontSize: 11.5, color: "#9FBBD0",
+          }}>↺ 불러오기</button>
+        </div>
+
+        <div style={{ ...card, marginBottom: 22 }}>
+          <Lbl>당구장</Lbl>
+          <input value={place} onChange={(e) => setPlace(e.target.value)}
+            placeholder="이름을 넣으세요"
+            style={{ background: "rgba(0,0,0,.35)", border: "none", borderRadius: 9, marginBottom: 18 }} />
+
+          {/* ★ 종목과 방식을 한 줄에 나란히 (사용자 지시) */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Lbl>종목</Lbl>
+              <Pills value={mode} set={changeMode} items={[["3", "3쿠션"], ["4", "4구"]]} />
+            </div>
+            <div style={{ flex: 1.15, minWidth: 0 }}>
+              <Lbl>방식</Lbl>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1.25fr", gap: 6 }}>
+                <button onClick={() => setTeam(false)} style={{
+                  borderRadius: 10, padding: "11px 0", fontSize: 13.5, fontWeight: 600,
+                  background: !team ? ACCENT : "rgba(0,0,0,.32)", color: !team ? "#141200" : "#61798C",
+                }}>단식</button>
+                <button onClick={toDoubles} style={{
+                  borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600,
+                  background: team ? ACCENT : "rgba(0,0,0,.32)",
+                  color: team ? "#141200" : (ps.length === 4 ? "#61798C" : "#40566B"),
+                }}>복식·4명</button>
+              </div>
+            </div>
+          </div>
+
+          <Lbl>게임 수</Lbl>
+          <Pills cols="repeat(4,1fr)" value={bestOf} set={setBestOf}
+            items={[[1, "단판"], [2, "2"], [3, "3"], [5, "5"]]} />
+        </div>
+
+        {/* ── 선수 · 편 짜기 ── */}
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>{team ? "편 짜기" : "선수"}</div>
+          <span style={{ fontSize: 11.5, color: "#7E9AB0" }}>{team ? "1편이 선공" : "맨 위가 선공"}</span>
+        </div>
+
+        {team ? (
+          <>
+            {sides.map((idxs, si) => (
+              <TeamCard key={si} si={si} idxs={idxs} ps={ps} mode={mode}
+                ball={(firstBall + si) % 2} first={si === 0}
+                onName={(j, v) => putName(j, v)}
+                onHandi={(j, v) => setP(j, { handi: v })}
+                onBall={(b) => setFirstBall((b + si) % 2)}
+                onUp={upInTeam} onCross={cross} />
+            ))}
+            <button onClick={swapSides} style={{
+              width: "100%", border: "1px solid rgba(255,255,255,.22)", borderRadius: 12,
+              padding: "12px 0", fontSize: 13.5, color: "#B9CCDA", marginBottom: 20,
+            }}>⇅ 1편 ⇄ 2편 · 선공 바꾸기</button>
+          </>
+        ) : (
+          <>
+            {ps.map((p, i) => (
+              <PlayerRow key={p.key} p={p} i={i} mode={mode} names={names}
+                ball={(firstBall + i) % 2}
+                onName={(v, picked) => putName(i, v, picked)}
+                onHandi={(v) => setP(i, { handi: v })}
+                onBall={(b) => setFirstBall((b + i) % 2)}
+                onDel={() => delP(i)} canDel={ps.length > 2}
+                onUp={() => up(i)} />
+            ))}
+            {ps.length < 4 && (
+              <button onClick={addP} style={{
+                width: "100%", border: "1px dashed rgba(232,184,56,.45)", borderRadius: 14,
+                padding: "13px 0", fontSize: 13.5, color: ACCENT, marginBottom: 20,
+              }}>＋ 선수 추가</button>
+            )}
+          </>
+        )}
+
+        {/* ── 기타 설정 ── */}
+        <button onClick={() => setMore(!more)} style={{
+          width: "100%", background: "rgba(255,255,255,.04)",
+          borderRadius: more ? "12px 12px 0 0" : 12, padding: 14,
+          display: "flex", alignItems: "center", gap: 10, textAlign: "left",
+          marginBottom: more ? 0 : 16,
+        }}>
+          <span style={{ fontSize: 15 }}>⚙</span>
+          <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "#B9CCDA" }}>기타 설정</span>
+          <span style={{ fontSize: 11.5, color: "#7E9AB0" }}>
+            {useClock ? `${clockSec}초` : "샷클락 끔"}{limitMin > 0 ? ` · ${limitMin}분` : ""}
+          </span>
+          <span style={{ fontSize: 13, color: "#7E9AB0" }}>{more ? "▲" : "▼"}</span>
+        </button>
+
+        {more && (
+          <div style={{ background: "rgba(0,0,0,.28)", borderRadius: "0 0 12px 12px", padding: "15px 14px", marginBottom: 16 }}>
+            <Lbl>샷 클락</Lbl>
+            <div style={{ marginBottom: 16 }}>
+              <Pills cols="repeat(3,1fr)" value={useClock ? clockSec : 0}
+                set={(v) => { if (!v) return setUseClock(false); setUseClock(true); setClockSec(v); }}
+                items={[[0, "끔"], [40, "40초"], [60, "60초"]]} />
+            </div>
+            <Lbl>경기 시간</Lbl>
+            <div style={{ marginBottom: 16 }}>
+              <Pills cols="repeat(3,1fr)" value={limitMin} set={setLimitMin}
+                items={[[30, "30분"], [40, "40분"], [60, "1시간"]]} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 13 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600 }}>소리로 이름 부르기</span>
+              <Toggle on={voice} set={setVoice} />
+            </div>
+            {canAuto ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 600 }}>목표에 닿으면 자동 종료</div>
+                  <div style={{ fontSize: 11, color: "var(--chalk)", marginTop: 2 }}>끄면 직접 [종료]를 누릅니다</div>
+                </div>
+                <Toggle on={autoEnd} set={setAutoEnd} />
+              </div>
+            ) : (
+              <div style={{ fontSize: 11.5, color: "rgba(159,187,208,.7)", lineHeight: 1.6 }}>
+                세 명 이상은 1등이 나와도 끝까지 칩니다. 자동 종료를 쓰지 않습니다.
+              </div>
+            )}
+
+            {/* ★ 카메라 주소는 맨 아래에 둔다 (사용자 지시).
+                  경기 설정이 다 끝난 뒤에 한 번 넣는 것이라 순서상 여기가 맞다.
+                  한 번 넣으면 저장되므로 매번 볼 일이 없다 */}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,.1)", marginTop: 16, paddingTop: 14 }}>
+              <Lbl>카메라 주소 (다시 보기)</Lbl>
+              <div style={{ display: "flex", gap: 7 }}>
+                <input value={cam} onChange={(e) => setCam(e.target.value)}
+                  placeholder="http://192.168.0.31:8080" inputMode="url"
+                  style={{ flex: 1, minWidth: 0, background: "rgba(0,0,0,.35)", border: "none", borderRadius: 9 }} />
+                <button onClick={() => setQr(true)} style={{
+                  flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "0 14px",
+                  borderRadius: 9, fontSize: 13, fontWeight: 700, color: ACCENT,
+                  background: "rgba(232,184,56,.14)", border: "1px solid rgba(232,184,56,.45)",
+                }}>▣ QR</button>
+              </div>
+              <div style={{ fontSize: 11, color: "#6F8598", marginTop: 6, lineHeight: 1.6 }}>
+                테이블 옆 QR을 찍으면 자동으로 들어갑니다. 직접 쳐도 됩니다.
+                {cam ? "" : " 비워두면 [다시 보기] 가 안 나옵니다."}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: "0 16px 16px" }}>
+        <button className="prim" onClick={start} style={{ padding: 17, fontSize: 17, borderRadius: 14 }}>
+          점수판으로 이동
+        </button>
+        {/* ⛔ 하단 탭을 늘리지 않는다 — 글자가 좁아진다 */}
+        <LegalLinks style={{ marginTop: 14 }} />
+      </div>
+
+      {qr && (
+        <QrScan
+          onFound={(v) => {
+            setCam(v); setQr(false);
+            say(`카메라 주소를 넣었습니다 · ${v.replace(/^https?:\/\//, "")}`);
+          }}
+          onClose={() => setQr(false)} />
+      )}
+    </div>
+  );
+}
+
+const Toggle = ({ on, set, disabled }) => (
+  <button onClick={() => !disabled && set(!on)} disabled={disabled} aria-label="스위치" style={{
+    width: 50, height: 29, borderRadius: 999, flexShrink: 0, opacity: disabled ? .45 : 1,
+    background: on ? ACCENT : "rgba(0,0,0,.35)", border: "1px solid var(--line)", position: "relative",
+  }}>
+    <span style={{
+      position: "absolute", top: 3, left: on ? 24 : 3, width: 21, height: 21, borderRadius: "50%",
+      background: on ? "#141200" : "var(--chalk)", transition: ".18s",
+    }} />
+  </button>
+);
+/* ── [종료] 확인 ──  ★ 7판에서 통째로 다시 짰습니다
+
+   전에는 "이 판을 끝낼까요?" 하나로 모든 경우를 덮었습니다.
+   그래서 5전 3선승제에서 [끝내기] 가 "이 판을 끝내는 것" 인지
+   "경기를 끝내는 것" 인지 알 수가 없었습니다 (사용자 지적).
+
+   지금 상태를 보고 네 갈래로 갈립니다.
+
+   ① 목표 채움 · 시리즈 아직   [다음 판 시작] · [이번 판까지만 치고 끝내기]
+   ② 목표 채움 · 시리즈 끝     [경기 끝내기]        축하는 결과 화면에서
+   ③ 못 채움 · 정한 시간 지남  [더 치기] · [무승부로 두고 다음 판] · [여기까지만 치고 끝내기]
+   ④ 못 채움 · 시간도 안 됨    [돌아가기] · [이번 판만 지우기]
+                             ★ 경기 취소로 본다. 앞서 친 판들은 그대로 남는다
+
+   ⚠ 되돌릴 수 없는 것은 늘 아래에, 안전한 것은 위에 둡니다.
+      경기 중에는 흘깃 보고 누르기 때문입니다.                                */
+function EndAsk({ names, ranked, drew, overTime, limitMin, elapsedMin, notStarted,
+  gameNo, nextNo, nextWord, willEndSeries, seriesLine, unitWord, single,
+  onBack, onNextGame, onFinishHere, onKeepPlaying, onWipe, onHome }) {
+  const box = { width: "100%", padding: "14px 0", borderRadius: 10, fontSize: 15, fontWeight: 700, marginBottom: 7 };
+  const blue = { ...box, background: "#1E88E5", border: "none", color: "#fff" };
+  const line = { ...box, background: "transparent", border: "1px solid #3a464d", color: "var(--chalk)", fontSize: 14 };
+  const gold = { ...box, background: "#2f2a17", border: "1px solid #d8b45a", color: "#f2d98d", fontSize: 14 };
+  const green = { ...box, background: "#16301f", border: "1px solid #4f9e6a", color: "#9fe0b8" };
+  const red = { ...box, background: "#2e1a1a", border: "1px solid #9e5757", color: "#f0a9a9", fontSize: 14 };
+  const back = { width: "100%", padding: "11px 0", borderRadius: 10, background: "transparent",
+    border: "none", color: "#7d8f9b", fontSize: 13 };
+  const note = { fontSize: 11.5, color: "rgba(159,187,208,.7)", lineHeight: 1.6, marginTop: 9 };
+
+  /* 제목 — 지금이 어떤 상황인지 제목만 보고 알 수 있게 */
+  const title = drew
+    ? (overTime ? `${limitMin}분이 다 됐습니다`
+      : (notStarted ? "아직 시작하지 않았습니다" : "아직 치는 중입니다"))
+    /* ★ 단판은 "1게임를 끝낼까요?" 가 아니라 그냥 경기가 끝난 것이다 (사용자 지적).
+          조사도 틀렸다 — "게임를" */
+    : (single ? "경기가 끝났습니다" : `${gameNo}${unitWord}을 끝낼까요?`);
+
+  return (
+    <div onClick={onBack} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 86,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 400, background: "var(--bg)", border: "1px solid var(--line)",
+        borderRadius: 14, padding: 20,
+      }}>
+        <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 10 }}>{title}</div>
+        <div style={{ fontSize: 13, color: "var(--chalk)", lineHeight: 1.7, marginBottom: 16 }}>
+          {names}
+          {!notStarted && <>
+            <br />
+            {drew
+              ? (overTime
+                ? "아직 아무도 목표에 닿지 못했습니다"
+                : `${limitMin > 0 ? `${limitMin}분 중 ` : ""}${elapsedMin}분 지났습니다`)
+              : `${ranked} 승리로 남습니다`}
+          </>}
+          {!drew && seriesLine && (
+            <><br /><span style={{ color: willEndSeries ? "#8fd6d6" : "#E8B838" }}>{seriesLine}</span></>
+          )}
+        </div>
+
+        {/* ★ 한 점도 안 쳤다 — 지울 점수가 없다.
+              저장하고 나온 뒤 나가려고 [종료] 를 누르는 경우가 여기다 (사용자 지적).
+              "이번 판만 지우기" 를 권하는 것은 말이 안 된다. 나가는 길을 준다 */}
+        {notStarted ? (
+          <>
+            <button style={blue} onClick={onBack}>돌아가기</button>
+            <button style={{ ...box, background: "#2b2b2b", border: "1px solid #6a6a6a", color: "#ddd", fontSize: 13.5 }}
+              onClick={onHome}>🏠 홈으로 나가기</button>
+            <div style={note}>지울 점수가 없습니다.</div>
+          </>
+        ) : drew && !overTime ? (
+          <>
+            <button style={blue} onClick={onBack}>잘못 눌렀으면 돌아가기</button>
+            <button style={red} onClick={onWipe}>이번 판만 지우기</button>
+            <div style={note}>이번 판 점수만 지웁니다. 앞서 친 판은 그대로 남고, 점수판에 그대로 있습니다.</div>
+          </>
+        ) : drew ? (
+          /* ③ 정한 시간이 지났는데 아무도 목표에 못 닿았다 */
+          <>
+            <button style={blue} onClick={onKeepPlaying}>더 치기</button>
+            <button style={gold} onClick={onNextGame}>무승부로 두고 다음 판</button>
+            <button style={line} onClick={onFinishHere}>여기까지만 치고 끝내기</button>
+            <button style={back} onClick={onBack}>돌아가기</button>
+            <div style={note}>무승부로 두고 다음 게임을 칩니다. 앞 게임은 무승부로 남습니다.</div>
+          </>
+        ) : willEndSeries ? (
+          /* ② 이 판으로 시리즈가 끝난다 */
+          <>
+            <button style={green} onClick={onFinishHere}>
+              {single ? "기록하고 끝내기" : "경기 끝내기"}
+            </button>
+            {/* ★ [기록하지 않고 다시 시작] 을 뺐다 (사용자 지시).
+                  지우고 다시 치는 길은 좌측 바 [점수 지움] 과 [🏠 홈] 에 이미 있다.
+                  ⚠ 붉은 단추를 노란 단추 바로 밑에 두면 잘못 눌러 한 판을 날린다 */}
+            <button style={back} onClick={onBack}>돌아가기</button>
+          </>
+        ) : (
+          /* ① 목표는 채웠지만 시리즈는 아직 */
+          <>
+            <button style={blue} onClick={onNextGame}>{nextWord || `${nextNo}${unitWord}`} 시작하기</button>
+            <button style={line} onClick={onFinishHere}>이번 판까지만 치고 끝내기</button>
+            <button style={back} onClick={onBack}>돌아가기</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── 🏠 를 눌렀을 때 · 어디로 갈까요 ──  ★ 7판에서 만들었습니다
+
+   기록·통계·회원에 가려면 점수판 나가기 → 종목 고르기 → 하단 탭, 세 단계였습니다.
+   "너무 어렵다 · 못 찾겠다" 는 말을 들었습니다 (사용자 지적).
+
+   ★ 좌측 바에 새 단추를 안 넣습니다 — 폰에 자리가 없습니다 (사용자 지적).
+      이미 있는 🏠 를 눌러 여는 방식입니다. 6판에서 "목표" 를 눌러 핸디를 고치게 한 것과 같습니다.
+   ★ 탭으로 가도 점수판은 살아 있습니다 (bareNow = bare && tab === "new").
+      아래에 [● 경기 진행 중 · 점수판으로] 알약이 떠서 그대로 돌아옵니다.                */
+/* ── 🏠 를 눌렀을 때 ──
+   ★ 8판까지는 "어디로 갈까요?" 를 띄우고 기록·통계·회원·주고받기·종목 고르기를 늘어놨다.
+      당구 전용 앱에는 통계·회원·주고받기·종목 고르기가 아예 없다.
+      기록은 하단 탭에 있다. 그래서 그 화면을 통째로 없앴다 (사용자 지시).
+
+   지금은 홈으로 바로 간다. 점수가 있을 때만 한 번 묻는다.
+   ⚠ [남기고 나가기] 를 위에 둔다 — 아래 붉은 것이 먼저 눌리면 한 판이 날아간다 */
+function HomeAsk({ line, canSave, onSave, onWipe, onBack }) {
+  const box = { width: "100%", padding: "14px 0", borderRadius: 10, fontSize: 14.5, fontWeight: 700, marginBottom: 8 };
+  return (
+    <div onClick={onBack} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 86,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 360, background: "var(--bg)", border: "1px solid var(--line)",
+        borderRadius: 14, padding: 20,
+      }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 7 }}>홈으로 나가시겠습니까?</div>
+        <div style={{ fontSize: 12.5, color: "var(--chalk)", lineHeight: 1.6, marginBottom: 15 }}>
+          {line}<br />홈에서 선수와 방식을 다시 정할 수 있습니다.
+        </div>
+
+        {canSave && (
+          <button style={{ ...box, background: "#E8B838", border: "none", color: "#141200" }}
+            onClick={onSave}>✓ 지금까지 기록을 남기고 나가기</button>
+        )}
+        <button style={{ ...box, background: "#2e1a1a", border: "1px solid #9e5757", color: "#f0a9a9" }}
+          onClick={onWipe}>지우고 새로 시작하기</button>
+        <button style={{
+          width: "100%", padding: "11px 0", borderRadius: 10, background: "transparent",
+          border: "none", color: "#7d8f9b", fontSize: 13.5,
+        }} onClick={onBack}>돌아가서 계속 치기</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 당구에 들어오면 맨 먼저 뜨는 창 ──
+   ★ 요금은 당구장마다 · 테이블마다 다르다. 앉자마자 한 번 넣어두면
+      그다음부터는 시간만 흐르면 게임비가 저절로 잡힌다.
+      전에 갔던 곳은 눌러서 그대로 불러온다.
+      ★ 다른 컴포넌트 안에서 정의하지 말 것 (렌더마다 새로 만들어져 입력이 지워진다) */
+/* 당구장 이름을 알약에 짧게 보이려고 뒷말을 떼어낸다.
+   "직방당구장" → "직방" · "코리아빌리어드" → "코리아"
+   ★ 화면에만 씌우는 것입니다. 저장은 늘 원래 이름 그대로 (setPlace 는 x.place 를 넣습니다).
+      짧은 이름으로 저장하면 같은 당구장이 둘로 갈라집니다. */
+const shortPlace = (s) => {
+  const t = String(s || "").trim();
+  const cut = t.replace(/\s*(당구장|당구클럽|빌리어드|비리야드|당구|클럽)$/, "").trim();
+  return cut || t;
+};
+
+/* ── 목표를 눌렀을 때 — 핸디만 고치는 작은 창 ──
+   ★ 선수 창(SeatSheet)을 또 띄우지 않습니다. 고칠 것이 하나뿐인데 창이 크면 부담스럽습니다.
+      치는 중에도 열립니다 — 핸디는 목표만 바꿀 뿐 점수·이닝을 건드리지 않습니다.
+   ★ seats 가 여럿이면 복식입니다. 그 편 사람들을 다 늘어놓고 합계를 보여줍니다.
+   ⚠ 다른 컴포넌트 안에서 정의하지 마십시오. */
+function HandiSheet({ ps, seats, title, setPs, mode, say, onClose }) {
+  const list = (seats || []).map((j) => ps[j]).filter(Boolean);
+  if (!list.length) return null;
+  const many = list.length > 1;
+  const sum = seats.reduce((t, j) => t + (Number(ps[j]?.handi) || 0), 0);
+  const bump = (j, d) => setPs(ps.map((x, k) => (k === j ? { ...x, handi: Math.max(1, (Number(x.handi) || 0) + d) } : x)));
+  const type = (j, v) => setPs(ps.map((x, k) => (k === j ? { ...x, handi: v } : x)));
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.72)", zIndex: 80,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: many ? 290 : 250, background: "var(--bg)", border: "1px solid var(--line)",
+        borderRadius: 12, padding: 14, maxHeight: "94%", overflowY: "auto",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          {!many && <span style={{ width: 12, height: 12, borderRadius: "50%", background: BALL[list[0].c ?? seats[0]], flexShrink: 0 }} />}
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+          <span style={{ fontSize: 12, color: "var(--chalk)", flexShrink: 0 }}>
+            {many ? <>목표 <b className="num" style={{ color: "var(--accent)", fontSize: 16 }}>{sum}</b></> : (mode === "3" ? "3쿠션" : "4구")}
+          </span>
+        </div>
+
+        {seats.map((j) => (
+          <div key={ps[j].key} style={{ marginBottom: 10 }}>
+            {many && <div style={{ fontSize: 12.5, color: "var(--ivory)", marginBottom: 5 }}>{ps[j].name}</div>}
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <button onClick={() => bump(j, -1)} style={{ width: 48, padding: "9px 0", borderRadius: 9, fontSize: 18, fontWeight: 700, background: "rgba(255,255,255,.08)" }}>−</button>
+              <input type="number" inputMode="numeric" value={ps[j].handi}
+                onChange={(e) => type(j, e.target.value)}
+                style={{ flex: 1, textAlign: "right", fontSize: 18, fontWeight: 700, padding: "9px 11px" }} />
+              <button onClick={() => bump(j, 1)} style={{ width: 48, padding: "9px 0", borderRadius: 9, fontSize: 18, fontWeight: 700, background: "rgba(255,255,255,.08)" }}>＋</button>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ fontSize: 11, color: "rgba(159,187,208,.65)", margin: "6px 0 12px" }}>
+          {many ? "두 사람을 더한 값이 이 편의 목표입니다" : "이번 경기에만 적용됩니다"}
+        </div>
+
+        <button className="prim" style={{ padding: 11, fontSize: 14 }}
+          onClick={() => { say(`${title} 목표 ${sum}점`); onClose(); }}>확인</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 복식에서 편 이름을 눌렀을 때 — 편 짜기 ──
+   ★ 번호판이 사람이 아니라 편이라, 전에는 눌러도 아무것도 안 떴습니다.
+      편 안의 순서 · 편 사이 이동 · 편 색을 여기서 다룹니다.
+   ★ 편 색은 편마다 하나입니다 (사용자 지시). 그 편 사람 전부에게 같은 색을 넣습니다 —
+      번호판 색이 첫 사람 색을 따르므로(units, 1934줄), 순서를 바꿔도 색이 안 흔들립니다.
+   ⚠ [시작] 을 누른 뒤에는 잠깁니다. 2이닝째에 편을 바꾸면 쌓인 점수의 주인이 달라집니다.
+   ⚠ 다른 컴포넌트 안에서 정의하지 마십시오. */
+function TeamSheet({ ps, setPs, sides, setSides, locked, say, onClose }) {
+  const move = (si, at, d) => {
+    const L = sides.map((x) => [...x]);
+    const to = at + d;
+    if (to < 0 || to >= L[si].length) return;
+    const t = L[si][at]; L[si][at] = L[si][to]; L[si][to] = t;
+    setSides(L);
+  };
+  /* ★ 복식은 2:2 뿐이다 (사용자 지시).
+        한 사람만 건너보내면 3:1 이 되므로, 상대 편의 같은 자리 사람과 맞바꾼다.
+        짝을 다시 짜는 일(A·B 대 C·D → A·C 대 B·D)은 이것으로 다 된다 */
+  const cross = (si, at) => {
+    const L = sides.map((x) => [...x]);
+    const other = 1 - si;
+    if (!L[other].length) return say("상대 편에 사람이 없습니다");
+    const pos = Math.min(at, L[other].length - 1);
+    const mine = L[si][at], theirs = L[other][pos];
+    L[si][at] = theirs; L[other][pos] = mine;
+    setSides(L);
+    say(`${ps[mine]?.name}님과 ${ps[theirs]?.name}님을 맞바꿨습니다`);
+  };
+  const swap = () => { setSides([sides[1], sides[0]]); say("1편과 2편의 자리를 바꿨습니다"); };
+  const paint = (si, ci) => setPs(ps.map((x, j) => (sides[si].includes(j) ? { ...x, c: ci } : x)));
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.72)", zIndex: 80,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 320, background: "var(--bg)", border: "1px solid var(--line)",
+        borderRadius: 14, padding: 13, maxHeight: "94%", overflowY: "auto",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>편 짜기</span>
+          <button onClick={onClose} style={{ color: "var(--chalk)", fontSize: 12.5, padding: 5 }}>닫기</button>
+        </div>
+
+        {sides.map((idxs, si) => (
+          <div key={si} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 10, marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
+              <span style={{ fontSize: 12.5, color: "var(--chalk)" }}>{si + 1}편</span>
+              <div style={{ display: "flex", gap: 7 }}>
+                {BALL.map((col, ci) => (
+                  <button key={ci} onClick={() => paint(si, ci)} aria-label={`${si + 1}편 ${BALLNAME[ci]}`} title={BALLNAME[ci]} style={{
+                    width: 19, height: 19, borderRadius: "50%", background: col, flexShrink: 0, boxSizing: "border-box",
+                    border: (ps[idxs[0]]?.c ?? si) === ci ? "2px solid var(--ivory)" : "1px solid rgba(0,0,0,.35)",
+                  }} />
+                ))}
+              </div>
+            </div>
+
+            {idxs.map((j, at) => (
+              <div key={ps[j]?.key || j} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: at === idxs.length - 1 ? 0 : 6 }}>
+                <span style={{ flex: 1, fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ps[j]?.name}</span>
+                {!locked && (
+                  <>
+                    <button onClick={() => move(si, at, -1)} disabled={at === 0} style={{
+                      border: "1px solid var(--line)", borderRadius: 7, padding: "5px 8px", fontSize: 11,
+                      color: at === 0 ? "#4a5a66" : "var(--ivory)", background: "transparent",
+                    }}>▲</button>
+                    <button onClick={() => move(si, at, 1)} disabled={at === idxs.length - 1} style={{
+                      border: "1px solid var(--line)", borderRadius: 7, padding: "5px 8px", fontSize: 11,
+                      color: at === idxs.length - 1 ? "#4a5a66" : "var(--ivory)", background: "transparent",
+                    }}>▼</button>
+                    <button onClick={() => cross(si, at)} style={{
+                      border: "1px solid var(--line)", borderRadius: 7, padding: "5px 8px", fontSize: 11,
+                      color: "#9fbbd0", background: "transparent",
+                    }}>{2 - si}편과 바꾸기</button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {locked ? (
+          <div style={{ fontSize: 11.5, color: "rgba(159,187,208,.7)", lineHeight: 1.6, textAlign: "center", margin: "4px 0 11px" }}>
+            시작한 뒤에는 편을 바꿀 수 없습니다 · <b style={{ color: "var(--ivory)" }}>점수 지움</b> 뒤에 가능
+            <br />공 색은 지금도 바꿀 수 있습니다
+          </div>
+        ) : (
+          <button className="ghost" style={{ padding: 10, fontSize: 13, marginBottom: 8, width: "100%" }} onClick={swap}>
+            1편 ⇄ 2편 자리 바꾸기
+          </button>
+        )}
+
+        <button className="prim" style={{ padding: 11, fontSize: 14 }} onClick={onClose}>닫기</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 이름을 눌렀을 때 — 순서와 공 색 ──
+   ★ 판이 끝날 때마다 승패에 따라 순서를 바꾼다.
+      그때마다 설정 서랍을 열고 ▲▼ 를 찾는 것은 번거롭다.
+      점수판에서 이름만 누르면 되게 한다. 다른 컴포넌트 안에서 정의하지 말 것 */
+function SeatSheet({ ps, seat, setSeat, setPs, roster, mode, locked, say, onClose,
+  autoBall, setAutoBall, firstBall, setFirstBall, ballOf }) {
+  const i = seat;
+  const p = ps[i];
+  const [pick, setPick] = useState(null);   // "swap" 이면 바꾸기, "add" 면 추가
+  const [typed, setTyped] = useState("");
+  if (!p) return null;
+
+  /* ★ 순서만 바꿀 때는 창을 닫지 않는다 (7판 · 사용자 지적).
+        전에는 옮기자마자 onClose() 라서, 옮긴 뒤 바로 초구 색을 못 바꿨다.
+        "꼴찌를 맨 앞으로 옮기고 흰공부터로 세팅" 이 한 번에 안 됐던 이유다.
+        초구 색은 당구장마다 다르므로 그때그때 고를 수 있어야 한다 */
+  const move = (d) => {
+    const j = i + d;
+    if (j < 0 || j >= ps.length) return;
+    const L = [...ps]; const t = L[i]; L[i] = L[j]; L[j] = t;
+    setPs(L); setSeat(j); say(`${p.name}님을 ${j + 1}번째로 옮겼습니다`);
+  };
+  const setBall = (ci) => setPs(ps.map((x, j) => (j === i ? { ...x, c: ci } : x)));
+
+  const put = (m) => {
+    const one = m
+      ? { key: "g" + uid(), memberId: null, name: m.name, handi: m.handi || (mode === "3" ? 15 : 150), c: 0 }
+      : { key: "g" + uid(), memberId: null, name: typed.trim(), handi: mode === "3" ? 15 : 150, c: 0 };
+    if (!one.name) return say("이름을 적어주세요");
+    if (pick === "swap") {
+      setPs(ps.map((x, j) => (j === i ? { ...one, c: x.c } : x)));
+      say(`${one.name}님으로 바꿨습니다`);
+    } else {
+      if (ps.length >= 4) return say("선수는 넷까지입니다");
+      setPs([...ps, { ...one, c: ps.length }]);
+      say(`${one.name}님을 넣었습니다`);
+    }
+    onClose();
+  };
+  const drop = () => {
+    if (ps.length <= 2) return say("선수는 둘 이상이어야 합니다");
+    setPs(ps.filter((x, j) => j !== i)); say(`${p.name}님을 뺐습니다`); onClose();
+  };
+
+  /* 이미 앉아 있는 사람은 명단에서 흐리게 */
+  const taken = (nm) => ps.some((x, j) => x.name === nm && j !== (pick === "swap" ? i : -1));
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.72)", zIndex: 80,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 300, background: "var(--bg)", border: "1px solid var(--line)",
+        borderRadius: 14, padding: 13, maxHeight: "94%", overflowY: "auto",
+      }}>
+        {pick ? (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 5 }}>누구와 치십니까</div>
+            <div style={{ fontSize: 12, color: "var(--chalk)", marginBottom: 16 }}>
+              지난 기록에 나온 이름입니다. 직접 적어도 됩니다.
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {roster.map((m) => (
+                <button key={m.name} className="chip" disabled={taken(m.name)}
+                  style={{ padding: "8px 12px", fontSize: 13, opacity: taken(m.name) ? .35 : 1 }}
+                  onClick={() => put(m)}>
+                  {m.name}{m.handi ? <span style={{ color: "#5f7488" }}> {m.handi}</span> : null}
+                </button>
+              ))}
+            </div>
+            <span className="lbl">명단에 없는 사람</span>
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="이름을 적으세요" />
+            <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
+              <button className="ghost" style={{ flex: 1 }} onClick={() => setPick(null)}>취소</button>
+              <button className="prim" style={{ flex: 1.4, padding: 14 }} onClick={() => put(null)}>고르기</button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* ★ 한 줄로 폈습니다 — [◀ 앞으로] 이름 [뒤로 ▶].
+                   이름이 가운데 있어 누구를 고치는지 바로 보입니다.
+                   핸디는 여기서 뺐습니다. 점수판의 "목표" 를 눌러 고칩니다 (HandiSheet) */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
+              <button onClick={() => move(-1)} disabled={i === 0} style={{
+                padding: "10px 9px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, flexShrink: 0,
+                background: "rgba(255,255,255,.08)", color: i === 0 ? "#4a5a66" : "var(--ivory)",
+              }}>◀ 앞으로</button>
+
+              <div style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  {/* ★ 자동 교대를 켜면 p.c 를 안 쓴다 (ballOf).
+                         그때는 지금 실제로 받게 될 공을 보여준다.
+                         전에는 여기만 옛 색(p.c)이라 아래 [흰공부터] 와 어긋나 보였다.
+                         ★ 손으로 다시 세지 않는다 — 점수판이 쓰는 ballOf 를 그대로 받아 쓴다 */}
+                  <span style={{ width: 11, height: 11, borderRadius: "50%", flexShrink: 0,
+                    background: BALL[autoBall && ballOf ? ballOf(i) : (p.c ?? i)] }} />
+                  <span style={{ fontSize: 16, fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--chalk)", marginTop: 2 }}>{i + 1}번째</div>
+              </div>
+
+              <button onClick={() => move(1)} disabled={i === ps.length - 1} style={{
+                padding: "10px 9px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, flexShrink: 0,
+                background: "rgba(255,255,255,.08)", color: i === ps.length - 1 ? "#4a5a66" : "var(--ivory)",
+              }}>뒤로 ▶</button>
+            </div>
+
+            {/* ★ 수구 자동 교대 — 켜면 사람이 고른 공 색(p.c)을 쓰지 않는다 (ballOf, 1941줄).
+                   그래서 아래 공 네 개 바로 위에 둔다. 켜지면 그 네 개가 "초구는 어느 공" 으로 바뀐다.
+                   ⚠ 이 값만 모두에게 걸린다 — 개인 창에 있는 전체 값이라 한 줄로 밝혀 둔다 */}
+            {/* ★ [수구 자동 교대] 스위치를 없앴다 (당구 전용).
+                   공은 늘 차례마다 번갈아 간다 — 못 끄는 스위치를 보여주면 헷갈린다.
+                   대신 초구를 어느 공으로 할지만 고른다 */}
+            <span className="lbl" style={{ marginBottom: 7 }}>초구 색</span>
+
+            {autoBall ? (
+              <>
+                <div style={{ display: "flex", gap: 8, marginBottom: 9 }}>
+                  {[0, 1].map((b) => (
+                    <button key={b} onClick={() => setFirstBall(b)} style={{
+                      flex: 1, padding: "9px 0", borderRadius: 9, fontSize: 12.5, fontWeight: 600,
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                      background: firstBall === b ? "rgba(255,255,255,.1)" : "rgba(0,0,0,.22)",
+                      border: (firstBall === b ? "2px solid " : "1px solid ") + (firstBall === b ? BALL[b] : "var(--line)"),
+                      color: firstBall === b ? BALL[b] : "var(--chalk)",
+                    }}>
+                      <span style={{ width: 16, height: 16, borderRadius: "50%", background: BALL[b] }} />
+                      {BALLNAME[b]}부터
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(159,187,208,.65)", lineHeight: 1.6, marginBottom: 11 }}>
+                  차례가 넘어갈 때마다 공이 저절로 바뀝니다. 모두에게 적용됩니다.
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 13 }}>
+                {BALL.map((col, ci) => (
+                  <button key={ci} onClick={() => setBall(ci)} aria-label={BALLNAME[ci]} title={BALLNAME[ci]} style={{
+                    width: 36, height: 36, borderRadius: "50%", background: col, flexShrink: 0,
+                    border: (p.c ?? i) === ci ? "3px solid var(--ivory)" : "2px solid rgba(0,0,0,.35)",
+                  }} />
+                ))}
+              </div>
+            )}
+
+            {/* ★ 한 점이라도 친 뒤에 사람을 바꾸면 점수·이닝이 통째로 어긋난다.
+                   순서·공 색은 그대로 두고 사람만 잠근다 */}
+            <div style={{ borderTop: "1px solid var(--line)", paddingTop: 11, display: "flex", flexDirection: "column", gap: 7 }}>
+              {locked ? (
+                <div style={{ fontSize: 11.5, color: "rgba(159,187,208,.7)", lineHeight: 1.6, textAlign: "center" }}>
+                  치는 중에는 선수를 바꿀 수 없습니다 · <b style={{ color: "var(--ivory)" }}>점수 지움</b> 뒤에 가능
+                </div>
+              ) : (
+                <>
+                  <button className="ghost" style={{ padding: 10, fontSize: 13.5 }} onClick={() => { setTyped(""); setPick("swap"); }}>
+                    다른 사람으로 바꾸기
+                  </button>
+                  <div style={{ display: "flex", gap: 7 }}>
+                    <button className="ghost" style={{ flex: 1, padding: 10, fontSize: 13.5 }} disabled={ps.length >= 4}
+                      onClick={() => { setTyped(""); setPick("add"); }}>＋ 선수 추가</button>
+                    <button className="ghost" style={{ flex: 1, padding: 10, fontSize: 13.5, borderColor: "rgba(217,48,37,.45)", color: "#d99e99" }}
+                      disabled={ps.length <= 2} onClick={drop}>이 선수 빼기</button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button className="prim" onClick={onClose} style={{ padding: 11, fontSize: 14, marginTop: 11 }}>닫기</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
+  const [phase, setPhase] = useState("board");
+  /* ★ 설정 화면이 없다. 홈에서 다 정하고 들어온다 (당구 전용 · 사용자 지시) */
+  const mode = setup.mode;
+  const [date] = useState(today());
+  const place = setup.place;
+  const [ps, setPs] = useState(() => setup.ps.map((p, i) => ({ ...p, c: i % 2 })));
+  const bestOf = setup.bestOf;
+  const useClock = !!setup.useClock;
+  const clockSec = Number(setup.clockSec) || 40;
+  const limitMin = Number(setup.limitMin) || 0;
+  const [overSaid, setOverSaid] = useState(false);  // 시간 다 됐다고 한 번만 알린다
+  const voice = !!setup.voice;
+  const autoEnd = !!setup.autoEnd;
+  /* ★ 공은 늘 차례마다 번갈아 간다 (당구 전용). 스위치를 없앴다 */
+  const autoBall = true;
+  /* ★ 치다가 사람 이름과 공 색이 어긋나는 일이 있다 (사용자 지적).
+        홈까지 나갔다 오지 않고 점수판에서 바로 고칠 수 있어야 한다.
+        ⚠ 초구 색만 바꾼다 — 그다음은 무조건 나머지 한 색이다 (7판 6-3) */
+  const [firstBall, setFirstBall] = useState(Number(setup.firstBall) || 0);
+  const [turnNo, setTurnNo] = useState(0);
+  const [finishOrder, setFinishOrder] = useState([]);
+  const [startAt, setStartAt] = useState(null);
+  const team = !!setup.team;
+  const [sides, setSides] = useState(() => (setup.team ? (setup.sides || [[0, 1], [2, 3]]) : [[0], [1]]));
+  /* ★ 복식은 진 편이 다음 판을 먼저 친다 — 관례다 (사용자 확인).
+        개인전은 사람마다 순서가 제각각이라 앱이 돌리지 않는다 (7판 6-3) */
+  const [loserFirst, setLoserFirst] = useState(true);
+  const [gameNo, setGameNo] = useState(1);
+  const [wins, setWins] = useState({});
+  const [pts, setPts] = useState({});
+  const [log, setLog] = useState([]);
+  const [endAsk, setEndAsk] = useState(false);     // [종료] 를 눌러 확인을 기다리는 중
+  const [goAsk, setGoAsk] = useState(false);       // 🏠 를 눌러 "어디로 갈까요?" 를 연 상태
+  /* ★ [경기 끝내기] 를 누르면 결과 화면을 거치지 않고 곧바로 저장하고 결과표로 간다 (사용자 지시).
+        finish() 가 setLog 로 마지막 판을 담는 것이 먼저 끝나야 하므로,
+        표시만 켜 두고 다음 그림에서 commit 을 부른다 */
+  const [saveNow, setSaveNow] = useState(false);
+  /* ★ 다시 보기 — 카메라 주소를 넣었을 때만 돈다.
+        안 넣으면 단추도 미리보기도 안 나온다 (카메라 없이 쓰는 분들 화면 그대로) */
+  const camPv = useRef(null);
+  const cam = useReplay(setup.cam, phase === "board", camPv);
+  const [replay, setReplay] = useState(null);
+  /* ★ 단판에서 목표에 닿는 순간 이미 승부를 말했다는 표시. finish 에서 또 말하지 않는다 */
+  const endSaid = useRef(false);
+  const [memo, setMemo] = useState("");
+
+
+  const [score, setScore] = useState({});
+  const [turns, setTurns] = useState({});
+  const [high, setHigh] = useState({});
+  const [run, setRun] = useState(0);
+  const [active, setActive] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [shot, setShot] = useState(40);
+  const [hist, setHist] = useState([]);
+  const [winner, setWinner] = useState("");
+  const wake = useRef(null);
+
+  const [seat, setSeat] = useState(null);      // 이름을 눌러 순서·공 색을 고치는 중 (선수 번호)
+  const [handi, setHandi] = useState(null);    // 목표를 눌러 핸디만 고치는 중 { seats:[선수번호], title }
+  const [teamOpen, setTeamOpen] = useState(false);  // 편 짜기 창이 열려 있는가
+  /* ★ [시작] 을 한 번이라도 눌렀는가. 편 짜기를 잠그는 기준입니다 (사용자 지시).
+        ❙❙ 로 멈춰도 다시 안 풀립니다 — 판이 시작된 사실은 그대로이기 때문입니다 */
+  const [begun, setBegun] = useState(false);
+
+  useEffect(() => { setBare(!endAsk && !goAsk && phase === "board"); }, [phase, endAsk, goAsk]); // eslint-disable-line
+  useEffect(() => {
+    if (!running || phase !== "board") return;
+    const t = setInterval(() => {
+      setElapsed((e) => e + 1);
+      if (useClock) setShot((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [running, phase, useClock]);
+  /* ★ 샷 클락 — 10초 · 5초 남았을 때 소리로 알리고, 다 되면 진동.
+     당구대에서 폰을 안 보고 치므로 눈으로 보는 숫자만으로는 늦는다.
+     정해 둔 시간이 그보다 짧으면(예: 5초) 그 안내는 건너뛴다.
+     음성 안내를 꺼 두면 말은 안 하고 진동만 한다 */
+  useEffect(() => {
+    if (!useClock || !running) return;
+    if (shot === 10 && clockSec > 10) say2("10초");
+    else if (shot === 5 && clockSec > 5) {
+      say2("5초");
+      try { navigator.vibrate?.(120); } catch (e) {}
+    } else if (shot === 0) {
+      say2("시간 초과");
+      try { navigator.vibrate?.(400); } catch (e) {}
+    }
+  }, [shot]); // eslint-disable-line
+
+  /* ★ 정해 둔 경기 시간이 다 되면 한 번만 알린다.
+     판을 저절로 끝내지는 않는다 — 마지막 차례는 마저 치는 것이 보통이다 */
+  useEffect(() => {
+    if (!limitMin || !running) return;
+    if (elapsed < limitMin * 60 || overSaid) return;
+    setOverSaid(true);
+    try { navigator.vibrate?.([300, 150, 300]); } catch (e) {}
+    say2(`${limitMin}분이 다 됐습니다`);
+  }, [elapsed, limitMin, running]); // eslint-disable-line
+  const wakeOn = async () => { try { wake.current = await navigator.wakeLock?.request("screen"); } catch (e) {} };
+  const wakeOff = () => { try { wake.current?.release(); } catch (e) {} wake.current = null; };
+  useEffect(() => { wakeOn(); return wakeOff; }, []); // eslint-disable-line
+
+  const units = team
+    ? sides.map((idxs, i) => {
+        const mem = idxs.map((j) => ps[j]).filter(Boolean);
+        return {
+          key: "T" + i,
+          name: mem.map((m) => m.name).join(" · ") || `${i + 1}편`,
+          handi: mem.reduce((t, m) => t + (Number(m.handi) || 0), 0),
+          c: mem[0]?.c ?? i,
+          members: mem,
+        };
+      })
+    : ps.map((p) => ({ ...p, members: [p] }));
+
+
+  /* 지난 기록에 나온 이름과 그때 핸디 — 선수 창에서 고를 후보 */
+  const pastNames = useMemo(() => knownNames(data.games).slice(0, 12)
+    .map((n) => ({ name: n, handi: lastHandiOf(data.games, n, mode) || 0 })), [data.games, mode]);
+
+  /* ★ 복식에서 소리로 부르는 이름 — 편이 아니라 사람 (사용자 지시).
+        점수·이닝·기록은 그대로 편끼리 센다 (7판 6-3). 바뀌는 것은 부르는 말뿐이다.
+        차례가 도는 규칙이 정해져 있으므로 차례 번호 하나로 사람이 정해진다:
+          0번째 1편 앞사람 · 1번째 2편 앞사람 · 2번째 1편 뒷사람 · 3번째 2편 뒷사람 …
+        편 안에서 누가 앞사람인지는 [편 짜기] 의 ▲▼ 로 정한다.
+     ⚠ 화면은 안 건드린다 — 점수 글씨가 작아지면 안 된다 (사용자 지시) */
+  const callName = (i, tn) => {
+    const u = units[i];
+    if (!u) return "";
+    const mem = u.members || [];
+    if (!team || mem.length < 2) return u.name;
+    const times = Math.floor(Math.max(0, tn) / units.length);   /* 그 편이 몇 번째로 치는가 */
+    return mem[times % mem.length]?.name || u.name;
+  };
+
+  /* ★ 판이 끝날 때 소리로 알린다 (사용자 지시).
+        "1게임째 종료" 같은 숫자말 대신 사람이 부르는 말로 한다.
+        첫 판 · 두 번째 판 … 일곱 번째 판 */
+  const NTH = ["", "첫", "두 번째", "세 번째", "네 번째", "다섯 번째",
+    "여섯 번째", "일곱 번째", "여덟 번째", "아홉 번째", "열 번째"];
+  const nthOf = (n, last) => `${NTH[n] || `${n}번째`} ${last ? "마지막 " : ""}판`;
+
+  const STEP = mode === "4" ? 10 : 1;
+  /* ★ 수구 색은 "몇 번째 차례인가" 로만 정한다 (7판 · 사용자 지시).
+        초구 색을 고르면(firstBall) 그다음은 무조건 나머지 한 색이다.
+        공은 흰공·노란공 두 가지뿐이므로 계속 번갈아 간다.
+
+     ⚠ 전에는 자리 번호(i)를 함께 더했다. 세 명일 때 자리와 차례가 서로 상쇄돼
+        흰·흰·흰 처럼 같은 색이 세 번 이어졌다 (사용자 지적).
+        두 명·네 명일 때는 우연히 맞아서 안 드러났다.
+
+     turn(i) — 그 자리 사람이 몇 번째로 치는가.
+        지금 칠 사람(active)이 turnNo 번째이고, 뒤로 갈수록 한 번씩 늘어난다.
+     ★ 아직 차례가 안 온 사람도 자기가 받을 색을 미리 보여준다 (사용자 확인). */
+  const ballOf = (i) => {
+    if (!autoBall) return units[i]?.c ?? i;
+    const n = units.length || 1;
+    const turn = turnNo + ((i - active + n) % n);
+    return (firstBall + turn) % 2;
+  };
+
+  const say2 = (t) => { if (voice) speakKo(t); };
+
+  const sc = (k) => score[k] || 0;
+  const tn = (k) => turns[k] || 0;
+  const snap = () => setHist((x) => [...x.slice(-60), { score: { ...score }, turns: { ...turns }, high: { ...high }, run, active }]);
+  const undo = () => {
+    const l = hist[hist.length - 1]; if (!l) return;
+    setScore(l.score); setTurns(l.turns); setHigh(l.high); setRun(l.run); setActive(l.active);
+    setHist((h) => h.slice(0, -1));
+  };
+  const addPt = (d) => {
+    const p = units[active], k = p.key;
+    if (!running) setRunning(true);
+    setBegun(true);
+    if (!startAt) setStartAt(Date.now());
+    snap();
+    const now = Math.max(0, sc(k) + d);
+    setScore((s) => ({ ...s, [k]: now }));
+    setRun((r) => Math.max(0, r + d));
+    setShot(clockSec);
+    const goal = Number(p.handi) || 0;
+    const left = goal - now;
+    if (goal > 0 && now >= goal) {
+      setFinishOrder((o) => (o.includes(k) ? o : [...o, k]));
+    }
+    const near = STEP * 3;
+    if (d < 0) say2(`마이너스 ${-d}점`);
+    else if (goal > 0 && left <= 0) {
+      // 3인 이상이면 꼴찌 한 명 남을 때까지 계속
+      const already = finishOrder.filter((x) => x !== k).length;
+      const doneCnt = already + 1;
+      const remain = units.length - doneCnt;
+      if (units.length <= 2 || remain <= 1) {
+        /* ★ 단판은 이 순간이 곧 경기의 끝이다. "목표 도달" 만으로는 끝난 줄 모른다 (사용자 지적).
+              여러 판이면 곧이어 "첫 판 종료, OO 승" 이 나오므로 여기서는 짧게 둔다 */
+        if (bestOf === 1 && autoEnd) {
+          /* ★ 목표를 넘겨 한 점 더 쳐도 같은 말을 또 하지 않는다 */
+          if (endSaid.current) say2(`${d}점`);
+          else { say2(`${d}점, ${p.name} 승, 경기가 종료되었습니다`); endSaid.current = true; }
+        } else say2(`${d}점, 목표 도달`);
+      } else {
+        say2(`${d}점, ${doneCnt}위 도달, ${remain}명 계속 진행`);
+      }
+    }
+    else if (goal > 0 && left <= near) say2(`${d}점, ${left}점 남았습니다`);
+    else say2(`${d}점`);
+  };
+  const hit = (i) => {
+    if (i !== active) {
+      // 점수판을 눌러 차례를 넘길 때도 이닝과 수구 교대를 그대로 적용
+      const k = units[active].key;
+      snap();
+      if (!running) setRunning(true);
+      if (!startAt) setStartAt(Date.now());
+      setHigh((h) => ({ ...h, [k]: Math.max(h[k] || 0, run) }));
+      const steps = (i - active + units.length) % units.length;
+      setTurns((t) => {
+        const n = { ...t };
+        for (let d = 0; d < steps; d++) {
+          const kk = units[(active + d) % units.length].key;
+          n[kk] = (n[kk] || 0) + 1;
+        }
+        return n;
+      });
+      setRun(0);
+      setActive(i);
+      setShot(clockSec);
+      setTurnNo((t) => t + steps);
+      if (autoBall) {
+        /* ★ 화면(ballOf)과 같은 식 — 몇 번째 차례인지만 본다.
+              자리 번호를 더하면 안 된다 (세 명일 때 색이 안 바뀐다) */
+        const b = (firstBall + turnNo + steps) % 2;
+        say2(`${callName(i, turnNo + steps)} 차례, ${BALLNAME[b]}`);
+      } else {
+        say2(`${callName(i, turnNo + steps)} 차례`);
+      }
+      return;
+    }
+    addPt(STEP);
+  };
+  const minus = (d = 1) => addPt(-d);
+  const next = () => {
+    const k = units[active].key; snap();
+    if (!running) setRunning(true);
+    if (!startAt) setStartAt(Date.now());
+    setHigh((h) => ({ ...h, [k]: Math.max(h[k] || 0, run) }));
+    setTurns((t) => ({ ...t, [k]: (t[k] || 0) + 1 }));
+    setRun(0);
+    const nx = (active + 1) % units.length;
+    setActive(nx); setShot(clockSec);
+    setTurnNo((t) => t + 1);
+    if (autoBall) {
+      /* ★ 화면(ballOf)과 같은 식 — 다음 차례는 지금보다 하나 뒤다 */
+      const b = (firstBall + turnNo + 1) % 2;
+      say2(`${callName(nx, turnNo + 1)} 차례, ${BALLNAME[b]}`);
+    } else {
+      say2(`${callName(nx, turnNo + 1)} 차례`);
+    }
+  };
+  const reset = () => {
+    if (!confirm("점수를 모두 지우고 새로 시작할까요?")) return;
+    setScore({}); setTurns({}); setHigh({}); setRun(0); setActive(0); setTurnNo(0); setFinishOrder([]); setStartAt(null);
+    setElapsed(0); setShot(clockSec); setHist([]); setRunning(false); setBegun(false); endSaid.current = false;
+  };
+  /* ★ go — 이 판을 저장한 뒤 어디로 갈지
+        "next"   바로 다음 판으로 (결과 화면을 안 거친다)
+        "done"   결과 화면으로 (기본)
+     ★ stop — 시리즈가 안 끝났어도 여기서 경기를 끝낸다
+        bestOf 를 1로 바꾸지 않는다. "5전 3선승제였는데 2판까지 치고 끝냄" 으로 남긴다 */
+  const finish = (go, stop) => {
+    const k = units[active].key;
+    const hi = { ...high, [k]: Math.max(high[k] || 0, run) };
+    const tu = { ...turns, [k]: Math.max(1, turns[k] || 0) };
+    /* ★ 8판 — 여기도 units 다. 편으로 칠 때 사람 열쇠를 넣으면
+          turns 에 쓰지도 않는 값이 섞이고, 아래 teams 의 inn 과도 어긋난다 */
+    units.forEach((u) => { if (!tu[u.key]) tu[u.key] = 1; });
+    setHigh(hi); setTurns(tu);
+    const rank = [...units].sort((a, b) => {
+      const ia = finishOrder.indexOf(a.key), ib = finishOrder.indexOf(b.key);
+      if (ia !== ib) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      const ra = Number(a.handi) > 0 ? sc(a.key) / Number(a.handi) : 0;
+      const rb = Number(b.handi) > 0 ? sc(b.key) / Number(b.handi) : 0;
+      return rb - ra;
+    });
+    /* ★ 시간을 정해 두고 치는 방식(3~4인 개인전)에서는
+       아무도 목표 점수에 닿지 못한 채 끝나는 판이 있다. 그때는 무승부다.
+       전에는 점수가 앞선 사람을 억지로 1위로 올렸다. */
+    const drew = finishOrder.length === 0;
+    const w = drew ? "" : rank[0].key;
+    setWinner(w);
+    setLog((L) => [...L, {
+      no: gameNo, seconds: elapsed, winnerKey: w, drew,
+      startAt: startAt || (Date.now() - elapsed * 1000), endAt: Date.now(),
+      order: rank.map((u) => u.key),
+      teams: units.map((u) => ({
+        key: u.key, name: u.name, handicap: Number(u.handi) || 0, c: u.c,
+        score: sc(u.key), inn: tu[u.key] || 1, high: hi[u.key] || 0,
+        members: u.members.map((m) => ({ key: m.key, memberId: m.memberId, name: m.name })),
+      })),
+    }]);
+    setWins((x) => {
+      const n = { ...x };
+      rank.forEach((u, i) => {
+        if (!n[u.key]) n[u.key] = 0;
+        if (!drew && i === 0) n[u.key] += 1;        // 1위 횟수 · 무승부는 안 센다
+      });
+      return n;
+    });
+    setPts((x) => {
+      const n = { ...x };
+      /* 무승부면 모두 같은 점수를 준다. 순서를 매기면 안 된다 */
+      const evenPt = Math.round((units.length + 1) / 2);
+      rank.forEach((u, i) => { n[u.key] = (n[u.key] || 0) + (drew ? evenPt : units.length - i); });
+      return n;
+    });
+    setRunning(false); wakeOff();
+    if (stop) setStopped(true);
+
+    /* ★ 판이 끝났을 때 부르는 말 (사용자가 정함)
+          1판  "첫 판 종료, 이인승 승"
+          2판  "두 번째 판 종료, 김성곤 승"
+          끝판  "세 번째 마지막 판 종료, 김성곤 승, 최종 김성곤 게임 승리했습니다"
+       ⚠ 여기서는 wins·pts 가 아직 안 바뀌었다 (바로 위에서 setWins 를 불렀을 뿐이다).
+         그래서 마지막 승자는 이 판 결과까지 얹어 직접 센다 */
+    const last = stop || gameNo >= bestOf ||
+      (!multiSeat && Object.keys(wins).some((k) => (wins[k] || 0) + (!drew && rank[0]?.key === k ? 1 : 0) >= need));
+    const head = bestOf > 1 ? `${nthOf(gameNo, last)} 종료` : "경기 종료";
+    const win = `${rank[0]?.name || ""} 승`;
+
+    /* ★ 무승부는 소리로 알리지 않는다 (사용자 지시).
+          화면에는 그대로 "무승부" 로 나온다 — 소리만 안 낸다.
+          다만 마지막 판이 무승부라도 경기 전체 승자는 있을 수 있으므로
+          그때는 승자만 부른다 */
+    if (drew && !last) return;
+
+    if (!last) {
+      say2(`${head}, ${win}`);
+    } else {
+      /* 마지막 판이면 경기 전체 승자까지 이어서 부른다 */
+      const tally = {};
+      units.forEach((u) => { tally[u.key] = (wins[u.key] || 0) + (!drew && rank[0]?.key === u.key ? 1 : 0); });
+      const board = multiSeat
+        ? units.map((u) => ({ n: u.name, v: (pts[u.key] || 0) + (drew ? 0 : units.length - rank.findIndex((r) => r.key === u.key)) }))
+        : units.map((u) => ({ n: u.name, v: tally[u.key] }));
+      board.sort((a, b) => b.v - a.v);
+      const champ = board.length > 1 && board[0].v === board[1].v
+        ? "" : (board[0] && board[0].v > 0 ? board[0].n : "");
+      /* ★ 단판은 이미 "경기 종료, OO 승" 으로 끝났다.
+            한 판뿐인데 "최종 … 게임 승리" 를 붙이면 군더더기다 */
+      const tail = drew ? head : `${head}, ${win}`;
+      if (bestOf === 1) { if (!drew && !endSaid.current) say2(tail); }
+      else if (champ) say2(`${tail}, 최종 ${champ} 게임 승리했습니다`);
+      else if (!drew) say2(tail);
+    }
+
+    if (go === "next") { nextGame(); return; }
+    setPhase("done");
+
+  };
+
+  /* ★ 시리즈가 안 끝났어도 "여기까지만 치고 끝내기" 를 고른 상태.
+        전에는 setBestOf(1) 로 판수를 1 로 바꿔버려서 기록에 "단판" 으로 남았다.
+        5전 3선승제였다는 사실은 그대로 두고 여기서 멈췄다는 것만 표시한다 */
+  const [stopped, setStopped] = useState(false);
+
+  const multiSeat = units.length > 2;              // 3인·4인 개인전
+  const need = multiSeat ? bestOf : Math.ceil(bestOf / 2);
+  /* ★ 무승부가 섞이면 선승 조건에 영영 못 닿는다.
+        3판 2선승인데 두 판이 무승부면 남은 한 판을 이겨도 1승뿐이다.
+        정한 판을 다 쳤으면 그것으로 끝난다 — 그보다 더 칠 수는 없다 */
+  const seriesOver = stopped || bestOf === 1 || (multiSeat
+    ? log.length >= bestOf                          // 정해둔 판을 다 쳐야 종료
+    : (Math.max(0, ...Object.values(wins)) >= need || log.length >= bestOf));
+
+  const nextGame = () => {
+    setScore({}); setTurns({}); setHigh({}); setRun(0);
+    /* ★ 맨 왼쪽이 항상 선공이다 (7판 6-3). 앱이 자동으로 돌리지 않는다.
+          다만 복식은 진 편이 다음 판을 먼저 치는 것이 관례라 그때만 편을 맞바꾼다
+          (사용자 확인 · [진 편이 먼저 치기] 스위치로 끌 수 있다) */
+    if (team && loserFirst && winner) {
+      const lost = sides.findIndex((_, i) => "T" + i !== winner);
+      if (lost === 1) setSides([sides[1], sides[0]]);
+    }
+    setActive(0);
+    setElapsed(0); setShot(clockSec); setHist([]); setWinner(""); setRunning(false); setTurnNo(0); setFinishOrder([]); setStartAt(null); setOverSaid(false);
+    /* ★ 8판까지 여기에 setBegun(false) 가 빠져 있었다 (사용자 지적 · 진짜 버그).
+          begun 이 켜진 채로 남아 편 짜기 창의 ▲▼ · [2편과 바꾸기] ·
+          [1편 ⇄ 2편 자리 바꾸기] 가 경기가 끝날 때까지 안 그려졌다.
+          reset() 과 commit() 에는 있는데 여기에만 없었다 (8판 ㉔ 와 같은 종류) */
+    setBegun(false); endSaid.current = false;
+    setGameNo((n) => n + 1); setPhase("board"); wakeOn();
+    /* ★ 판 종료는 "두 번째 판 종료" 인데 시작은 "2게임 시작" 이라 말투가 어긋났다 (사용자 지적).
+          한 곳에서만 고치고 다른 곳을 안 봐서 생긴 일이다 (8판 ⑳) */
+    say2(`${nthOf(gameNo + 1)} 시작`);
+  };
+  const commit = () => {
+    const ids = ps.map((p) => p.key);
+    const seriesId = uid();
+    const summary = bestOf > 1 ? {
+      bestOf, games: log.length,
+      /* ★ 판마다가 아니라 경기 전체의 기록을 담는다 (7판 · 사용자 요청).
+            공유 글은 마지막 판 하나만 받아서 만들기 때문에, 여기 안 담으면 전체를 못 센다.
+            에버 = 총 득점 ÷ 총 이닝. 판별 에버를 다시 평균 내지 않는다 —
+            이닝 수가 판마다 달라 짧은 판이 과하게 반영된다.
+            하이런은 판별 중 제일 높은 하나. */
+      score: units.map((p) => {
+        let pt2 = 0, inn = 0, hi = 0;
+        log.forEach((e) => {
+          const t = (e.teams || []).find((x) => x.key === p.key);
+          if (!t) return;
+          pt2 += Number(t.score) || 0;
+          inn += Number(t.inn) || 0;
+          hi = Math.max(hi, Number(t.high) || 0);
+        });
+        return { name: p.name, w: wins[p.key] || 0, pt: pts[p.key] || 0,
+          total: pt2, inn, high: hi, handi: Number(p.handi) || 0 };
+      }),
+      byRank: units.length > 2,
+      rounds: log.map((e, i) => {
+        /* ★ 판마다 등수 점수를 함께 담는다 (7판 · 사용자 요청).
+              finish() 가 pts 에 더할 때 쓴 식과 똑같이 센다 — 한 곳에서 두 번 세면 어긋난다.
+              e.order 는 그 판의 순위(1등부터)이고, 세 명이면 3·2·1 점이 된다.
+              ★ 당구는 동점이 없다. 꼴찌 한 사람만 남을 때까지 치므로 순위가 늘 갈린다 */
+        const n = e.teams.length;
+        const evenPt = Math.round((n + 1) / 2);
+        const ptOf = (k) => {
+          if (e.drew) return evenPt;
+          const r = (e.order || []).indexOf(k);
+          return r < 0 ? 1 : n - r;
+        };
+        return {
+          no: e.no,
+          line: e.teams.map((x) => `${x.name} ${x.score}`).join(" : "),
+          /* ★ 먼저 목표를 달성한 순서대로 적는다 (사용자 지시).
+                맨 앞이 1등이라 "승" 을 따로 안 써도 누가 이겼는지 바로 보인다.
+                e.order 가 그 판의 순위다 (finish 에서 rank 로 만든 것) */
+          names: (() => {
+            const ord = e.order || [];
+            return e.teams
+              .map((x) => ({ name: x.name, score: x.score, pt: ptOf(x.key), key: x.key }))
+              .sort((a, b) => {
+                const ia = ord.indexOf(a.key), ib = ord.indexOf(b.key);
+                return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+              })
+              .map(({ name, score, pt }) => ({ name, score, pt }));
+          })(),
+          win: e.teams.find((x) => x.key === e.winnerKey)?.name || "",
+          drew: !e.winnerKey,
+          carried: !!e.carried,
+        };
+      }),
+    } : null;
+
+    const recs = log.map((e, idx) => {
+      const last = idx === log.length - 1;
+      const flat = [];
+      e.teams.forEach((t) => t.members.forEach((m) => {
+        flat.push({
+          /* ★ 회원이 아닌 사람(직접 적은 이름)에게는 회원 번호를 붙이지 않는다.
+             전에는 m.key 로 넘어갔는데, key 는 그 자리에 처음 앉아 있던 회원의
+             번호라서, 이름만 바꿔 적으면 그 사람 점수가 앞 회원의 전적으로 들어갔다 */
+          memberId: m.memberId || null, name: m.name,
+          /* ★ 자리 열쇠. order 가 이 값으로 저장되므로, 기록 화면에서 달성 순서를
+                되살릴 때 이것으로 맞춘다. memberId 로 맞추면 회원이 아닌 사람은
+                null 이라 순서를 못 찾고 뒤로 밀린다 (7판에 찾은 버그) */
+          seatKey: m.key,
+          score: t.score, handicap: t.handicap, inn: t.inn, high: t.high,
+          /* ★ 무승부는 won 을 비워 둔다. false 로 두면 전원 '패' 로 잡힌다 */
+          guest: !m.memberId, side: t.name,
+          won: e.winnerKey ? t.key === e.winnerKey : null,
+        });
+      }));
+      const wt = e.teams.find((t) => t.key === e.winnerKey);
+      return {
+        id: uid(), sport: "billiard", mode, date, place, seconds: e.seconds,
+        startAt: e.startAt, endAt: e.endAt, order: e.order,
+        innings: Math.max(1, ...e.teams.map((t) => t.inn)),
+        team, players: flat,
+        teams: team ? e.teams.map((t) => ({
+          name: t.name, score: t.score, handicap: t.handicap, inn: t.inn,
+          high: t.high, c: t.c,
+          members: t.members.map((m) => m.name), win: e.winnerKey ? t.key === e.winnerKey : false,
+        })) : null,
+        winnerId: team ? "" : (() => {
+          const wm = wt?.members?.[0];
+          return wm ? (wm.memberId || "") : "";
+        })(),
+        winnerSide: team ? (wt?.name || "") : "",
+        drew: !e.winnerKey,                       // 아무도 목표에 못 닿은 판
+        seriesId, gameNo: e.no, bestOf,
+        series: summary,
+        by: data.nick || "",
+      };
+    });
+
+    if (!recs.length) return say("저장할 경기가 없습니다");
+    save({ ...data, games: [...recs.reverse(), ...data.games] });
+    setScore({}); setTurns({}); setHigh({}); setRun(0); setActive(0);
+    setElapsed(0); setHist([]); setMemo(""); setLog([]); setWins({}); setPts({}); setGameNo(1); setFinishOrder([]);
+    setStopped(false);
+    setRunning(false); setBegun(false); setStartAt(null); setTurnNo(0);
+    /* ★ 저장이 끝나면 홈으로 나간다 (7판 · 사용자 지시).
+          전에는 setPhase("board") 로 빈 점수판이 다시 떴다.
+          다 끝났는데 새 판을 시작하려는 것처럼 보였고, 나가려고 [종료] 를 누르면
+          "아직 치는 중입니다" 가 떠서 말이 안 맞았다.
+          세 판을 다 치면 복식으로 새로 잡거나 아주 끝내므로, 처음부터 다시 잡는 것이 맞다.
+          공유 창은 홈 화면 위에 뜬다 — 닫으면 홈이다 */
+    /* ★ 저장이 끝나면 곧바로 결과표를 띄운다 (사용자 지시).
+          전에는 "경기가 끝났습니다" 창을 한 번 더 거쳐야 했다.
+          결과표 창 안에 [홈으로 가기] 가 있으므로 한 단계가 준다.
+          ⚠ 저장이 먼저다 — 창을 저장 앞에 두면 안 누르고 나갔을 때 기록을 잃는다 */
+    wakeOff(); setPhase("board");
+    openSheet({ ...recs[0], justSaved: true, gamesSaved: recs.length });
+    goHome();
+  };
+
+  /* ★ [경기 끝내기] 로 들어왔으면 결과 화면을 안 거치고 바로 저장한다.
+        log·wins·pts 가 이미 갱신된 뒤라 commit 이 마지막 판까지 담는다 */
+  useEffect(() => {
+    if (!saveNow || phase !== "done") return;
+    setSaveNow(false);
+    commit();
+  }, [saveNow, phase]); // eslint-disable-line
+
+  /* ★ 목표에 닿으면 판을 끝낸다.
+        ⚠ 3명 이상은 1등이 나와도 나머지가 끝까지 친다 (사용자 확인).
+           등수를 매기려면 마지막 사람까지 쳐야 하므로 자동 종료를 안 쓴다 —
+           홈에서도 두 자리일 때만 그 스위치가 나온다.
+        ★ 8판까지는 말없이 결과 화면으로 넘어갔다. 이제 한 번 묻는다 */
+  useEffect(() => {
+    if (phase !== "board" || !autoEnd || multiSeat) return;
+    const reached = units.filter((p) => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi));
+    if (!reached.length) return;
+    /* ★ 목표에 닿으면 곧바로 시계를 멈춘다 (사용자 지적 · 진짜 버그였다).
+          8판까지는 running 을 안 껐다. 확인창이 떠 있는 동안에도 샷 클락이 계속 줄어들어
+          끝내 "시간 초과" 까지 말했다. 판이 끝났는데 시간을 재고 있을 이유가 없다 */
+    setRunning(false);
+    wakeOff();
+    const t = setTimeout(() => setEndAsk(true), 1200);
+    return () => clearTimeout(t);
+  }, [score, phase, autoEnd]); // eslint-disable-line
+
+  /* ★ 8판 — units 로 센다 (사용자 지적 · 복식에서 이닝이 안 올라감).
+        차례(turns)는 next()·hit() 에서 units[…].key 로 쌓인다.
+        편으로 칠 때 그 열쇠는 "T0" · "T1" 인데 여기서는 사람 열쇠로 찾고 있었다.
+        turns 에 사람 열쇠가 없으니 tn() 이 늘 0 → 1이닝에서 멈췄다.
+        개인전은 units 가 곧 ps 라 열쇠가 같아서 잘 돌아갔다 */
+  const inning = Math.min(...units.map((u) => tn(u.key))) + 1;
+  const midAt = units.length % 2 === 0 ? units.length / 2 : 0;
+  /* 두 자리(2인 개인전 · 편먹기)일 때만 [다음] 을 가운데 세로로 세운다 */
+  const twoUp = units.length === 2;
+  const maxLen = Math.max(1, ...ps.map((p) => String(sc(p.key)).length));
+  const NUMSIZE = padSize(maxLen);
+  const F = tv ? 1.55 : 1;
+
+  /* ── 판이 끝났을 때 ──
+        ★ 정산을 통째로 없앴다 (사용자 지시). 결과와 저장만 남는다.
+           ② 판이 끝나면 "몇 게임 중 몇 번째가 끝났습니다" 하고 다음 판을 묻는다
+           ④ 경기가 다 끝나면 저장한 뒤 "홈으로 가시겠습니까" 를 묻는다 */
+  const rankNow = [...units].sort((a, b) => (pts[b.key] || 0) - (pts[a.key] || 0));
+  /* 승점이 같으면 공동 순위로 묶고 그다음을 건너뛴다 (7판 5장 ⑩ 에 남아 있던 것) */
+  const rankNo = (i) => {
+    let n = 1;
+    for (let k = 0; k < i; k++) if ((pts[rankNow[k].key] || 0) > (pts[rankNow[i].key] || 0)) n = k + 2;
+    return n;
+  };
+  const topName = (() => {
+    const top = Math.max(0, ...units.map((p) => wins[p.key] || 0));
+    const led = units.filter((p) => (wins[p.key] || 0) === top);
+    return !top || led.length !== 1 ? "" : led[0].name;
+  })();
+
+  if (phase === "done") return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: 16 }}>
+      <div style={{ textAlign: "center", paddingTop: 6 }}>
+        <div style={{ fontSize: 12, color: "var(--chalk)", letterSpacing: ".1em" }}>
+          {bestOf === 1 ? B_LABEL[mode] : `${bestOf}판 중 ${nthOf(log.length)}`}
+        </div>
+        <div style={{ fontSize: 19, fontWeight: 700, marginTop: 6, color: seriesOver ? "var(--accent)" : "var(--ivory)" }}>
+          {seriesOver
+            ? (topName ? `${topName} 우승` : "승부를 가리지 못했습니다")
+            : `${nthOf(log.length)}이 끝났습니다`}
+        </div>
+        {place ? <div style={{ fontSize: 12, color: "var(--chalk)", marginTop: 4 }}>{place} · {clock(elapsed)}</div> : null}
+      </div>
+
+      {/* 이번 판 결과 */}
+      <div className="card" style={{ padding: 14 }}>
+        <span className="lbl">{bestOf > 1 ? `${gameNo}게임 결과` : "경기 결과"}</span>
+        {units.map((p, i) => (
+          <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 0", borderTop: i ? "1px solid var(--line)" : "none" }}>
+            <span style={{ width: 12, height: 12, borderRadius: "50%", background: BALL[p.c ?? i], flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+            <span className="num" style={{ fontSize: 17, width: 58 }}>{sc(p.key)}<span style={{ fontSize: 12, color: "var(--chalk)" }}>/{p.handi}</span></span>
+            <span className="num" style={{ fontSize: 12, color: "var(--chalk)", width: 48 }}>{tn(p.key) || 1}이닝</span>
+            <span className="num" style={{ fontSize: 14, color: "var(--accent)", flex: 1, textAlign: "right" }}>
+              {fmtAvg(avg(sc(p.key), tn(p.key) || 1), mode)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* 여러 판을 칠 때 — 지금까지 */}
+      {bestOf > 1 && (
+        <div className="card" style={{ padding: 14 }}>
+          <span className="lbl">지금까지</span>
+          {(multiSeat ? rankNow : units).map((p, i) => (
+            <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: i ? "1px solid var(--line)" : "none" }}>
+              {multiSeat && (
+                <span className="num" style={{
+                  width: 20, height: 20, borderRadius: "50%", fontSize: 11, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: rankNo(i) === 1 ? "#E8B838" : "rgba(0,0,0,.3)",
+                  color: rankNo(i) === 1 ? "#141200" : "var(--chalk)",
+                }}>{rankNo(i)}</span>
+              )}
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: BALL[p.c ?? i] }}>{p.name}</span>
+              <span className="num" style={{ fontSize: 12, color: "var(--chalk)" }}>1위 {wins[p.key] || 0}회</span>
+              {multiSeat && <span className="num" style={{ fontSize: 16, color: "var(--accent)", width: 46, textAlign: "right" }}>{pts[p.key] || 0}점</span>}
+            </div>
+          ))}
+          {!seriesOver && (
+            <div style={{ textAlign: "center", fontSize: 12, color: "var(--chalk)", marginTop: 8 }}>
+              {multiSeat ? `${bestOf - log.length}판 남았습니다` : `${need}판 먼저 이기면 승리`}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 무승부 판이면 그렇게 표시해 둔다 — 점수만으로는 알 수 없다 */}
+      {winner === "" && (
+        <div style={{ fontSize: 12.5, color: "rgba(232,184,56,.9)", textAlign: "center" }}>
+          아무도 목표에 닿지 못했습니다 · 무승부
+        </div>
+      )}
+
+      {seriesOver ? (
+        <>
+          <div><span className="lbl">메모</span>
+            <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="선택 입력" /></div>
+          <button className="prim" onClick={commit} style={{ padding: 18, fontSize: 17 }}>
+            ✓ {bestOf > 1 ? `${log.length}게임 저장하고 결과표 만들기` : "저장하고 결과표 만들기"}
+          </button>
+          <div style={{ fontSize: 11.5, color: "rgba(159,187,208,.65)", textAlign: "center", lineHeight: 1.6 }}>
+            이 단추를 눌러야 기록에 남습니다.
+          </div>
+        </>
+      ) : (
+        <>
+          {/* ★ 복식은 진 편이 다음 판을 먼저 친다 — 관례다 (사용자 확인) */}
+          {team && (
+            <div className="card" style={{ padding: 13, display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600 }}>진 편이 먼저 치기</span>
+              <Toggle on={loserFirst} set={setLoserFirst} />
+            </div>
+          )}
+          <button className="prim" onClick={nextGame} style={{ padding: 16, fontSize: 16 }}>
+            {nthOf(gameNo + 1)} 시작 ▸
+          </button>
+          {/* ★ 판수를 1로 바꾸지 않는다. 여기서 멈췄다는 것만 표시한다 (7판) */}
+          <button className="ghost" onClick={() => setStopped(true)}>여기까지만 치고 끝내기</button>
+        </>
+      )}
+      <button className="ghost" onClick={() => { setPhase("board"); wakeOn(); }}>점수판으로 돌아가기</button>
+    </div>
+  );
+
+  /* ── 점수판 ── */
+  const ratio = useClock ? shot / clockSec : 1;
+  const segs = Math.min(clockSec, 40);
+  const LBL = PAD_LBL;
+
+  return (
+    <BoardShell onPointerDown={primeTTS}>
+      <BoardRail
+        top={[
+          /* ★ ❙❙ 는 무슨 뜻인지 모른다는 지적이 있었습니다. 한글로 씁니다 */
+          { label: running ? "중지" : "시작", onClick: () => { setRunning(!running); setBegun(true); },
+            title: running ? "시간을 멈춥니다" : "시간을 흘립니다",
+            bg: running ? "#3a2020" : "#1E88E5", color: "#fff", size: RAIL_TXT,
+            border: running ? "1px solid #a35a5a" : "none" },
+          /* ★ ↶ 만으로는 있는지조차 몰랐다 (사용자 지적 두 번).
+                 화살표를 빼고 글자만 두 줄로 크게 쓴다.
+                 누를 것이 없어도 테두리는 남긴다 — 아예 안 보이면 단추가 없는 줄 안다 */
+          { label: <>되돌<br />리기</>, onClick: undo, disabled: !hist.length, size: RAIL_TWO,
+            title: "방금 누른 것 취소",
+            color: "#8fd6d6", bg: "#1d3a3d", border: "1px solid #5aa8ad" },
+          /* ★ 되돌릴 수 없는 일이므로 붉은 계열로 따로 세운다 */
+          { label: <>점수<br />지움</>, onClick: reset, size: RAIL_TWO, title: "이번 판 점수만 0으로",
+            color: "#f0a9a9", bg: "#2e1a1a", border: "1px solid #9e5757" },
+        ]}
+        bottom={[
+          /* ★ 바탕이 거의 검정이라 노란 글씨가 멀리서 안 보였다 (사용자 지적).
+                 바탕을 올리고 같은 노랑으로 테두리를 두른다 */
+          /* ★ 어두운 바탕에 노란 글씨라 멀리서 안 보였다. 시작과 같은 파랑으로 채운다.
+                 대신 시작과 색이 같아져 잘못 누르기 쉬우므로 한 번 물어본다 */
+          { label: "종료", onClick: () => setEndAsk(true), color: "#fff", size: RAIL_TXT, bg: "#1E88E5" },
+          /* ★ 무슨 단추인지 알 수가 없었습니다 (사용자 지적).
+                 ⤢ 만 파랗게 떠 있어 눈에 안 띄었습니다 — 테두리를 두르고 글자를 붙입니다.
+                 누르면 "화면 최대 크게" 가 2.4초 떴다 사라집니다 */
+          { label: <span style={{ display: "block", lineHeight: 1.1 }}>⤢<br /><span style={{ fontSize: 9.5 }}>크게</span></span>,
+            onClick: () => { fullScreen(); say("화면 최대 크게"); },
+            title: "화면 최대 크게", size: RAIL_SYM, color: "#7ec2ff",
+            bg: "#12243a", border: "1px solid #2f6fa8" },
+          /* ★ 다시 보기 — 카메라를 넣었을 때만 나온다 */
+          ...(cam.state === "live" && cam.secs >= 1 ? [{
+            label: <span style={{ display: "block", lineHeight: 1.1 }}>▶<br /><span style={{ fontSize: 9.5 }}>다시<br />보기</span></span>,
+            title: "최근 30초 다시 보기", size: RAIL_SYM, color: "#c9a6f0",
+            bg: "#2a1c33", border: "1px solid #8a63c4",
+            onClick: () => { setRunning(false); setReplay(cam.snapshot()); },
+          }] : []),
+          /* ★ 회색 ← 하나뿐이라 안 보였고, 위의 되돌리기(↶)와도 헷갈렸다 (7판 지적).
+                 어디로 가는지가 핵심이므로 집 그림과 글자를 붙인다.
+             ★ 당구 전용 — "어디로 갈까요?" 를 없앴다 (사용자 지시).
+                거기 있던 통계·회원·주고받기·종목 고르기가 이 앱에는 아예 없다.
+                누르면 홈으로 간다. 점수가 있을 때만 한 번 묻는다 */
+          { label: <span style={{ display: "block", lineHeight: 1.1 }}>🏠<br /><span style={{ fontSize: 9.5 }}>홈</span></span>,
+            title: "홈으로 나가서 다시 정하기", size: RAIL_SYM, color: "#ddd", bg: "#2b2b2b", border: "1px solid #6a6a6a",
+            onClick: () => {
+              if (Object.values(score).some((v) => v > 0) || log.length) { setGoAsk(true); return; }
+              wakeOff(); goHome();      /* 친 것이 없으면 묻지 않는다 */
+            } },
+        ]}
+      />
+
+      <BoardArea>
+        <div style={{ flex: 1, display: "flex", alignItems: "stretch", gap: 8, padding: "8px 10px 0", minHeight: 0, overflow: "hidden" }}>
+          {units.map((p, i) => (
+            <React.Fragment key={p.key}>
+              {i === midAt && (
+                <BoardMid big={inning} cap="이닝" width={twoUp ? "clamp(76px,15vw,206px)" : undefined}
+                  bottom={twoUp ? (
+                    /* ★ [다음] 을 가운데에 세로로 길게 둔다.
+                          지표 줄과 점수 단추 줄에 걸쳐 있어 폭은 좁아도 누르는 면적은 더 넓다.
+                          "다음 선수 ▸" 는 가로로 길어 이 폭에 안 들어간다 — 두 줄로 접는다 */
+                    <button onClick={next} aria-label="다음 선수 차례" style={{
+                      width: "100%", marginBottom: 8, borderRadius: "clamp(10px,2.4vh,22px)",
+                      height: "clamp(56px,17vh,150px)", flexShrink: 0,
+                      background: run >= 3 ? "#2a6ea0" : "#1b3d55", color: "#fff",
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                      lineHeight: 1.05, transition: "background .2s",
+                    }}>
+                      <span style={{ fontSize: "clamp(15px,3.8vh,44px)", fontWeight: 700 }}>다음</span>
+                      <span style={{ fontSize: "clamp(13px,3.4vh,40px)", color: "#9ecbe8" }}>
+                        ⇒{run > 0 ? ` ${run}` : ""}
+                      </span>
+                    </button>
+                  ) : null}
+                  top={<>
+                  {/* ★ 지금 무엇으로 치는지 — 눌러서 고치는 것이 아니라 보여주기만 한다.
+                        방식은 홈에서 정하고 들어온다 (당구 전용) */}
+                  <div style={{
+                    textAlign: "center", marginBottom: 5, lineHeight: 1.2, color: "#8f86a8",
+                    fontSize: "clamp(10px,1.5vh,14px)", fontWeight: 700, whiteSpace: "nowrap",
+                  }}>
+                    {B_LABEL[mode]}{team ? " 복식" : ""}
+                  </div>
+                  {bestOf > 1 && (
+                    <div style={{ textAlign: "center", marginBottom: 4 }}>
+                      <div className="num" style={{ fontSize: "clamp(15px,2.8vh,32px)", color: "#E8B838" }}>
+                        {units.map((x) => wins[x.key] || 0).join(" : ")}
+                      </div>
+                      <div style={{ fontSize: MID_LBL, color: "#888", whiteSpace: "nowrap" }}>{nthOf(gameNo)}</div>
+                    </div>
+                  )}
+                  {/* ★ 시간을 정해 뒀으면 남은 시간을 보여준다. 다 되면 빨갛게 */}
+                  <div className="num" style={{
+                    fontSize: MID_VAL, whiteSpace: "nowrap",
+                    color: limitMin > 0 && elapsed >= limitMin * 60 ? "#D93025" : "#ddd",
+                  }}>
+                    {limitMin > 0
+                      ? (elapsed >= limitMin * 60 ? "시간 종료" : clock(limitMin * 60 - elapsed))
+                      : clock(elapsed)}
+                  </div>
+                  {limitMin > 0 && (
+                    <div style={{ fontSize: MID_LBL, color: "#888", whiteSpace: "nowrap" }}>
+                      {elapsed >= limitMin * 60 ? `${limitMin}분 지남` : `${limitMin}분 중`}
+                    </div>
+                  )}
+                </>} />
+              )}
+              {/* ★ 두 자리일 때는 ± 단추가 그 사람 번호판 밑에 붙는다.
+                     왼쪽은 빼기, 오른쪽은 더하기. 누구 것인지 헷갈릴 일이 없다.
+                     세 자리 이상은 칸이 좁아 예전처럼 아래 한 줄로 모은다 */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+                <ScorePad
+                  name={p.name}
+                  value={sc(p.key)}
+                  size={NUMSIZE}
+                  bg={i === active ? BALL[ballOf(i)] : DIM[ballOf(i)]}
+                  fg={i === active ? "#000" : "rgba(255,255,255,.34)"}
+                  accent={BALL[ballOf(i)]}
+                  dim={i !== active}
+                  badge={finishOrder.includes(p.key)
+                    ? { text: `${finishOrder.indexOf(p.key) + 1}위 도달`, color: "#E8B838" } : null}
+                  dot={autoBall ? { color: BALL[ballOf(i)], text: BALLNAME[ballOf(i)] } : null}
+                  stats={[
+                    ["하이런", Math.max(high[p.key] || 0, i === active ? run : 0)],
+                    ["에버", fmtAvg(avg(sc(p.key), tn(p.key) || 1), mode)],
+                    ["목표", Number(p.handi) || (mode === "3" ? 15 : 150), "#999",
+                      /* 개인전은 그 사람 하나, 복식은 그 편 사람들을 다 연다 */
+                      () => setHandi(team
+                        ? { seats: sides[i] || [], title: `${i + 1}편` }
+                        : { seats: [i], title: ps[i]?.name || "" })],
+                  ]}
+                  onTap={() => hit(i)}
+                  onName={() => (team ? setTeamOpen(true) : setSeat(i))}
+                  ariaLabel={`${p.name} ${sc(p.key)}점${i === active ? ", 공격 중. 누르면 1점" : ", 누르면 공격권 넘기기"}`}
+                />
+                {twoUp && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, paddingBottom: 8 }}>
+                    {(i === 0
+                      ? [[-2 * STEP, `−${2 * STEP}`], [-1 * STEP, `−${STEP}`]]
+                      : [[STEP, `+${STEP}`], [2 * STEP, `+${2 * STEP}`]]
+                    ).map(([d, l]) => (
+                      <button key={l} onClick={() => (d < 0 ? minus(-d) : addPt(d))} style={{
+                        background: d < 0 ? "#2a1c1a" : "#18261a", color: d < 0 ? "#d99e99" : "#8fc79a",
+                        padding: PT_PAD, fontSize: PT_FS, fontWeight: 700, borderRadius: 999,
+                      }}>{l}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+
+        {!twoUp && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2.2fr 1fr 1fr", gap: 6, padding: "5px 10px" }}>
+            {[[-2 * STEP, `−${2 * STEP}`], [-1 * STEP, `−${STEP}`]].map(([d, l]) => (
+              <button key={l} onClick={() => minus(-d)} style={{
+                background: "#2a1c1a", color: "#d99e99", padding: PT_PAD,
+                fontSize: PT_FS, fontWeight: 700, borderRadius: 999,
+              }}>{l}</button>
+            ))}
+            <button onClick={next} style={{
+              background: run >= 3 ? "#2a6ea0" : "#1b3d55", color: "#fff",
+              padding: PT_PAD, fontSize: PT_FS,
+              fontWeight: 700, borderRadius: 999, transition: "background .2s", whiteSpace: "nowrap",
+            }}>다음 ⇒{run > 0 ? ` ${run}` : ""}</button>
+            {[[STEP, `+${STEP}`], [2 * STEP, `+${2 * STEP}`]].map(([d, l]) => (
+              <button key={l} onClick={() => addPt(d)} style={{
+                background: "#18261a", color: "#8fc79a", padding: PT_PAD,
+                fontSize: PT_FS, fontWeight: 700, borderRadius: 999,
+              }}>{l}</button>
+            ))}
+          </div>
+        )}
+
+        {useClock && (
+          <div style={{ display: "flex", gap: 2, alignItems: "center", padding: "5px 10px 9px" }}>
+            {Array.from({ length: segs }).map((_, i) => {
+              const on = i < Math.round((shot / clockSec) * segs);
+              const c = i / segs > .72 ? "#D93025" : i / segs > .55 ? "#F5A623" : "#34A853";
+              return <div key={i} style={{ flex: 1, height: "clamp(6px,2.6vh,26px)", background: on ? c : "#191919", borderRadius: 3 }} />;
+            })}
+            <span className="num" style={{ fontSize: MID_LBL, color: ratio > .25 ? "#34A853" : "#D93025", marginLeft: 9, minWidth: 34, textAlign: "right" }}>{shot}</span>
+          </div>
+        )}
+      </BoardArea>
+
+      {endAsk && (() => {
+        const nowDrew = finishOrder.length === 0;
+        const elapsedMin = Math.max(0, Math.round(elapsed / 60));
+        /* 정한 시간이 지났는가 — 시간을 안 정했으면(0) 지난 것으로 안 본다 */
+        const overTime = limitMin > 0 && elapsed >= limitMin * 60;
+        /* ★ 이 판을 끝내면 시리즈가 끝나는가 — 미리 세어서 알려준다 */
+        const winKey = nowDrew ? "" : (units.find((u) => u.key === finishOrder[0]) || {}).key;
+        const willWins = { ...wins };
+        if (winKey) willWins[winKey] = (willWins[winKey] || 0) + 1;
+        const willEndSeries = bestOf === 1 || (multiSeat
+          ? log.length + 1 >= bestOf
+          : (Math.max(0, ...Object.values(willWins)) >= need || log.length + 1 >= bestOf));
+        const unitWord = "게임";
+        /* ★ 8판 — 3인 이상은 선승제가 아니다 */
+        const seriesWord = multiSeat ? `${bestOf}게임` : `${bestOf}판 ${need}선승제`;
+        const line = bestOf === 1 ? "" : (willEndSeries
+          ? `이번 판으로 경기가 끝납니다 · ${seriesWord}`
+          : `${units.map((u) => willWins[u.key] || 0).join(" : ")} 가 됩니다 · ${seriesWord}`);
+        return (
+          <EndAsk
+            names={units.map((u) => `${u.name} ${sc(u.key)}`).join("  ·  ")}
+            drew={nowDrew}
+            ranked={(units.find((u) => u.key === finishOrder[0]) || {}).name || ""}
+            overTime={overTime} limitMin={limitMin} elapsedMin={elapsedMin}
+            notStarted={!begun && !log.length && !Object.values(score).some((v) => v > 0)}
+            gameNo={gameNo} nextNo={gameNo + 1} willEndSeries={willEndSeries}
+            seriesLine={line} unitWord={unitWord} single={bestOf === 1}
+            nextWord={nthOf(gameNo + 1)}
+            onBack={() => setEndAsk(false)}
+            onHome={() => { setEndAsk(false); wakeOff(); goHome(); }}
+            onKeepPlaying={() => setEndAsk(false)}
+            onNextGame={() => { setEndAsk(false); finish("next"); }}
+            onFinishHere={() => { setEndAsk(false); setSaveNow(true); finish("done", true); }}
+            onWipe={() => { setEndAsk(false); reset(); say("이번 판 점수를 지웠습니다"); }} />
+        );
+      })()}
+      {/* ★ 카메라가 살아 있는지 구석에 아주 작게. 점수를 가리면 안 된다 (사용자 지시) */}
+      {cam.state !== "off" && phase === "board" && (
+        <div style={{
+          position: "fixed", right: 6, bottom: 6, width: 104, height: 60, zIndex: 40,
+          background: "#12202c", border: "1px solid rgba(255,255,255,.25)", borderRadius: 8,
+          overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {/* ★ 연결을 안 늘리려고 <img> 가 아니라 담은 그림을 옮겨 그린다 */}
+          <canvas ref={camPv} style={{
+            width: "100%", height: "100%", objectFit: "cover",
+            display: cam.state === "live" ? "block" : "none",
+          }} />
+          {cam.state !== "live" && (
+            <span style={{ fontSize: 9.5, color: "#5B7186", textAlign: "center", lineHeight: 1.4, whiteSpace: "pre" }}>
+              {cam.state === "wait" ? "카메라\n연결 중" : "카메라\n못 찾음"}
+            </span>
+          )}
+          {cam.state === "live" && (
+            <span style={{ position: "absolute", top: 4, left: 6, display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#E24B4A" }} />
+              <span style={{ fontSize: 8.5, color: "#F09595" }}>{cam.secs}초 담김</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {replay && <ReplaySheet frames={replay} say={say} onClose={() => setReplay(null)} />}
+
+      {goAsk && (
+        <HomeAsk
+          line={log.length
+            ? `${bestOf > 1 ? `${bestOf}판 중 ${nthOf(gameNo)}` : "치는 중"} · 앞의 ${log.length}판은 이미 끝났습니다`
+            : `${bestOf > 1 ? nthOf(gameNo) : "치는 중"} · 아직 저장하지 않았습니다`}
+          /* ★ 한 판이라도 끝냈으면 남기고 나갈 수 있다.
+                지금 치던 판만 있으면 남길 것이 없다 — 그 판은 아직 안 끝났다 */
+          canSave={log.length > 0}
+          onSave={() => { setGoAsk(false); setSaveNow(true); finish("done", true); }}
+          onWipe={() => { setGoAsk(false); wakeOff(); goHome(); }}
+          onBack={() => setGoAsk(false)} />
+      )}
+      {seat !== null && (
+        <SeatSheet ps={ps} seat={seat} setSeat={setSeat} setPs={setPs} say={say} mode={mode} ballOf={ballOf}
+          roster={pastNames}
+          autoBall={autoBall} setAutoBall={() => {}}
+          firstBall={firstBall}
+          setFirstBall={(b) => {
+            if (b === firstBall) return;
+            setFirstBall(b);
+            /* 지금 칠 사람의 공이 무엇이 되는지 바로 알려준다 */
+            const now = (b + turnNo + ((active - active + units.length) % units.length)) % 2;
+            say(`${BALLNAME[b]}부터로 바꿨습니다`);
+            say2(`${callName(active, turnNo)} ${BALLNAME[(b + turnNo) % 2]}`);
+          }}
+          locked={turnNo > 0 || Object.values(score).some((v) => v > 0)}
+          onClose={() => setSeat(null)} />
+      )}
+      {handi !== null && (
+        <HandiSheet ps={ps} seats={handi.seats} title={handi.title} setPs={setPs} mode={mode} say={say}
+          onClose={() => setHandi(null)} />
+      )}
+      {teamOpen && (
+        <TeamSheet ps={ps} setPs={setPs} sides={sides} setSides={setSides} say={say}
+          locked={begun || turnNo > 0 || Object.values(score).some((v) => v > 0)}
+          onClose={() => setTeamOpen(false)} />
+      )}
+    </BoardShell>
+  );
+}
+/* ── 기록 보기 ───────────────────────────────
+   ★ 사용자가 적어준 형식 그대로다 (당구 전용 · 8판의 표를 걷어냈다).
+
+     9/2  핸디 김성곤 · 류승현 25점 : 김관동 · 이인승 26점      3판 2승제
+          1번 게임  25 : 20   김성곤 · 류승현 승
+          최종  김성곤 · 류승현  2 : 1 승
+          avg  김성곤 · 류승현 2.501 · 김관동 · 이인승 1.502
+
+   ★ 세 명 이상은 점수 대신 등수만 적는다 (사용자 확인).
+     1등이 나와도 나머지가 끝까지 치므로 점수를 나란히 적으면 길기만 하다.
+   ★ 접었다 펴지 않는다. 한 경기가 여섯 줄이라 다 펴도 길지 않다 */
+
+/* 한 경기(시리즈) 안의 자리들 — 복식이면 편, 개인전이면 사람 */
+const unitsOf = (g) => {
+  if (g.team && Array.isArray(g.teams) && g.teams.length) {
+    return g.teams.map((t) => ({
+      name: Array.isArray(t.members) ? t.members.join(" · ") : t.name,
+      score: Number(t.score) || 0, handi: Number(t.handicap) || 0,
+      inn: Number(t.inn) || 0, high: Number(t.high) || 0,
+    }));
+  }
+  const seen = [];
+  (g.players || []).forEach((p) => {
+    if (seen.some((x) => x.name === p.name)) return;
+    seen.push({
+      name: p.name, score: Number(p.score) || 0, handi: Number(p.handicap) || 0,
+      inn: Number(p.inn) || Number(g.innings) || 0, high: Number(p.high) || 0,
+    });
+  });
+  return seen;
+};
+
+/* ★ 한 경기를 화면과 공유 글이 함께 쓰는 모양으로 만든다.
+      ⚠ 같은 계산을 두 군데 두면 반드시 어긋난다 (8판 ⑳). 여기 하나만 고칠 것.
+        기록 카드(MatchCard)와 카톡 글(buildText)이 똑같이 이것을 쓴다 */
+function matchOf(first, list) {
+  const all = list || [first];
+  const sum = all.map((g) => g.series).filter(Boolean)[0] || null;
+  const us = unitsOf(first);
+  const many = sum ? !!sum.byRank : us.length > 2;
+
+  /* 판별 줄 — 여러 판이면 요약에서, 단판이면 그 판에서 */
+  const rounds = sum ? (sum.rounds || []) : [{
+    no: 1,
+    names: us.map((u) => ({ name: u.name, score: u.score, pt: 0 })),
+    drew: !!first.drew,
+    win: first.team ? (first.winnerSide || "")
+      : ((first.players || []).find((p) => p.won === true)?.name || ""),
+  }];
+
+  /* 전체 성적 */
+  const score = sum ? (sum.score || []) : us.map((u) => ({
+    name: u.name, w: first.drew ? 0 : ((first.team ? first.winnerSide === u.name
+      : (first.players || []).some((p) => p.name === u.name && p.won === true)) ? 1 : 0),
+    pt: 0, total: u.score, inn: u.inn, high: u.high, handi: u.handi,
+  }));
+
+  /* ★ 판별 점수의 순서를 핸디 줄과 똑같이 맞춘다 (사용자 지적).
+        7판 요약은 "먼저 목표에 닿은 순서" 로 담겨 있어서 게임마다 좌우가 뒤집혔다.
+        "2게임 12 : 4" 만 보고는 어느 쪽이 누구 점수인지 알 수가 없다.
+        ⚠ 세 명 이상은 등수로 적으므로 그때는 달성 순서 그대로 둔다 */
+  const order = score.map((x) => x.name);
+  const fixed = many ? rounds : rounds.map((r) => ({
+    ...r,
+    names: order
+      .map((nm) => (r.names || []).find((x) => x.name === nm))
+      .filter(Boolean)
+      .concat((r.names || []).filter((x) => !order.includes(x.name))),
+  }));
+
+  const bestOf = sum ? sum.bestOf : (first.bestOf || 1);
+  return {
+    key: first.seriesId || first.id,
+    date: first.date, place: first.place || "", mode: first.mode || "3",
+    team: !!first.team, bestOf, games: sum ? sum.games : 1, many, rounds: fixed, score,
+    startAt: first.startAt || 0, endAt: all[all.length - 1]?.endAt || first.endAt || 0,
+    seconds: all.reduce((t, g) => t + (Number(g.seconds) || 0), 0),
+    memo: all.map((g) => g.memo).filter(Boolean)[0] || "",
+    ids: all.map((g) => g.id),
+    last: all[all.length - 1],
+  };
+}
+
+/* 방식을 사람 말로 — 화면과 공유 글이 같은 말을 쓰게 한다 */
+const wayOf = (m) => (m.bestOf === 1 ? "단판"
+  : m.many ? `${m.score.length}명 · ${m.bestOf}게임`
+  : `${m.bestOf}판 ${Math.ceil(m.bestOf / 2)}선승`);
+
+/* 저장된 여러 판을 한 경기로 묶는다.
+   ★ 마지막 판에만 series(요약)가 들어 있다 — 8판 형식 그대로다 */
+function seriesList(games) {
+  const bil = bilGames(games);
+  const byId = {};
+  bil.forEach((g) => {
+    const k = g.seriesId || g.id;
+    (byId[k] = byId[k] || []).push(g);
+  });
+  return Object.keys(byId)
+    .map((k) => {
+      const list = byId[k].slice().sort((a, b) => (a.gameNo || 1) - (b.gameNo || 1));
+      return matchOf(list[0], list);
+    })
+    .sort((a, b) => (a.date === b.date ? b.endAt - a.endAt : (a.date < b.date ? 1 : -1)));
+}
+
+/* 승점이 같으면 공동 순위로 묶고 그다음을 건너뛴다 (7판 5장 ⑩) */
+const rankNoOf = (arr, i, key) => {
+  let n = 1;
+  for (let k = 0; k < i; k++) if (arr[k][key] > arr[i][key]) n = k + 2;
+  return n;
+};
+
+function MatchCard({ m, onSheet, onDel }) {
+  const fin = [...m.score].sort((a, b) => (m.many ? b.pt - a.pt : b.w - a.w));
+  const seriesWord = wayOf(m);
+
+  return (
+    <div style={{ borderBottom: "1px solid var(--line)", padding: "0 0 11px", marginBottom: 13 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+            <span className="num" style={{ fontSize: 15, color: "var(--accent)" }}>{md(m.date)}</span>
+            <span style={{ fontSize: 11.5, color: "#6F8598", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {m.place}
+            </span>
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 11.5, color: "#6F8598", marginBottom: 5 }}>{seriesWord}</div>
+          <button onClick={onSheet} style={{
+            border: "1px solid var(--accent)", borderRadius: 999, padding: "5px 11px",
+            fontSize: 11.5, fontWeight: 600, color: "var(--accent)",
+          }}>결과표</button>
+        </div>
+      </div>
+
+      {/* 핸디
+          ★ 복식은 편 이름 안에도 "·" 가 들어간다 (류승현 · 김성곤).
+             편 사이까지 "·" 로 이으면 넷이 나란한 것처럼 보인다 — 편 사이는 " : " 로 가른다 */}
+      <div style={{ fontSize: 13.5, lineHeight: 1.65, marginBottom: 9 }}>
+        <span style={{ fontSize: 11.5, color: "var(--chalk)", marginRight: 6 }}>핸디</span>
+        {m.score.map((u, i) => (
+          <React.Fragment key={u.name + i}>
+            {i > 0 && <span style={{ color: "#6F8598" }}>{m.team ? "  :  " : " · "}</span>}
+            {u.name} <span style={{ color: "var(--accent)" }}>{u.handi}</span>
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* 판별 */}
+      {m.bestOf > 1 && (
+        <div style={{ background: "rgba(255,255,255,.05)", borderRadius: 8, padding: "9px 11px", fontSize: 12.5, color: "#B9CCDA", lineHeight: 2 }}>
+          {m.rounds.map((r, i) => (
+            <div key={i}>
+              {r.no || i + 1}번 게임&nbsp;
+              {m.many ? (
+                /* ★ 세 명 이상은 등수만 (사용자 지시) */
+                (r.names || []).map((x, j) => (
+                  <span key={j} style={{ color: j === 0 ? "var(--accent)" : "#B9CCDA" }}>
+                    {j > 0 ? " " : ""}{j + 1}등 {x.name}&nbsp;
+                  </span>
+                ))
+              ) : (
+                <>
+                  <span style={{ color: "var(--ivory)" }}>
+                    {(r.names || []).map((x) => x.score).join(" : ")}
+                  </span>
+                  &nbsp;<span style={{ fontSize: 11.5, color: "#6F8598" }}>
+                    {r.drew ? "무승부" : `${r.win || (r.names || [])[0]?.name || ""} 승`}
+                  </span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 최종 */}
+      <div style={{ fontSize: 13.5, marginTop: m.bestOf > 1 ? 9 : 0, lineHeight: 1.75 }}>
+        <span style={{ fontSize: 11.5, color: "var(--chalk)", marginRight: 5 }}>최종</span>
+        {m.many ? (
+          fin.map((u, i) => (
+            <span key={u.name + i} style={{ color: rankNoOf(fin, i, "pt") === 1 ? "var(--accent)" : "#B9CCDA" }}>
+              {i > 0 ? " " : ""}{rankNoOf(fin, i, "pt")}등 {u.name} ({u.pt}점)&nbsp;
+            </span>
+          ))
+        ) : m.bestOf > 1 ? (
+          <span style={{ color: "var(--accent)" }}>
+            {fin[0]?.name} &nbsp;{fin.map((u) => u.w).join(" : ")} 승
+          </span>
+        ) : (
+          <>
+            <span style={{ color: "var(--accent)" }}>
+              {m.rounds[0]?.drew ? "무승부" : `${m.rounds[0]?.win || fin[0]?.name} 승`}
+            </span>
+            <span style={{ color: "#B9CCDA", marginLeft: 8 }}>
+              {m.score.map((u) => u.total).join(" : ")}
+            </span>
+          </>
+        )}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginTop: 6 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--chalk)", lineHeight: 1.7 }}>
+          <span style={{ color: "#6F8598" }}>avg</span>&nbsp;
+          {m.score.map((u, i) => (
+            <React.Fragment key={u.name + i}>
+              {i > 0 && " · "}
+              {u.name} {fmtAvg(avg(u.total, u.inn || 1), m.mode)}
+            </React.Fragment>
+          ))}
+        </div>
+        <button onClick={onDel} style={{
+          flexShrink: 0, fontSize: 11.5, color: "#8A6A6A",
+          border: "1px solid rgba(200,120,120,.35)", borderRadius: 999, padding: "4px 10px",
+        }}>삭제</button>
+      </div>
+    </div>
+  );
+}
+
+function Log({ data, save, say, openSheet }) {
+  const [range, setRange] = useState("3m");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState(today());
+
+  const bound = useMemo(() => {
+    const d = new Date();
+    if (range === "own") return [from || "2000-01-01", to || today()];
+    if (range === "m") return [`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, today()];
+    const back = range === "1y" ? 12 : 3;
+    const e = new Date(d.getFullYear(), d.getMonth() - back, d.getDate());
+    return [`${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`, today()];
+  }, [range, from, to]);
+
+  const all = useMemo(() => seriesList(data.games), [data.games]);
+  const list = all.filter((m) => m.date >= bound[0] && m.date <= bound[1]);
+
+  const del = (m) => {
+    if (!confirm(m.ids.length > 1
+      ? `${md(m.date)} 경기를 지울까요? ${m.ids.length}게임이 모두 지워집니다`
+      : `${md(m.date)} 경기를 지울까요?`)) return;
+    save({ ...data, games: data.games.filter((g) => !m.ids.includes(g.id)) });
+    say("지웠습니다");
+  };
+
+  return (
+    <div>
+      <div style={{ padding: "15px 14px 12px", borderBottom: "1px solid var(--line)" }}>
+        <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 11 }}>기록 보기</div>
+        <Pills cols="repeat(4,1fr)" value={range} set={setRange}
+          items={[["m", "이번 달"], ["3m", "3개월"], ["1y", "1년"], ["own", "직접"]]} />
+        {range === "own" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9 }}>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ flex: 1, fontSize: 13, padding: "8px 9px" }} />
+            <span style={{ color: "var(--chalk)" }}>~</span>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ flex: 1, fontSize: 13, padding: "8px 9px" }} />
+          </div>
+        ) : (
+          <div className="num" style={{ fontSize: 11.5, color: "#6F8598", marginTop: 9 }}>
+            {bound[0]} ~ {bound[1]} · {list.length}경기
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: "12px 14px 0" }}>
+        {list.length === 0 ? (
+          <div style={{ padding: "50px 0", textAlign: "center", fontSize: 13.5, color: "var(--chalk)", lineHeight: 1.8 }}>
+            이 기간에 친 기록이 없습니다.<br />
+            <span style={{ fontSize: 12, color: "#6F8598" }}>기간을 넓혀 보세요.</span>
+          </div>
+        ) : list.map((m) => (
+          <MatchCard key={m.key} m={m} onSheet={() => openSheet(m.last)} onDel={() => del(m)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+/* ── 결과표 · 카톡으로 보내기 ────────────────
+   ★ 갈래가 아예 없다 (사용자 지시 · 실제로 써보고 정함).
+      전   [성적만] / [성적+비용] / [전부]
+      후   글 하나. 돈도 기록코딩문도 안 나간다
+   ★ 한 줄이 길면 카톡 말풍선에서 접혀 더 읽기 나쁘다 (7판 4-2). 짧게 유지할 것 */
+
+const hhmm = (t) => {
+  const d = new Date(Number(t) || 0);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+function buildText(g, tail) {
+  /* ★ 기록 화면(MatchCard)과 똑같은 모양을 쓴다 — 같은 matchOf 를 본다.
+        전에는 여기서 따로 계산해서, 단판일 때 핸디 줄과 최종 줄이 빠졌다 (사용자 지적) */
+  const m = matchOf(g, null);
+  const L = [];
+  L.push(`🎱 ${g.date} (${dow(g.date)}) · ${B_LABEL[g.mode] || ""}`);
+  const mins = Math.round((Number(m.seconds) || 0) / 60);
+  /* ★ 1분이 안 되면 시간 줄을 아예 뺀다 — "00:15 ~ 00:15" 가 나온다 (사용자 지적) */
+  if (m.startAt && m.endAt && mins >= 1) L.push(`🕐 ${hhmm(m.startAt)} ~ ${hhmm(m.endAt)} · ${mins}분`);
+  if (g.place) L.push(`📍 ${g.place}`);
+  L.push("━━━━━━━━━━━━━");
+  L.push(`🏁 ${wayOf(m)}${m.bestOf > 1 ? ` · ${m.games}게임 진행` : ""}`);
+  L.push("");
+
+  /* 핸디 */
+  L.push(`핸디  ${m.score.map((u) => `${u.name} ${u.handi}`).join(m.team ? "  :  " : " · ")}`);
+  L.push("");
+
+  /* 판별 */
+  m.rounds.forEach((r, i) => {
+    const no = r.no || i + 1;
+    if (m.many) {
+      L.push(`${no}게임  ${(r.names || []).map((x, j) => `${j + 1}등 ${x.name}`).join("  ")}`);
+    } else {
+      const sc = (r.names || []).map((x) => x.score).join(" : ");
+      const win = r.drew ? "무승부" : `${r.win || (r.names || [])[0]?.name || ""} 승`;
+      L.push(`${no}게임  ${sc}  ${win}`);
+    }
+  });
+
+  L.push("─────────────");
+  if (m.many) {
+    const tot = [...m.score].sort((a, b) => (b.pt || 0) - (a.pt || 0));
+    L.push(`최종  ${tot.map((x, i) => `${rankNoOf(tot, i, "pt")}등 ${x.name} (${x.pt || 0}점)`).join("  ")}`);
+  } else if (m.bestOf > 1) {
+    const tot = [...m.score].sort((a, b) => (b.w || 0) - (a.w || 0));
+    L.push(`최종  ${tot[0]?.name || ""}  ${tot.map((x) => x.w || 0).join(" : ")} 승`);
+  } else {
+    const r = m.rounds[0] || {};
+    L.push(`최종  ${r.drew ? "무승부" : `${r.win || ""} 승`}`);
+  }
+
+  L.push("━━━━━━━━━━━━━");
+  if (m.bestOf > 1) L.push(`전체 ${m.games}게임`);
+  m.score.forEach((x) => {
+    L.push(`${x.name}  ${x.total}점 ${x.inn}이닝`);
+    L.push(`  에버 ${fmtAvg(avg(x.total, x.inn || 1), g.mode)}  하이런 ${x.high || 0}`);
+  });
+
+  if (m.memo) { L.push("━━━━━━━━━━━━━"); L.push(`📝 ${m.memo}`); }
+  /* ★ 맨 아래에 그때그때 필요한 말을 붙인다 (사용자 지시). 기록에는 저장하지 않는다 */
+  if (tail && tail.trim()) {
+    L.push("━━━━━━━━━━━━━");
+    L.push(tail.trim());
+  }
+  return L.join("\n");
+}
+
+function Sheet({ game, onClose, say }) {
+  const saved = !!game.justSaved;
+  const [edit, setEdit] = useState(false);
+  const [outText, setOutText] = useState("");
+  const [tail, setTail] = useState("");
+
+  const auto = useMemo(() => buildText(game, tail), [game, tail]);
+  const shown = edit && outText ? outText : auto;
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(shown); say("복사했습니다"); }
+    catch (e) { say("복사하지 못했습니다. 글을 길게 눌러 복사하세요"); }
+  };
+  /* ★ 보내기 — 폰의 공유창을 띄운다. 그 목록에 카카오톡이 나온다.
+        웹 앱에서 카톡 앱으로 곧바로 들어가려면 카카오 개발자 열쇠가 있어야 한다
+        (developers.kakao.com 에 이 주소를 등록하고 JavaScript 키를 받는 일).
+        그 전까지는 공유창이 가장 확실하다 — 한 번만 더 누르면 된다.
+     ⚠ 공유창은 https 에서만 열린다. Vercel 주소는 https 라 괜찮다 */
+  const send = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: shown });
+        return;
+      } catch (e) {
+        /* 사용자가 공유창을 닫은 것이면 아무 일도 안 한다 */
+        if (String(e && e.name) === "AbortError") return;
+      }
+    }
+    copy();
+    say("공유가 안 되는 브라우저입니다. 복사했으니 카톡에 붙여넣으세요");
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 92,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 14,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 420, maxHeight: "92%", overflowY: "auto",
+        background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 14, padding: 15,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: saved ? 8 : 12 }}>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>{saved ? "경기가 끝났습니다" : "결과표"}</span>
+          <button onClick={onClose} style={{ color: "var(--chalk)", fontSize: 13, padding: 6 }}>닫기</button>
+        </div>
+        {saved && (
+          <div style={{
+            background: "rgba(232,184,56,.1)", border: "1px solid rgba(232,184,56,.3)",
+            borderRadius: 10, padding: "9px 11px", fontSize: 12.5, color: "#F4EEDF",
+            marginBottom: 12, lineHeight: 1.6,
+          }}>
+            ✓ {game.gamesSaved > 1 ? `${game.gamesSaved}게임을 ` : ""}기록에 저장했습니다.
+            아래 글을 그대로 보내시면 됩니다.
+          </div>
+        )}
+
+        {edit ? (
+          <textarea value={shown} onChange={(e) => setOutText(e.target.value)} rows={14}
+            style={{ fontSize: 12.5, lineHeight: 1.75, fontFamily: "inherit" }} />
+        ) : (
+          <div style={{
+            background: "rgba(0,0,0,.32)", borderRadius: 10, padding: 13,
+            fontSize: 12.5, lineHeight: 1.85, whiteSpace: "pre-wrap",
+            wordBreak: "break-word", userSelect: "all",
+          }}>{shown}</div>
+        )}
+
+        {!edit && (
+          <div style={{ marginTop: 11 }}>
+            <span className="lbl">맨 아래에 덧붙일 말</span>
+            <textarea value={tail} onChange={(e) => setTail(e.target.value)} rows={2}
+              placeholder="다음 주 토요일 같은 시간에 봅시다"
+              style={{ fontSize: 13.5, lineHeight: 1.7, fontFamily: "inherit" }} />
+            <div style={{ fontSize: 11, color: "#6F8598", marginTop: 4, lineHeight: 1.6 }}>
+              쓰면 위 글 맨 아래에 줄을 긋고 붙습니다. 기록에는 저장되지 않습니다.
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
+          <button className="prim" style={{ flex: 1, padding: 13, fontSize: 14 }} onClick={send}>카톡으로</button>
+          <button className="ghost" style={{ flex: 1, padding: 13, fontSize: 14 }} onClick={copy}>복사</button>
+        </div>
+
+        {/* ★ 보내기 전에 그 자리에서 손본다. 저장하지 않는다 (8판 2-8) */}
+        <div style={{ textAlign: "center", marginTop: 9 }}>
+          {edit ? (
+            <button onClick={() => { setEdit(false); setOutText(""); }}
+              style={{ fontSize: 12, color: "var(--chalk)", padding: "8px 12px" }}>↺ 자동으로 되돌리기</button>
+          ) : (
+            <button onClick={() => { setOutText(auto); setEdit(true); }}
+              style={{ fontSize: 12, color: "var(--chalk)", padding: "8px 12px" }}>✏️ 보내기 전에 고치기</button>
+          )}
+        </div>
+        {edit && (
+          <div style={{ fontSize: 11, color: "#6F8598", textAlign: "center", marginTop: 4, lineHeight: 1.6 }}>
+            고친 글은 저장되지 않습니다. 창을 닫으면 사라집니다.
+          </div>
+        )}
+
+        {saved && (
+          <button className="ghost" onClick={onClose}
+            style={{ marginTop: 12, fontSize: 14, padding: 13 }}>🏠 홈으로 가기</button>
+        )}
+      </div>
+    </div>
+  );
+}
+/* ── 계정 · 서버 백업 · 문의 ──────────────────
+   ★ 하단 탭에서 [주고받기] 를 없앴다 (사용자 지시).
+      그 안에 있던 서버 백업은 없애면 안 된다 — 없으면 기록이 그 폰 안에만 남고,
+      폰을 바꾸거나 앱을 지우면 그동안 친 것이 통째로 사라진다.
+      그래서 오른쪽 위 아바타를 누르면 열리는 창으로 옮겼다.
+   ★ 회원 명부를 없앴으므로 members·memberVault 를 쓰지 않는다.
+      계정이 바뀌면 기록만 창고(vault)에 넣어 가른다 */
+
+function Account({ data, save, say, sync, syncNow, onClose }) {
+  const [tab, setTab] = useState(data.me ? "me" : "in");
+  const [email, setEmail] = useState(data.lastEmail || "");
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [nick, setNick] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const acc = data.profile || null;
+
+  const pend = data.games.filter((g) => !g.sid).length;
+
+  /* 계정이 바뀌면 앞 사람 기록은 창고로, 이 계정 기록은 창고에서 꺼낸다.
+     지우지 않는 이유 — 그 사람이 다시 들어오면 그대로 돌려줘야 한다.
+     주인이 안 적힌 것은 지금 들어온 사람이 가져간다 */
+  /* ★ splitGames 는 00-head 로 옮겼다 (2026-09-10).
+        카카오는 앱이 뜰 때 로그인되므로 이 창을 안 거친다 — 같은 계산이 두 곳에 있으면 어긋난다 */
+
+  const signIn = async () => {
+    const e = email.trim().toLowerCase();
+    if (!e || !pw) return say("이메일과 비밀번호를 넣어주세요");
+    if (busy) return;
+    setBusy(true);
+    try {
+      const t = await sbSignIn(e, pw);
+      const uid = t?.user?.id;
+      /* ★ 부를 이름은 pickName 하나로 정한다 (20-sb.jsx · 차례 다섯 줄) */
+      const pf = await sbProfile(t.access_token, uid);
+      const nm = pickName(pf, t?.user?.user_metadata, e);
+      const { games, vault } = splitGames(data, uid);
+      save({
+        ...data, games, vault, me: uid, nick: nm, lastEmail: e,
+        profile: { id: uid, email: e, nickname: nm },
+        session: sessOf(t),
+      });
+      say(`${nm}님, 반갑습니다`);
+      setBusy(false); onClose();
+    } catch (err) {
+      setBusy(false);
+      const m = String(err.message || "");
+      if (/Invalid login/i.test(m)) return say("이메일이나 비밀번호가 맞지 않습니다");
+      if (/Email not confirmed/i.test(m)) return say("이메일 인증을 먼저 마쳐주세요");
+      if (/fetch|network/i.test(m)) return say("연결에 실패했습니다. 인터넷을 확인해 주세요");
+      say(m);
+    }
+  };
+
+  const signUp = async () => {
+    const e = email.trim().toLowerCase();
+    if (!e || !pw) return say("이메일과 비밀번호를 넣어주세요");
+    if (pw.length < 6) return say("비밀번호는 여섯 자 이상이어야 합니다");
+    if (pw !== pw2) return say("비밀번호가 서로 다릅니다");
+    if (!nick.trim()) return say("이름을 넣어주세요");
+    if (busy) return;
+    setBusy(true);
+    try {
+      await sbSignUp(e, pw, { nickname: nick.trim() });
+      setBusy(false);
+      say("가입 메일을 보냈습니다. 메일에서 인증을 마친 뒤 로그인해 주세요");
+      setTab("in");
+    } catch (err) {
+      setBusy(false);
+      const m = String(err.message || "");
+      if (/already/i.test(m)) return say("이미 가입된 이메일입니다");
+      say(m);
+    }
+  };
+
+  const reset = async () => {
+    const e = email.trim().toLowerCase();
+    if (!e) return say("이메일을 먼저 넣어주세요");
+    try { await sbReset(e); say("비밀번호 재설정 메일을 보냈습니다"); }
+    catch (err) { say(String(err.message || "보내지 못했습니다")); }
+  };
+
+  const signOut = () => {
+    if (!confirm("로그아웃할까요? 폰에 있는 기록은 그대로 남습니다")) return;
+    save({ ...data, me: null, nick: "", session: null, profile: null });
+    say("로그아웃했습니다");
+    onClose();
+  };
+
+  const box = { background: "rgba(255,255,255,.05)", borderRadius: 10, padding: 13 };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 94,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 14,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 360, maxHeight: "92%", overflowY: "auto",
+        background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 14, padding: 16,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>
+            {tab === "me" ? "내 계정" : tab === "up" ? "가입하기" : "로그인"}
+          </span>
+          <button onClick={onClose} style={{ color: "var(--chalk)", fontSize: 13, padding: 6 }}>닫기</button>
+        </div>
+
+        {tab === "me" ? (
+          <>
+            <div style={{ ...box, display: "flex", alignItems: "center", gap: 12, marginBottom: 11 }}>
+              <span style={{
+                width: 40, height: 40, borderRadius: "50%", background: "var(--accent)", color: "#141200",
+                fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              }}>{(data.nick || "?").slice(0, 1)}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{data.nick}</div>
+                <div style={{ fontSize: 11.5, color: "var(--chalk)", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {acc?.email || ""}
+                </div>
+              </div>
+            </div>
+
+            {/* ★ 서버 백업 — 없애면 폰을 바꿨을 때 기록을 잃는다 */}
+            <div style={{ ...box, marginBottom: 11 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 5 }}>서버에 보관</div>
+              <div style={{ fontSize: 12, color: "var(--chalk)", lineHeight: 1.7, marginBottom: 11 }}>
+                기록 {data.games.length}건 중 {pend ? `${pend}건이 아직 안 올라갔습니다` : "모두 보관돼 있습니다"}.
+                {data.syncAt ? <><br />마지막 보관 {new Date(data.syncAt).toLocaleString("ko-KR")}</> : null}
+              </div>
+              <button className="prim" disabled={sync.busy} onClick={() => syncNow()}
+                style={{ padding: 13, fontSize: 14 }}>
+                {sync.busy ? "보관하는 중…" : "지금 보관하기"}
+              </button>
+              {sync.msg ? <div style={{ fontSize: 11.5, color: "#f0a9a9", marginTop: 8, lineHeight: 1.6 }}>{sync.msg}</div> : null}
+              <div style={{ fontSize: 11, color: "#6F8598", marginTop: 8, lineHeight: 1.6 }}>
+                폰을 바꾸면 여기서 로그인만 하시면 기록이 그대로 내려옵니다.
+              </div>
+            </div>
+
+            <button className="ghost" onClick={signOut} style={{ fontSize: 13.5 }}>로그아웃</button>
+          </>
+        ) : (
+          <>
+            {/* ★ 카카오로 시작 — 맨 위 (2026-09-10 · 골프온·명카페와 같은 모양)
+                   ⛔ 아래 이메일 칸을 «지우지 말 것» — 관리자 두 분이 그 길로 들어온다 */}
+            <button onClick={sbKakaoGo} style={{
+              width: "100%", padding: 15, fontSize: 15, fontWeight: 700,
+              background: "#FEE500", color: "#191600", borderRadius: 10,
+            }}>카카오로 3초 만에 시작</button>
+            <div style={{ fontSize: 11.5, color: "#6F8598", lineHeight: 1.7, margin: "9px 0 14px" }}>
+              명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
+              <span style={{ fontSize: 11.5, color: "var(--chalk)" }}>또는 이메일로</span>
+              <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
+            </div>
+
+            <span className="lbl">이메일</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)}
+              inputMode="email" placeholder="name@example.com" style={{ marginBottom: 11 }} />
+
+            <span className="lbl">비밀번호</span>
+            <div style={{ position: "relative", marginBottom: 11 }}>
+              <input type={show ? "text" : "password"} value={pw} onChange={(e) => setPw(e.target.value)}
+                placeholder="여섯 자 이상" style={{ paddingRight: 54 }} />
+              <button onClick={() => setShow(!show)} style={{
+                position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                fontSize: 11.5, color: "var(--chalk)", padding: "6px 8px",
+              }}>{show ? "숨김" : "보기"}</button>
+            </div>
+
+            {tab === "up" && (
+              <>
+                <span className="lbl">비밀번호 다시</span>
+                <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} style={{ marginBottom: 11 }} />
+                <span className="lbl">이름</span>
+                <input value={nick} onChange={(e) => setNick(e.target.value)}
+                  placeholder="동호회에서 부르는 이름" style={{ marginBottom: 11 }} />
+              </>
+            )}
+
+            <button className="prim" disabled={busy} onClick={tab === "up" ? signUp : signIn}
+              style={{ padding: 15, fontSize: 15, marginTop: 4 }}>
+              {busy ? "잠시만요…" : tab === "up" ? "가입하기" : "로그인"}
+            </button>
+
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+              <button onClick={() => { setTab(tab === "up" ? "in" : "up"); setPw(""); setPw2(""); }}
+                style={{ fontSize: 12.5, color: "var(--accent)", padding: 6 }}>
+                {tab === "up" ? "이미 계정이 있습니다" : "처음이신가요? 가입하기"}
+              </button>
+              {tab === "in" && (
+                <button onClick={reset} style={{ fontSize: 12.5, color: "var(--chalk)", padding: 6 }}>
+                  비밀번호를 잊었어요
+                </button>
+              )}
+            </div>
+
+            <div style={{ fontSize: 11, color: "#6F8598", lineHeight: 1.7, marginTop: 14 }}>
+              로그인하지 않아도 앱은 그대로 쓸 수 있습니다. 다만 기록이 이 폰 안에만 남습니다.
+              명연재 계정이 있으면 그대로 쓰시면 됩니다.
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── 문의하기 ── */
+function Ask({ say }) {
+  const MAIL = "lysh6728@naver.com";
+  return (
+    <div style={{ padding: "18px 16px 0" }}>
+      <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 14 }}>문의하기</div>
+
+      <div style={{ background: "rgba(255,255,255,.05)", borderRadius: 10, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 13.5, lineHeight: 1.8, color: "var(--chalk)" }}>
+          쓰시다가 이상한 곳이 있거나 고쳤으면 하는 것이 있으면 알려주십시오.
+          어느 화면에서 어떻게 눌렀을 때 그랬는지 함께 적어주시면 훨씬 빨리 고칩니다.
+        </div>
+      </div>
+
+      <a href={`mailto:${MAIL}?subject=${encodeURIComponent("큐보드 문의")}`}
+        style={{ textDecoration: "none" }}>
+        <div className="prim" style={{ padding: 15, fontSize: 15, textAlign: "center", marginBottom: 9 }}>
+          ✉️ 메일로 보내기
+        </div>
+      </a>
+      <button className="ghost" onClick={async () => {
+        try { await navigator.clipboard.writeText(MAIL); say("메일 주소를 복사했습니다"); }
+        catch (e) { say(MAIL); }
+      }} style={{ fontSize: 13.5, marginBottom: 20 }}>주소 복사 ({MAIL})</button>
+
+      <div style={{
+        paddingTop: 18, borderTop: "1px solid var(--line)",
+        fontSize: 11.5, color: "rgba(159,187,208,.62)", lineHeight: 1.85,
+      }}>
+        <div style={{ color: "rgba(244,238,223,.82)", fontWeight: 600, marginBottom: 3 }}>
+          {CO.name} | 대표 {CO.ceo}
+        </div>
+        {/* 🔴 2026-09-10 — 여기 ★가짜 번호(000-00-00000)와 틀린 주소(201호)가 박혀 있었다.
+               ⛔ 가짜는 «없는 것보다 나쁘다» (허위 표시). PG 심사가 신청서와 대조한다.
+               ⛔ 통신판매업 신고번호·전화번호는 아직 없다 — 줄을 «아예 안 낸다» */}
+        <div>사업자등록번호 {CO.biz}</div>
+        <div>{CO.addr}</div>
+        <div style={{ marginTop: 3 }}>
+          <span style={{ color: "rgba(244,238,223,.82)", fontWeight: 600 }}>고객센터 </span>
+          <span style={{ color: "var(--accent)" }}>{MAIL}</span>
+          <span style={{ opacity: .5 }}> · </span>
+          <span style={{ color: "var(--accent)" }}>{CO.tel}</span>
+        </div>
+        <div style={{ marginTop: 3 }}>
+          <span style={{ color: "rgba(244,238,223,.82)", fontWeight: 600 }}>개인정보 보호책임자 </span>
+          {CO.ceo} (대표이사)
+        </div>
+        <LegalLinks style={{ marginTop: 12, justifyContent: "flex-start" }} />
+        <div style={{ marginTop: 10, color: "rgba(159,187,208,.45)" }}>
+          © {new Date().getFullYear()} {CO.name}. All rights reserved.
+        </div>
+      </div>
+    </div>
+  );
+}
+/* ── 앱 ─────────────────────────────────────
+   ★ 종목 고르기가 없다. 열면 바로 홈(경기 준비)이다.
+      하단은 세 칸 — 홈 · 기록 보기 · 문의하기 (사용자 지시) */
+export default function App() {
+  const [data, setData] = useState({ games: [] });
+  const [tab, setTab] = useState("home");
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState("");
+  const [bare, setBare] = useState(false);
+  const [tv, setTv] = useState(false);
+  const [login, setLogin] = useState(false);
+  const [sync, setSync] = useState({ busy: false, msg: "" });
+  const syncing = useRef(false);
+  const [setup, setSetup] = useState(null);      /* 홈에서 정한 것 → 점수판 */
+  const [boardKey, setBoardKey] = useState(0);   /* 점수판을 새로 띄울 때 쓰는 열쇠 */
+  const [sheet, setSheet] = useState(null);
+  const dataRef = useRef(data);
+  const bareNow = bare && tab === "home";
+
+  useEffect(() => { document.body.style.background = bareNow ? "#000" : "#0A2438"; }, [bareNow]);
+
+  useEffect(() => {
+    (async () => {
+      const put = (n) => { dataRef.current = n; setData(n); };
+
+      /* 저장칸을 «읽기만» 한다 — 아직 return 하지 않는다 */
+      let saved = null;
+      try {
+        const r = await window.storage.get(KEY);
+        if (r?.value) saved = normalize(JSON.parse(r.value));
+      } catch (e) {}
+
+      /* ★★ 카카오에서 돌아온 조각을 «먼저» 받는다 (2026-09-10 · 골프온이 찾아준 것)
+             ⚠ 저장칸을 읽고 곧바로 return 하면, ★이미 쓰던 폰은 여기까지 못 온다.
+               화면은 멀쩡히 뜨고 «로그인만 조용히» 안 된다 — 검사도 못 잡는다.
+               그래서 조각 확인이 반드시 앞이다 */
+      const ks = sbHashSess();
+      if (ks) {
+        sbHashClear();                                   /* ⛔ 담자마자 지운다 */
+        try {
+          const u = await sbUser(ks.token);
+          const uid = u?.id;
+          if (uid) {
+            const pf = await sbProfile(ks.token, uid);
+            const nm = pickName(pf, u?.user_metadata, u?.email);
+            const base = saved || normalize({ games: [] });
+            const { games, vault } = splitGames(base, uid);
+            const n = normalize({
+              ...base, games, vault, me: uid, nick: nm, session: ks,
+              profile: { id: uid, email: u?.email || "", nickname: nm },
+            });
+            put(n);
+            try { await window.storage.set(KEY, JSON.stringify(n)); } catch (e) {}
+            setLoading(false);
+            return;
+          }
+        } catch (e) {}
+        /* 조각이 상했으면 그냥 하던 대로 간다 — 앱이 안 열리는 일은 없어야 한다 */
+      }
+
+      if (saved) { put(saved); setLoading(false); return; }
+      /* ★ 처음 켤 때 My Score 자료에서 당구만 가져온다 (같은 폰에서 쓰던 경우) */
+      try {
+        const o = await window.storage.get(HUB);
+        if (o?.value) {
+          const h = JSON.parse(o.value);
+          put(normalize({ me: h.me, nick: h.nick, session: h.session, games: bilGames(h.games) }));
+        }
+      } catch (e) {}
+      setLoading(false);
+    })();
+  }, []);
+
+  const save = async (n) => {
+    setData(n); dataRef.current = n;
+    try { await window.storage.set(KEY, JSON.stringify(n)); } catch (e) { setToast("저장 실패"); }
+  };
+  const toastT = useRef(null);
+  const say = (m) => {
+    setToast(m);
+    if (toastT.current) clearTimeout(toastT.current);
+    toastT.current = setTimeout(() => setToast(""), 2400);
+  };
+
+  /* ── 서버 보관 ──
+     ★ 올리는 데 몇 초가 걸린다. 그 사이 또 저장할 수 있으므로
+        save 를 그대로 쓰면 나중 저장이 앞 저장을 덮어쓴다.
+        그래서 늘 dataRef(가장 최신)를 보고 고친다 (8판 그대로) */
+  const patch = async (fn) => {
+    const n = fn(dataRef.current);
+    dataRef.current = n; setData(n);
+    try { await window.storage.set(KEY, JSON.stringify(n)); } catch (e) {}
+  };
+
+  const syncNow = async (quiet) => {
+    if (syncing.current) return;
+    const d = dataRef.current;
+    if (!d.me || !d.session?.token) {
+      if (!quiet) say("로그인하면 서버에 보관됩니다");
+      return;
+    }
+    syncing.current = true;
+    setSync({ busy: true, msg: "" });
+
+    const token = await sbToken(d.session, (s) => patch((p) => ({ ...p, session: s })));
+    if (!token) {
+      syncing.current = false;
+      setSync({ busy: false, msg: "다시 로그인해 주세요" });
+      if (!quiet) say("로그인이 만료됐습니다. 다시 로그인해 주세요");
+      return;
+    }
+
+    let up = 0, down = 0, err = "";
+    /* 아직 안 올라간 것부터. 오래된 것을 먼저 */
+    const pend = dataRef.current.games.filter((g) => !g.sid).slice().reverse();
+    for (const g of pend) {
+      try {
+        const sid = await pushGame(g, token, dataRef.current.me);
+        await patch((p) => ({
+          ...p, games: p.games.map((x) => (x.id === g.id ? { ...x, sid, upAt: Date.now() } : x)),
+        }));
+        up++;
+      } catch (e) {
+        err = syncMsg(e);
+        break;   /* 하나가 막히면 나머지도 같은 이유로 막힌다 */
+      }
+    }
+
+    /* 서버에만 있는 기록 내려받기 (폰을 바꿨거나 앱을 지웠을 때) */
+    if (!err) {
+      try {
+        const remote = await pullGames(token, dataRef.current.me);
+        const have = new Set(dataRef.current.games.map((g) => g.id));
+        const add = remote.filter((g) => !have.has(g.id));
+        if (add.length) {
+          down = add.length;
+          await patch((p) => ({ ...p, games: [...p.games, ...add].sort(recentFirst) }));
+        }
+      } catch (e) { err = syncMsg(e); }
+    }
+
+    await patch((p) => ({ ...p, syncAt: Date.now() }));
+    syncing.current = false;
+    setSync({ busy: false, msg: err });
+    if (err) { if (!quiet) say(err); return; }
+    if (!quiet) say(up || down ? `서버에 ${up}건 올리고 ${down}건 받았습니다` : "모두 보관돼 있습니다");
+  };
+
+  /* 저장이 끝나면 잠깐 뒤에 저절로 올린다 (사용자가 누를 필요 없게) */
+  useEffect(() => {
+    if (!data.me || !data.session?.token) return;
+    if (!data.games.some((g) => !g.sid)) return;
+    const t = setTimeout(() => syncNow(true), 1500);
+    return () => clearTimeout(t);
+  }, [data.games.length, data.me, data.session?.token]); // eslint-disable-line
+
+  /* 인터넷이 돌아오면 밀린 것을 올린다 */
+  useEffect(() => {
+    const on = () => syncNow(true);
+    window.addEventListener("online", on);
+    return () => window.removeEventListener("online", on);
+  }, []); // eslint-disable-line
+
+  if (loading) return (
+    <div className="sq" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}>
+      <style>{CSS}</style><span style={{ color: "var(--chalk)" }}>불러오는 중…</span>
+    </div>
+  );
+
+  const ctx = { data, save, say, tv, setTv, onLogin: () => setLogin(true) };
+
+  return (
+    <div className={"sq" + (bareNow ? " bare" : "") + (tv ? " tv" : "")} style={{ "--accent": ACCENT }}>
+      <style>{CSS}</style>
+
+      {tab === "home" && !setup && (
+        <Home {...ctx} go={(s) => { setSetup(s); }} />
+      )}
+      {tab === "home" && setup && (
+        <Billiard key={boardKey} {...ctx} setup={setup} setBare={setBare}
+          openSheet={setSheet}
+          /* ★ 종목 고르기가 없으므로 goHome 은 점수판을 새로 띄우는 일이다.
+                열쇠를 바꿔 다시 그리면 7판의 "저장 뒤 홈으로" 가 그대로 돈다 */
+          goHome={() => { setSetup(null); setBare(false); setBoardKey((n) => n + 1); }} />
+      )}
+      {tab === "log" && <Log data={data} save={save} say={say} openSheet={setSheet} />}
+      {tab === "ask" && <Ask say={say} />}
+
+      {!bareNow && (
+        <nav style={{
+          position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 520,
+          display: "grid", gridTemplateColumns: "repeat(3,1fr)", background: "rgba(10,36,56,.97)",
+          borderTop: "1px solid var(--line)", paddingBottom: "env(safe-area-inset-bottom)",
+        }}>
+          {[["home", "홈", "🏠"], ["log", "기록 보기", "📋"], ["ask", "문의하기", "✉️"]].map(([k, l, ic]) => (
+            <button key={k} onClick={() => setTab(k)} style={{
+              padding: "10px 2px 13px", borderTop: "3px solid " + (tab === k ? ACCENT : "transparent"),
+              background: tab === k ? "rgba(255,255,255,.08)" : "transparent",
+            }}>
+              <div style={{ fontSize: 20, lineHeight: 1.1 }}>{ic}</div>
+              <div style={{
+                fontSize: 12.5, marginTop: 3, whiteSpace: "nowrap",
+                fontWeight: tab === k ? 700 : 600,
+                color: tab === k ? "var(--ivory)" : "#B9CCDA",
+              }}>{l}</div>
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {login && (
+        <Account data={data} save={save} say={say} sync={sync} syncNow={syncNow}
+          onClose={() => setLogin(false)} />
+      )}
+
+      {sheet && (
+        /* ★ data.games 에서 다시 찾는다 — 기록이 갱신되면 그것을 봐야 한다 (7판).
+              ⚠ 다만 justSaved 는 기록에 없는 일회용 표시라 다시 얹어준다.
+                8판에서 openCard 로 똑같은 자리를 겪었다 */
+        <Sheet game={(() => {
+          const fresh = data.games.find((g) => g.id === sheet.id);
+          if (!fresh) return sheet;
+          return sheet.justSaved
+            ? { ...fresh, justSaved: true, gamesSaved: sheet.gamesSaved }
+            : fresh;
+        })()}
+          onClose={() => setSheet(null)} say={say} />
+      )}
+
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: bareNow ? 24 : 98, left: "50%", transform: "translateX(-50%)",
+          background: "var(--ivory)", color: "var(--bg)", padding: "11px 18px", borderRadius: 999,
+          fontSize: 14, fontWeight: 600, zIndex: 90, textAlign: "center", maxWidth: 400,
+        }}>{toast}</div>
+      )}
+    </div>
+  );
+}
