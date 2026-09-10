@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-26 고객센터 전화번호 · 명카페→명연재 -->
+<!-- build: 1판-27 주소 복사 단추 없앰 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -6897,23 +6897,9 @@ function Ask({
       padding: 15,
       fontSize: 15,
       textAlign: "center",
-      marginBottom: 9
-    }
-  }, "✉️ 메일로 보내기")), /*#__PURE__*/React.createElement("button", {
-    className: "ghost",
-    onClick: async () => {
-      try {
-        await navigator.clipboard.writeText(MAIL);
-        say("메일 주소를 복사했습니다");
-      } catch (e) {
-        say(MAIL);
-      }
-    },
-    style: {
-      fontSize: 13.5,
       marginBottom: 20
     }
-  }, "주소 복사 (", MAIL, ")"), /*#__PURE__*/React.createElement("div", {
+  }, "✉️ 메일로 보내기")), /*#__PURE__*/React.createElement("div", {
     style: {
       paddingTop: 18,
       borderTop: "1px solid var(--line)",
