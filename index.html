@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-30 시간 다 되면 무승부 묻기 · 끝난 사람 건너뛰기 · 시간 직접 입력 -->
+<!-- build: 1판-31 종료 창으로 길 모음 · 한 사람 남으면 안내 · 종료 깜빡임 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -101,6 +101,12 @@ const B_INN = {
   "4": 30
 };
 const CSS = `
+/* ★ [종료] 깜빡임 — 판이 끝났는데 어느 단추를 눌러야 하는지 모르면 소용이 없다.
+      당구대에서 폰을 멀리 두고 치시므로 «움직임» 이 있어야 눈에 든다.
+   ⛔ 너무 빠르면 거슬린다. 1.1초에 한 번씩 부드럽게 */@keyframes blinkEnd { 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.55); } }
+.blinkEnd { animation: blinkEnd 1.1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .blinkEnd { animation: none; } }
+
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap');
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 .sq {
@@ -914,6 +920,7 @@ function BoardRail({
     onClick: b.onClick,
     disabled: b.disabled,
     title: b.title,
+    className: b.className,
     style: {
       width: 46,
       padding: RAIL_PAD,
@@ -4423,6 +4430,9 @@ function Billiard({
   const [log, setLog] = useState([]);
   const [endAsk, setEndAsk] = useState(false); // [종료] 를 눌러 확인을 기다리는 중
   const [timeAsk, setTimeAsk] = useState(false); // ★ 정한 시간이 다 돼 저절로 뜬 창
+  const [overAsk, setOverAsk] = useState(false); // ★ 3인 이상 · 한 사람만 남았다는 안내
+  const [blinkEnd, setBlinkEnd] = useState(false); // ★ [종료] 를 깜빡이게 한다
+  const lastOne = useRef(false);
   const [doneMsg, setDoneMsg] = useState(""); // ★ 목표에 닿은 사람을 눌렀을 때
   const [goAsk, setGoAsk] = useState(false); // 🏠 를 눌러 "어디로 갈까요?" 를 연 상태
   /* ★ [경기 끝내기] 를 누르면 결과 화면을 거치지 않고 곧바로 저장하고 결과표로 간다 (사용자 지시).
@@ -5143,6 +5153,26 @@ function Billiard({
     return () => clearTimeout(t);
   }, [score, phase, autoEnd]); // eslint-disable-line
 
+  /* ★ 3명 이상 — 한 사람만 남으면 그 판은 «사실상» 끝난 것이다 (2026-09-11 · 대표님).
+        ⛔ 저절로 끝내지는 않는다. 마지막 한 분의 점수를 적어야 등수가 나온다.
+           ⇒ 안내만 하고, [종료] 를 ★깜빡여 어디를 눌러야 하는지 알려 준다.
+        ★ 한 번만 뜬다 (lastOne) */
+  useEffect(() => {
+    if (phase !== "board" || !multiSeat) return;
+    const alive = units.filter((p, i) => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
+    if (alive.length !== 1 || units.length < 3) {
+      if (alive.length > 1) lastOne.current = false;
+      return;
+    }
+    if (lastOne.current) return;
+    lastOne.current = true;
+    setRunning(false);
+    wakeOff();
+    setBlinkEnd(true);
+    const t = setTimeout(() => setOverAsk(true), 700);
+    return () => clearTimeout(t);
+  }, [score, phase]); // eslint-disable-line
+
   /* ★ 8판 — units 로 센다 (사용자 지적 · 복식에서 이닝이 안 올라감).
         차례(turns)는 next()·hit() 에서 units[…].key 로 쌓인다.
         편으로 칠 때 그 열쇠는 "T0" · "T1" 인데 여기서는 사람 열쇠로 찾고 있었다.
@@ -5429,12 +5459,20 @@ function Billiard({
            바탕을 올리고 같은 노랑으로 테두리를 두른다 */
     /* ★ 어두운 바탕에 노란 글씨라 멀리서 안 보였다. 시작과 같은 파랑으로 채운다.
            대신 시작과 색이 같아져 잘못 누르기 쉬우므로 한 번 물어본다 */
+    /* ★ 판이 끝났는데 눌러야 할 단추가 어느 것인지 모르면 소용이 없다.
+          당구대에서 폰을 안 보고 치시므로 ★노랗게 깜빡여 눈에 띄게 한다.
+          누르면 곧 멈춘다 */
     {
       label: "종료",
-      onClick: () => setEndAsk(true),
-      color: "#fff",
+      onClick: () => {
+        setBlinkEnd(false);
+        setEndAsk(true);
+      },
+      color: blinkEnd ? "#141200" : "#fff",
       size: RAIL_TXT,
-      bg: "#1E88E5"
+      bg: blinkEnd ? "#E8B838" : "#1E88E5",
+      border: blinkEnd ? "2px solid #FFF3C4" : undefined,
+      className: blinkEnd ? "blinkEnd" : undefined
     },
     /* ★ 무슨 단추인지 알 수가 없었습니다 (사용자 지적).
            ⤢ 만 파랗게 떠 있어 눈에 안 띄었습니다 — 테두리를 두르고 글자를 붙입니다.
@@ -5731,7 +5769,7 @@ function Billiard({
       minWidth: 34,
       textAlign: "right"
     }
-  }, shot))), timeAsk && /*#__PURE__*/React.createElement("div", {
+  }, shot))), (timeAsk || overAsk) && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
@@ -5745,7 +5783,7 @@ function Billiard({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       width: "100%",
-      maxWidth: 340,
+      maxWidth: 350,
       background: "var(--card)",
       border: "1px solid var(--line)",
       borderRadius: 16,
@@ -5755,16 +5793,28 @@ function Billiard({
     style: {
       fontSize: 19,
       fontWeight: 700,
-      marginBottom: 10
+      marginBottom: 11
     }
-  }, limitMin, "분이 다 됐습니다"), /*#__PURE__*/React.createElement("div", {
+  }, overAsk ? "이번 판이 종료되었습니다" : "경기 시간이 종료되었습니다"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 14,
       color: "var(--chalk)",
-      lineHeight: 1.7,
+      lineHeight: 1.75,
       marginBottom: 18
     }
-  }, "아직 아무도 목표에 닿지 못했습니다.", /*#__PURE__*/React.createElement("br", null), "이번 판을 무승부로 처리할까요?"), /*#__PURE__*/React.createElement("button", {
+  }, overAsk ? (() => {
+    const done = units.filter(p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi));
+    const alive = units.find(p => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
+    return /*#__PURE__*/React.createElement(React.Fragment, null, done.map(p => p.name).join(" · "), " ", done.length > 1 ? "님들이" : "님이", " 목표에 닿았습니다.", /*#__PURE__*/React.createElement("br", null), alive ? `${alive.name}님만 남았습니다.` : "", /*#__PURE__*/React.createElement("br", null), "아래 ", /*#__PURE__*/React.createElement("b", {
+      style: {
+        color: "#E8B838"
+      }
+    }, "[종료]"), " 를 누르고 다음 판을 시작하십시오.");
+  })() : /*#__PURE__*/React.createElement(React.Fragment, null, limitMin, "분이 지났고 아직 아무도 목표에 닿지 못했습니다.", /*#__PURE__*/React.createElement("br", null), "무승부로 처리하시려면 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "#E8B838"
+    }
+  }, "[종료]"), " 를 누르고 다음 판을 시작하십시오.")), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     style: {
       width: "100%",
@@ -5774,12 +5824,11 @@ function Billiard({
     },
     onClick: () => {
       setTimeAsk(false);
-      if (bestOf === 1) {
-        setSaveNow(true);
-        finish("done", true);
-      } else finish("next");
+      setOverAsk(false);
+      setBlinkEnd(true);
+      setEndAsk(true); /* ★ [종료] 를 누른 것과 «똑같은» 창을 연다 */
     }
-  }, "예 · 무승부로 처리"), /*#__PURE__*/React.createElement("button", {
+  }, "종료 창 열기"), !overAsk && /*#__PURE__*/React.createElement("button", {
     style: {
       width: "100%",
       padding: 15,
@@ -5794,14 +5843,29 @@ function Billiard({
       setRunning(true);
       wakeOn();
     }
-  }, "아니오 · 더 치기"), /*#__PURE__*/React.createElement("div", {
+  }, "계속 진행하기"), overAsk && /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      padding: 14,
+      fontSize: 15,
+      borderRadius: 12,
+      marginTop: 9,
+      background: "#1C4E80",
+      color: "#fff"
+    },
+    onClick: () => {
+      setOverAsk(false);
+      setRunning(true);
+      wakeOn();
+    }
+  }, "알겠습니다 · 마저 치기"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "var(--chalk)",
       marginTop: 12,
       lineHeight: 1.6
     }
-  }, "더 치기를 고르시면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."))), doneMsg && /*#__PURE__*/React.createElement("div", {
+  }, overAsk ? "남은 분의 점수를 마저 적으신 뒤에 눌러도 됩니다. 다시 묻지 않습니다." : "계속 진행하면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."))), doneMsg && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       left: "50%",
