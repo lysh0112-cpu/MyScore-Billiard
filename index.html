@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-29 이메일 로그인 걷어냄 · 카카오 하나 -->
+<!-- build: 1판-30 시간 다 되면 무승부 묻기 · 끝난 사람 건너뛰기 · 시간 직접 입력 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -3157,11 +3157,45 @@ function Home({
       marginBottom: 16
     }
   }, /*#__PURE__*/React.createElement(Pills, {
-    cols: "repeat(3,1fr)",
+    cols: "repeat(4,1fr)",
+    value: [30, 40, 60].includes(limitMin) ? limitMin : -1,
+    set: v => setLimitMin(v === -1 ? 5 : v),
+    items: [[30, "30분"], [40, "40분"], [60, "1시간"], [-1, "직접"]]
+  }), ![30, 40, 60].includes(limitMin) && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "1",
+    max: "180",
     value: limitMin,
-    set: setLimitMin,
-    items: [[30, "30분"], [40, "40분"], [60, "1시간"]]
-  })), /*#__PURE__*/React.createElement("div", {
+    onChange: e => setLimitMin(Math.min(180, Math.max(0, Number(e.target.value) || 0))),
+    style: {
+      width: 96,
+      padding: "10px 12px",
+      fontSize: 16,
+      textAlign: "center",
+      background: "rgba(0,0,0,.3)",
+      color: "var(--ivory)",
+      border: "1px solid var(--line)",
+      borderRadius: 10
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600
+    }
+  }, "분"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--chalk)",
+      lineHeight: 1.5
+    }
+  }, "1~180분 · 시험할 때는 짧게"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -4388,6 +4422,8 @@ function Billiard({
   const [pts, setPts] = useState({});
   const [log, setLog] = useState([]);
   const [endAsk, setEndAsk] = useState(false); // [종료] 를 눌러 확인을 기다리는 중
+  const [timeAsk, setTimeAsk] = useState(false); // ★ 정한 시간이 다 돼 저절로 뜬 창
+  const [doneMsg, setDoneMsg] = useState(""); // ★ 목표에 닿은 사람을 눌렀을 때
   const [goAsk, setGoAsk] = useState(false); // 🏠 를 눌러 "어디로 갈까요?" 를 연 상태
   /* ★ [경기 끝내기] 를 누르면 결과 화면을 거치지 않고 곧바로 저장하고 결과표로 간다 (사용자 지시).
         finish() 가 setLog 로 마지막 판을 담는 것이 먼저 끝나야 하므로,
@@ -4419,8 +4455,8 @@ function Billiard({
         ❙❙ 로 멈춰도 다시 안 풀립니다 — 판이 시작된 사실은 그대로이기 때문입니다 */
   const [begun, setBegun] = useState(false);
   useEffect(() => {
-    setBare(!endAsk && !goAsk && phase === "board");
-  }, [phase, endAsk, goAsk]); // eslint-disable-line
+    setBare(!endAsk && !goAsk && !timeAsk && phase === "board");
+  }, [phase, endAsk, goAsk, timeAsk]); // eslint-disable-line
   useEffect(() => {
     if (!running || phase !== "board") return;
     const t = setInterval(() => {
@@ -4448,8 +4484,11 @@ function Billiard({
     }
   }, [shot]); // eslint-disable-line
 
-  /* ★ 정해 둔 경기 시간이 다 되면 한 번만 알린다.
-     판을 저절로 끝내지는 않는다 — 마지막 차례는 마저 치는 것이 보통이다 */
+  /* ★ 정해 둔 경기 시간이 다 되면 알린다.
+     ⚠ 2026-09-11 — 전에는 ★«말만» 했다. 당구대에서 폰을 안 보고 치시니
+       그 한마디가 그냥 지나갔고, 무승부 창은 [종료] 를 «손으로 눌러야» 나왔다.
+       ⇒ 대표님이 「작동이 안 된다」고 하신 것이 이것이다. 이제 ★창을 띄운다.
+     ⛔ 판을 저절로 끝내지는 않는다 — 묻고, 고르시는 대로 한다 */
   useEffect(() => {
     if (!limitMin || !running) return;
     if (elapsed < limitMin * 60 || overSaid) return;
@@ -4458,6 +4497,12 @@ function Billiard({
       navigator.vibrate?.([300, 150, 300]);
     } catch (e) {}
     say2(`${limitMin}분이 다 됐습니다`);
+    /* ★ 누군가 이미 목표에 닿아 있으면 무승부가 아니다 — 승부가 난 것이다 */
+    if (units.some(p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi))) return;
+    /* 목표에 닿았을 때와 같게 — 묻는 동안 시계를 멈춘다 */
+    setRunning(false);
+    wakeOff();
+    setTimeAsk(true);
   }, [elapsed, limitMin, running]); // eslint-disable-line
   const wakeOn = async () => {
     try {
@@ -4599,7 +4644,32 @@ function Billiard({
       }
     } else if (goal > 0 && left <= near) say2(`${d}점, ${left}점 남았습니다`);else say2(`${d}점`);
   };
+  /* ★ 목표에 닿은 사람은 «없는 것으로» 본다 (2026-09-11 · 대표님).
+        3명 이상은 1등이 나와도 나머지가 끝까지 친다. 그런데 끝난 사람 차례가
+        그대로 돌아와서 「없는 사람을 기다리는」 모양이 됐다.
+     ⛔ 건너뛴 사람은 차례도 «안 세고» 이닝도 «안 올린다» — 안 쳤으니까.
+        그래야 공 색이 어긋나지 않는다 (색은 몇 번째 차례인지로 정해진다).
+     ⚠ 두 자리(단식·복식)는 건너뛰지 않는다 — 목표에 닿으면 판이 끝난다 */
+  const isDone = i => {
+    if (!multiSeat) return false;
+    const p = units[i];
+    return Number(p.handi) > 0 && sc(p.key) >= Number(p.handi);
+  };
+  /* 아직 치고 계신 분 중 다음 차례. 아무도 없으면 지금 자리를 그대로 둔다 */
+  const nextAlive = from => {
+    for (let d = 1; d <= units.length; d++) {
+      const j = (from + d) % units.length;
+      if (!isDone(j)) return j;
+    }
+    return from;
+  };
   const hit = i => {
+    /* ★ 끝난 사람을 누르면 점수가 오르지 않는다. 대신 왜 그런지 말해준다 */
+    if (isDone(i) && i !== active) {
+      setDoneMsg(`${units[i].name}님은 목표에 닿았습니다`);
+      setTimeout(() => setDoneMsg(""), 1600);
+      return;
+    }
     if (i !== active) {
       // 점수판을 눌러 차례를 넘길 때도 이닝과 수구 교대를 그대로 적용
       const k = units[active].key;
@@ -4610,15 +4680,21 @@ function Billiard({
         ...h,
         [k]: Math.max(h[k] || 0, run)
       }));
-      const steps = (i - active + units.length) % units.length;
+      const span = (i - active + units.length) % units.length;
+      /* ★ 사이에 끼어 있는 «끝난 사람» 은 차례로 세지 않는다 — 안 쳤다 */
+      const passed = [];
+      for (let d = 0; d < span; d++) {
+        const j = (active + d) % units.length;
+        if (!isDone(j) || j === active) passed.push(units[j].key);
+      }
+      const steps = passed.length;
       setTurns(t => {
         const n = {
           ...t
         };
-        for (let d = 0; d < steps; d++) {
-          const kk = units[(active + d) % units.length].key;
+        passed.forEach(kk => {
           n[kk] = (n[kk] || 0) + 1;
-        }
+        });
         return n;
       });
       setRun(0);
@@ -4652,7 +4728,8 @@ function Billiard({
       [k]: (t[k] || 0) + 1
     }));
     setRun(0);
-    const nx = (active + 1) % units.length;
+    /* ★ 끝난 사람은 건너뛴다. 차례 수는 «한 번만» 는다 — 건너뛴 사람은 안 쳤다 */
+    const nx = nextAlive(active);
     setActive(nx);
     setShot(clockSec);
     setTurnNo(t => t + 1);
@@ -5536,16 +5613,21 @@ function Billiard({
   }, /*#__PURE__*/React.createElement(ScorePad, {
     name: p.name,
     value: sc(p.key),
-    size: NUMSIZE,
-    bg: i === active ? BALL[ballOf(i)] : DIM[ballOf(i)],
-    fg: i === active ? "#000" : "rgba(255,255,255,.34)",
+    size: NUMSIZE
+    /* ★ 목표에 닿은 사람은 «없는 것으로» 보이게 한다 (2026-09-11).
+          차례가 안 오므로 공 색도 안 보여준다 — 보여주면 기다리는 줄 안다 */,
+    bg: i === active && !isDone(i) ? BALL[ballOf(i)] : DIM[ballOf(i)],
+    fg: i === active && !isDone(i) ? "#000" : "rgba(255,255,255,.34)",
     accent: BALL[ballOf(i)],
-    dim: i !== active,
-    badge: finishOrder.includes(p.key) ? {
+    dim: i !== active || isDone(i),
+    badge: isDone(i) ? {
+      text: finishOrder.includes(p.key) ? `${finishOrder.indexOf(p.key) + 1}위 도달 ✓` : "도달 ✓",
+      color: "#E8B838"
+    } : finishOrder.includes(p.key) ? {
       text: `${finishOrder.indexOf(p.key) + 1}위 도달`,
       color: "#E8B838"
     } : null,
-    dot: autoBall ? {
+    dot: autoBall && !isDone(i) ? {
       color: BALL[ballOf(i)],
       text: BALLNAME[ballOf(i)]
     } : null,
@@ -5649,7 +5731,100 @@ function Billiard({
       minWidth: 34,
       textAlign: "right"
     }
-  }, shot))), endAsk && (() => {
+  }, shot))), timeAsk && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 90,
+      background: "rgba(0,0,0,.72)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 22
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 340,
+      background: "var(--card)",
+      border: "1px solid var(--line)",
+      borderRadius: 16,
+      padding: 22
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 19,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, limitMin, "분이 다 됐습니다"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      color: "var(--chalk)",
+      lineHeight: 1.7,
+      marginBottom: 18
+    }
+  }, "아직 아무도 목표에 닿지 못했습니다.", /*#__PURE__*/React.createElement("br", null), "이번 판을 무승부로 처리할까요?"), /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    style: {
+      width: "100%",
+      padding: 15,
+      fontSize: 16,
+      borderRadius: 12
+    },
+    onClick: () => {
+      setTimeAsk(false);
+      if (bestOf === 1) {
+        setSaveNow(true);
+        finish("done", true);
+      } else finish("next");
+    }
+  }, "예 · 무승부로 처리"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      padding: 15,
+      fontSize: 16,
+      borderRadius: 12,
+      marginTop: 9,
+      background: "#1C4E80",
+      color: "#fff"
+    },
+    onClick: () => {
+      setTimeAsk(false);
+      setRunning(true);
+      wakeOn();
+    }
+  }, "아니오 · 더 치기"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--chalk)",
+      marginTop: 12,
+      lineHeight: 1.6
+    }
+  }, "더 치기를 고르시면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."))), doneMsg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      left: "50%",
+      top: "42%",
+      transform: "translate(-50%,-50%)",
+      zIndex: 95,
+      background: "rgba(0,0,0,.86)",
+      color: "#fff",
+      border: "1px solid var(--line)",
+      borderRadius: 14,
+      padding: "16px 20px",
+      fontSize: 15,
+      textAlign: "center",
+      lineHeight: 1.7,
+      maxWidth: 300,
+      pointerEvents: "none"
+    }
+  }, doneMsg, /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      color: "var(--chalk)"
+    }
+  }, "아직 치고 계신 분을 눌러주세요")), endAsk && (() => {
     const nowDrew = finishOrder.length === 0;
     const elapsedMin = Math.max(0, Math.round(elapsed / 60));
     /* 정한 시간이 지났는가 — 시간을 안 정했으면(0) 지난 것으로 안 본다 */
