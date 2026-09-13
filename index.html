@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-34 치는 도중 ＋2판 더 (2인·복식만) -->
+<!-- build: 1판-35 ＋2판 더 — 한 줄로 모음 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -3533,16 +3533,20 @@ function EndAsk({
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: green,
     onClick: onFinishHere
-  }, single ? "기록하고 끝내기" : "경기 끝내기"), canGrow && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, single ? "기록하고 끝내기" : "경기 끝내기"), canGrow && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: {
-      ...note,
-      textAlign: "center",
-      margin: "12px 0 7px"
-    }
-  }, "아쉬우시면"), /*#__PURE__*/React.createElement("button", {
-    style: blue,
+      ...blue,
+      marginTop: 12
+    },
     onClick: onGrow
-  }, "＋2판 더 · ", growWord), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      opacity: .82,
+      marginRight: 7
+    }
+  }, "아쉬우시면"), "＋2판 더 · ", growWord), /*#__PURE__*/React.createElement("div", {
     style: note
   }, "지금 판은 그대로 남고 승수도 이어집니다.")), /*#__PURE__*/React.createElement("button", {
     style: back,
