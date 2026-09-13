@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-32 무승부 두 가지 바로잡음 -->
+<!-- build: 1판-33 무승부 — 2인·복식·3인 이상 모두 · 공동 등수 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -6196,6 +6196,28 @@ const finalOf = score => {
     name: tie ? "" : tot[0]?.name || ""
   };
 };
+
+/* ★ 3인 이상 «최종» 줄 — 승점이 같으면 «공동 N등» 으로 묶는다.
+      ⚠ 무승부 판은 승점을 똑같이 나눠 주므로(evenPt) 같아지는 일이 흔하다.
+      ⇒ 기록 화면과 카톡 글이 «같은 것» 을 쓴다 (9장 ①) */
+const tieRanksOf = score => {
+  const tot = [...(score || [])].sort((a, b) => (b.pt || 0) - (a.pt || 0));
+  const out = [];
+  for (let i = 0; i < tot.length;) {
+    const v = tot[i].pt || 0;
+    let j = i;
+    while (j < tot.length && (tot[j].pt || 0) === v) j++;
+    out.push({
+      no: i + 1,
+      tie: j - i > 1,
+      names: tot.slice(i, j).map(x => x.name),
+      pt: v
+    });
+    i = j;
+  }
+  return out;
+};
+const tieGroupsOf = score => tieRanksOf(score).map(g => `${g.tie ? "공동 " : ""}${g.no}등 ${g.names.join(" · ")} (${g.pt}점)`).join("  ");
 const rankNoOf = (arr, i, key) => {
   let n = 1;
   for (let k = 0; k < i; k++) if (arr[k][key] > arr[i][key]) n = k + 2;
@@ -6327,12 +6349,13 @@ function MatchCard({
       color: "var(--chalk)",
       marginRight: 5
     }
-  }, "최종"), m.many ? fin.map((u, i) => /*#__PURE__*/React.createElement("span", {
-    key: u.name + i,
+  }, "최종"), m.many ? (/* ★ 카톡 글과 «같은» tieRanksOf 를 쓴다. 따로 세면 어긋난다 */
+  tieRanksOf(m.score).map((g, i) => /*#__PURE__*/React.createElement("span", {
+    key: g.no + "-" + i,
     style: {
-      color: rankNoOf(fin, i, "pt") === 1 ? "var(--accent)" : "#B9CCDA"
+      color: g.no === 1 ? "var(--accent)" : "#B9CCDA"
     }
-  }, i > 0 ? " " : "", rankNoOf(fin, i, "pt"), "등 ", u.name, " (", u.pt, "점)\xA0")) : m.bestOf > 1 ? (() => {
+  }, i > 0 ? " " : "", g.tie ? "공동 " : "", g.no, "등 ", g.names.join(" · "), " (", g.pt, "점)\xA0"))) : m.bestOf > 1 ? (() => {
     const f = finalOf(m.score);
     return /*#__PURE__*/React.createElement("span", {
       style: {
@@ -6516,7 +6539,17 @@ function buildText(g, tail) {
   m.rounds.forEach((r, i) => {
     const no = r.no || i + 1;
     if (m.many) {
-      L.push(`${no}게임  ${(r.names || []).map((x, j) => `${j + 1}등 ${x.name}`).join("  ")}`);
+      /* 🔴 2026-09-13 — 여기가 ★r.drew 를 «안 봤다».
+            3인 이상은 무승부 판도 「1등 … 2등 …」 으로 적혀서
+            무승부라는 말이 ★어디에도 없었다. 그런데 속으로는 무승부로 다뤄
+            승점을 «똑같이» 나눠 준다 (evenPt) — 읽는 사람이 헷갈린다.
+         ⇒ 무승부 판은 등수를 «안 매기고» 점수만 남긴다. 누가 몇 점 쳤는지는 기록이다 */
+      if (r.drew) {
+        const sc = (r.names || []).map(x => x.score).join(" : ");
+        L.push(`${no}게임  무승부  (${sc})`);
+      } else {
+        L.push(`${no}게임  ${(r.names || []).map((x, j) => `${j + 1}등 ${x.name}`).join("  ")}`);
+      }
     } else {
       const sc = (r.names || []).map(x => x.score).join(" : ");
       const win = r.drew ? "무승부" : `${r.win || (r.names || [])[0]?.name || ""} 승`;
@@ -6525,8 +6558,9 @@ function buildText(g, tail) {
   });
   L.push("─────────────");
   if (m.many) {
-    const tot = [...m.score].sort((a, b) => (b.pt || 0) - (a.pt || 0));
-    L.push(`최종  ${tot.map((x, i) => `${rankNoOf(tot, i, "pt")}등 ${x.name} (${x.pt || 0}점)`).join("  ")}`);
+    /* ★ 승점이 같으면 «공동 1등» 이다. 등수 번호만 같게 주고 말을 안 붙이면
+          「1등 김성곤 (7점)  1등 류승현 (7점)」 처럼 어색하게 나간다 */
+    L.push(`최종  ${tieGroupsOf(m.score)}`);
   } else if (m.bestOf > 1) {
     /* ★ 기록 화면과 «같은» finalOf 를 쓴다 (60-log.jsx). 따로 세면 어긋난다 */
     const f = finalOf(m.score);
