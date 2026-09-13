@@ -38,7 +38,15 @@ const DIM = ["#4a4436", "#4a4028"];
 const B_LABEL = { "3": "3쿠션", "4": "4구" };
 const B_INN = { "3": 25, "4": 30 };
 
-const CSS = `
+/* ★ [종료] 깜빡임 — 판이 끝났는데 어느 단추를 눌러야 하는지 모르면 소용이 없다.
+      당구대에서 폰을 멀리 두고 치시므로 «움직임» 이 있어야 눈에 든다.
+   ⛔ 너무 빠르면 거슬린다. 1.1초에 한 번씩 부드럽게
+   ⚠ 설명을 CSS 글 «안» 에 두지 말 것 — <style> 안 글자가 textContent 로 새어
+     검사가 화면 글자인 줄 알고 집는다 (2026-09-13 에 실제로 그랬다) */
+const CSS = `@keyframes blinkEnd { 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.55); } }
+.blinkEnd { animation: blinkEnd 1.1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .blinkEnd { animation: none; } }
+
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap');
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 .sq {
@@ -656,7 +664,8 @@ const RAIL_SYM  = "clamp(13px, 2.15vh, 18px)";   /* ⤢ 크게 · 🏠 홈 (그�
       여덟 칸이 34px 더 길어진다 — 7판에서 [홈] 이 잘린 진짜 이유였다 (8장 ⑰) */
 function BoardRail({ top = [], bottom = [] }) {
   const btn = (b, i) => (
-    <button key={i} onClick={b.onClick} disabled={b.disabled} title={b.title} style={{
+    <button key={i} onClick={b.onClick} disabled={b.disabled} title={b.title}
+      className={b.className} style={{
       width: 46, padding: RAIL_PAD, borderRadius: 9, fontWeight: 700, lineHeight: 1.15,
       fontSize: b.size || RAIL_TXT, background: b.bg || "#1f1f1f",
       border: b.disabled ? "1px solid #4d4d4d" : (b.border || "none"),
@@ -1806,11 +1815,24 @@ function Home({ data, save, say, go, onLogin, tv, setTv }) {
           width: 34, height: 34, borderRadius: 9, fontSize: 16, opacity: tv ? 1 : .7,
           border: "1px solid " + (tv ? ACCENT : "rgba(255,255,255,.2)"),
         }}>🖥</button>
+        {/* ★ 알약 단추 (2026-09-10 · 골프온과 같은 모양)
+               전에는 동그라미에 「＋」였다 — 로그인하는 곳인 줄 아무도 몰랐다.
+               ⛔ 글자를 넣어 «무엇을 하는 단추인지» 보이게 한다. 중장년 손님이 쓴다 */}
         <button onClick={onLogin} title={me ? "내 계정" : "로그인"} style={{
-          width: 34, height: 34, borderRadius: "50%", fontSize: 13, fontWeight: 700,
-          background: me ? ACCENT : "rgba(0,0,0,.3)", color: me ? "#141200" : "var(--chalk)",
-          border: "1px solid rgba(255,255,255,.2)",
-        }}>{me ? me.slice(0, 1) : "＋"}</button>
+          height: 34, borderRadius: 17, padding: "0 14px 0 5px", fontSize: 13.5,
+          display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap",
+          background: "rgba(0,0,0,.3)", color: "var(--ivory)",
+          border: "1px solid " + (me ? "rgba(232,184,56,.55)" : "rgba(255,255,255,.28)"),
+        }}>
+          <span style={{
+            width: 24, height: 24, borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: me ? 12 : 14, fontWeight: me ? 700 : 400,
+            background: me ? ACCENT : "rgba(255,255,255,.12)",
+            color: me ? "#141200" : "var(--chalk)",
+          }}>{me ? me.slice(0, 1) : "👤"}</span>
+          {me ? "내 정보" : "로그인"}
+        </button>
       </div>
 
       <Banner />
@@ -1929,8 +1951,27 @@ function Home({ data, save, say, go, onLogin, tv, setTv }) {
             </div>
             <Lbl>경기 시간</Lbl>
             <div style={{ marginBottom: 16 }}>
-              <Pills cols="repeat(3,1fr)" value={limitMin} set={setLimitMin}
-                items={[[30, "30분"], [40, "40분"], [60, "1시간"]]} />
+              {/* ★ 「직접」 칸을 더했다 (2026-09-11 · 대표님).
+                    시험할 때 30분을 기다릴 수 없다. 1~180분을 손으로 친다 */}
+              <Pills cols="repeat(4,1fr)"
+                value={[30, 40, 60].includes(limitMin) ? limitMin : -1}
+                set={(v) => setLimitMin(v === -1 ? 5 : v)}
+                items={[[30, "30분"], [40, "40분"], [60, "1시간"], [-1, "직접"]]} />
+              {![30, 40, 60].includes(limitMin) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <input type="number" min="1" max="180" value={limitMin}
+                    onChange={(e) => setLimitMin(Math.min(180, Math.max(0, Number(e.target.value) || 0)))}
+                    style={{
+                      width: 96, padding: "10px 12px", fontSize: 16, textAlign: "center",
+                      background: "rgba(0,0,0,.3)", color: "var(--ivory)",
+                      border: "1px solid var(--line)", borderRadius: 10,
+                    }} />
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>분</span>
+                  <span style={{ fontSize: 11.5, color: "var(--chalk)", lineHeight: 1.5 }}>
+                    1~180분 · 시험할 때는 짧게
+                  </span>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 13 }}>
               <span style={{ fontSize: 13.5, fontWeight: 600 }}>소리로 이름 부르기</span>
@@ -2023,6 +2064,7 @@ const Toggle = ({ on, set, disabled }) => (
       경기 중에는 흘깃 보고 누르기 때문입니다.                                */
 function EndAsk({ names, ranked, drew, overTime, limitMin, elapsedMin, notStarted,
   gameNo, nextNo, nextWord, willEndSeries, seriesLine, unitWord, single,
+  canGrow, growWord, onGrow,
   onBack, onNextGame, onFinishHere, onKeepPlaying, onWipe, onHome }) {
   const box = { width: "100%", padding: "14px 0", borderRadius: 10, fontSize: 15, fontWeight: 700, marginBottom: 7 };
   const blue = { ...box, background: "#1E88E5", border: "none", color: "#fff" };
@@ -2098,6 +2140,24 @@ function EndAsk({ names, ranked, drew, overTime, limitMin, elapsedMin, notStarte
             <button style={green} onClick={onFinishHere}>
               {single ? "기록하고 끝내기" : "경기 끝내기"}
             </button>
+            {/* ★ 2026-09-13 대표님 — 「빨리 끝나면 싱겁다」.
+                   여기서 두 판을 더 붙일 수 있게 한다. 지금 판은 그대로 저장된다.
+                ⛔ 줄이는 길은 두지 않는다 · ⛔ 7판에서 멈춘다 · ⛔ 3인 이상은 안 나온다 */}
+            {canGrow && (
+              <>
+                {/* ★ 2026-09-13 — 「아쉬우시면」을 «따로 한 줄» 로 뒀더니 화면이 어수선했다.
+                       단추 안으로 넣어 한 줄로 모았다 [대표님].
+                    ⚠ 태블릿·폰 가로에서는 한 줄에 들어간다. 폰 세로에서 두 줄이 되어도
+                      글자를 줄이지 않는다 — 중장년 손님이 쓰는 앱이다 */}
+                <button style={{ ...blue, marginTop: 12 }} onClick={onGrow}>
+                  <span style={{ fontSize: 13, fontWeight: 600, opacity: .82, marginRight: 7 }}>
+                    아쉬우시면
+                  </span>
+                  ＋2판 더 · {growWord}
+                </button>
+                <div style={note}>지금 판은 그대로 남고 승수도 이어집니다.</div>
+              </>
+            )}
             {/* ★ [기록하지 않고 다시 시작] 을 뺐다 (사용자 지시).
                   지우고 다시 치는 길은 좌측 바 [점수 지움] 과 [🏠 홈] 에 이미 있다.
                   ⚠ 붉은 단추를 노란 단추 바로 밑에 두면 잘못 눌러 한 판을 날린다 */}
@@ -2515,7 +2575,12 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
   const [date] = useState(today());
   const place = setup.place;
   const [ps, setPs] = useState(() => setup.ps.map((p, i) => ({ ...p, c: i % 2 })));
-  const bestOf = setup.bestOf;
+  /* ★ 2026-09-13 — 치는 도중에 판 수를 «늘릴 수 있게» 바꿨다 (대표님).
+        「너무 빨리 끝나서 싱겁다」 ⇒ 끝낼까요? 창에서 두 판을 더 붙인다.
+     ⛔ 줄이지는 않는다. 이미 친 판이 사라지면 기록이 어긋난다.
+     ⛔ 3인 이상(multiSeat)은 안 한다 — 선승제가 아니라 판 수를 정해 치는 방식이다 [대표님] */
+  const [bestOfNow, setBestOf] = useState(setup.bestOf);
+  const bestOf = bestOfNow;
   const useClock = !!setup.useClock;
   const clockSec = Number(setup.clockSec) || 40;
   const limitMin = Number(setup.limitMin) || 0;
@@ -2541,6 +2606,11 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
   const [pts, setPts] = useState({});
   const [log, setLog] = useState([]);
   const [endAsk, setEndAsk] = useState(false);     // [종료] 를 눌러 확인을 기다리는 중
+  const [timeAsk, setTimeAsk] = useState(false);   // ★ 정한 시간이 다 돼 저절로 뜬 창
+  const [overAsk, setOverAsk] = useState(false);   // ★ 3인 이상 · 한 사람만 남았다는 안내
+  const [blinkEnd, setBlinkEnd] = useState(false); // ★ [종료] 를 깜빡이게 한다
+  const lastOne = useRef(false);
+  const [doneMsg, setDoneMsg] = useState("");      // ★ 목표에 닿은 사람을 눌렀을 때
   const [goAsk, setGoAsk] = useState(false);       // 🏠 를 눌러 "어디로 갈까요?" 를 연 상태
   /* ★ [경기 끝내기] 를 누르면 결과 화면을 거치지 않고 곧바로 저장하고 결과표로 간다 (사용자 지시).
         finish() 가 setLog 로 마지막 판을 담는 것이 먼저 끝나야 하므로,
@@ -2575,7 +2645,7 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
         ❙❙ 로 멈춰도 다시 안 풀립니다 — 판이 시작된 사실은 그대로이기 때문입니다 */
   const [begun, setBegun] = useState(false);
 
-  useEffect(() => { setBare(!endAsk && !goAsk && phase === "board"); }, [phase, endAsk, goAsk]); // eslint-disable-line
+  useEffect(() => { setBare(!endAsk && !goAsk && !timeAsk && phase === "board"); }, [phase, endAsk, goAsk, timeAsk]); // eslint-disable-line
   useEffect(() => {
     if (!running || phase !== "board") return;
     const t = setInterval(() => {
@@ -2600,14 +2670,23 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     }
   }, [shot]); // eslint-disable-line
 
-  /* ★ 정해 둔 경기 시간이 다 되면 한 번만 알린다.
-     판을 저절로 끝내지는 않는다 — 마지막 차례는 마저 치는 것이 보통이다 */
+  /* ★ 정해 둔 경기 시간이 다 되면 알린다.
+     ⚠ 2026-09-11 — 전에는 ★«말만» 했다. 당구대에서 폰을 안 보고 치시니
+       그 한마디가 그냥 지나갔고, 무승부 창은 [종료] 를 «손으로 눌러야» 나왔다.
+       ⇒ 대표님이 「작동이 안 된다」고 하신 것이 이것이다. 이제 ★창을 띄운다.
+     ⛔ 판을 저절로 끝내지는 않는다 — 묻고, 고르시는 대로 한다 */
   useEffect(() => {
     if (!limitMin || !running) return;
     if (elapsed < limitMin * 60 || overSaid) return;
     setOverSaid(true);
     try { navigator.vibrate?.([300, 150, 300]); } catch (e) {}
     say2(`${limitMin}분이 다 됐습니다`);
+    /* ★ 누군가 이미 목표에 닿아 있으면 무승부가 아니다 — 승부가 난 것이다 */
+    if (units.some((p) => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi))) return;
+    /* 목표에 닿았을 때와 같게 — 묻는 동안 시계를 멈춘다 */
+    setRunning(false);
+    wakeOff();
+    setTimeAsk(true);
   }, [elapsed, limitMin, running]); // eslint-disable-line
   const wakeOn = async () => { try { wake.current = await navigator.wakeLock?.request("screen"); } catch (e) {} };
   const wakeOff = () => { try { wake.current?.release(); } catch (e) {} wake.current = null; };
@@ -2719,7 +2798,33 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     else if (goal > 0 && left <= near) say2(`${d}점, ${left}점 남았습니다`);
     else say2(`${d}점`);
   };
+  /* ★ 목표에 닿은 사람은 «없는 것으로» 본다 (2026-09-11 · 대표님).
+        3명 이상은 1등이 나와도 나머지가 끝까지 친다. 그런데 끝난 사람 차례가
+        그대로 돌아와서 「없는 사람을 기다리는」 모양이 됐다.
+     ⛔ 건너뛴 사람은 차례도 «안 세고» 이닝도 «안 올린다» — 안 쳤으니까.
+        그래야 공 색이 어긋나지 않는다 (색은 몇 번째 차례인지로 정해진다).
+     ⚠ 두 자리(단식·복식)는 건너뛰지 않는다 — 목표에 닿으면 판이 끝난다 */
+  const isDone = (i) => {
+    if (!multiSeat) return false;
+    const p = units[i];
+    return Number(p.handi) > 0 && sc(p.key) >= Number(p.handi);
+  };
+  /* 아직 치고 계신 분 중 다음 차례. 아무도 없으면 지금 자리를 그대로 둔다 */
+  const nextAlive = (from) => {
+    for (let d = 1; d <= units.length; d++) {
+      const j = (from + d) % units.length;
+      if (!isDone(j)) return j;
+    }
+    return from;
+  };
+
   const hit = (i) => {
+    /* ★ 끝난 사람을 누르면 점수가 오르지 않는다. 대신 왜 그런지 말해준다 */
+    if (isDone(i) && i !== active) {
+      setDoneMsg(`${units[i].name}님은 목표에 닿았습니다`);
+      setTimeout(() => setDoneMsg(""), 1600);
+      return;
+    }
     if (i !== active) {
       // 점수판을 눌러 차례를 넘길 때도 이닝과 수구 교대를 그대로 적용
       const k = units[active].key;
@@ -2727,13 +2832,17 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
       if (!running) setRunning(true);
       if (!startAt) setStartAt(Date.now());
       setHigh((h) => ({ ...h, [k]: Math.max(h[k] || 0, run) }));
-      const steps = (i - active + units.length) % units.length;
+      const span = (i - active + units.length) % units.length;
+      /* ★ 사이에 끼어 있는 «끝난 사람» 은 차례로 세지 않는다 — 안 쳤다 */
+      const passed = [];
+      for (let d = 0; d < span; d++) {
+        const j = (active + d) % units.length;
+        if (!isDone(j) || j === active) passed.push(units[j].key);
+      }
+      const steps = passed.length;
       setTurns((t) => {
         const n = { ...t };
-        for (let d = 0; d < steps; d++) {
-          const kk = units[(active + d) % units.length].key;
-          n[kk] = (n[kk] || 0) + 1;
-        }
+        passed.forEach((kk) => { n[kk] = (n[kk] || 0) + 1; });
         return n;
       });
       setRun(0);
@@ -2760,7 +2869,8 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     setHigh((h) => ({ ...h, [k]: Math.max(h[k] || 0, run) }));
     setTurns((t) => ({ ...t, [k]: (t[k] || 0) + 1 }));
     setRun(0);
-    const nx = (active + 1) % units.length;
+    /* ★ 끝난 사람은 건너뛴다. 차례 수는 «한 번만» 는다 — 건너뛴 사람은 안 쳤다 */
+    const nx = nextAlive(active);
     setActive(nx); setShot(clockSec);
     setTurnNo((t) => t + 1);
     if (autoBall) {
@@ -2781,7 +2891,10 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
         "done"   결과 화면으로 (기본)
      ★ stop — 시리즈가 안 끝났어도 여기서 경기를 끝낸다
         bestOf 를 1로 바꾸지 않는다. "5전 3선승제였는데 2판까지 치고 끝냄" 으로 남긴다 */
-  const finish = (go, stop) => {
+  /* ★ bo — 판 수를 «늘리면서» 끝낼 때 쓴다. setBestOf 는 곧바로 반영되지 않아
+        여기서 옛 값을 보고 「이번 판으로 끝」 이라 잘못 셈하기 때문이다 */
+  const finish = (go, stop, bo) => {
+    const bestOf = bo || bestOfNow;
     const k = units[active].key;
     const hi = { ...high, [k]: Math.max(high[k] || 0, run) };
     const tu = { ...turns, [k]: Math.max(1, turns[k] || 0) };
@@ -2844,10 +2957,15 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     /* ★ 무승부는 소리로 알리지 않는다 (사용자 지시).
           화면에는 그대로 "무승부" 로 나온다 — 소리만 안 낸다.
           다만 마지막 판이 무승부라도 경기 전체 승자는 있을 수 있으므로
-          그때는 승자만 부른다 */
-    if (drew && !last) return;
-
-    if (!last) {
+          그때는 승자만 부른다
+       🔴 2026-09-13 — 여기 `if (drew && !last) return;` 이 있었다.
+          «소리만» 건너뛰려던 것인데 ★함수 전체를 빠져나갔다.
+          ⇒ 무승부로 두고 다음 판을 고르면 nextGame() 까지 못 가서
+            ★점수가 안 지워지고 판 번호도 안 올라갔다 (결과표에 「1게임」이 두 번).
+          ⇒ 소리를 안 내는 것과 다음 판으로 가는 것은 «다른 일» 이다. 갈라놓는다 */
+    if (drew && !last) {
+      /* 소리 없음 */
+    } else if (!last) {
       say2(`${head}, ${win}`);
     } else {
       /* 마지막 판이면 경기 전체 승자까지 이어서 부른다 */
@@ -2879,6 +2997,20 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
 
   const multiSeat = units.length > 2;              // 3인·4인 개인전
   const need = multiSeat ? bestOf : Math.ceil(bestOf / 2);
+
+  /* ★ 두 판을 더 붙인다 (2026-09-13 · 대표님 — 「빨리 끝나면 싱겁다」)
+        단판 → 3판 2선승 → 5판 3선승 → 7판 4선승. ★7판에서 멈춘다.
+     ⛔ 3인 이상은 안 한다 · ⛔ 줄이지 않는다 */
+  const canGrow = !multiSeat && bestOf < 7;
+  const grownTo = bestOf === 1 ? 3 : bestOf + 2;
+  const growWord = `${grownTo}판 ${Math.ceil(grownTo / 2)}선승으로`;
+  const growMore = () => {
+    setBestOf(grownTo);
+    setEndAsk(false);
+    setBlinkEnd(false);
+    /* ⚠ 늘린 값을 «직접» 넘긴다 — setBestOf 는 이 자리에서 아직 안 바뀐다 */
+    finish("next", false, grownTo);
+  };
   /* ★ 무승부가 섞이면 선승 조건에 영영 못 닿는다.
         3판 2선승인데 두 판이 무승부면 남은 한 판을 이겨도 1승뿐이다.
         정한 판을 다 쳤으면 그것으로 끝난다 — 그보다 더 칠 수는 없다 */
@@ -3054,6 +3186,23 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     return () => clearTimeout(t);
   }, [score, phase, autoEnd]); // eslint-disable-line
 
+  /* ★ 3명 이상 — 한 사람만 남으면 그 판은 «사실상» 끝난 것이다 (2026-09-11 · 대표님).
+        ⛔ 저절로 끝내지는 않는다. 마지막 한 분의 점수를 적어야 등수가 나온다.
+           ⇒ 안내만 하고, [종료] 를 ★깜빡여 어디를 눌러야 하는지 알려 준다.
+        ★ 한 번만 뜬다 (lastOne) */
+  useEffect(() => {
+    if (phase !== "board" || !multiSeat) return;
+    const alive = units.filter((p, i) => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
+    if (alive.length !== 1 || units.length < 3) { if (alive.length > 1) lastOne.current = false; return; }
+    if (lastOne.current) return;
+    lastOne.current = true;
+    setRunning(false);
+    wakeOff();
+    setBlinkEnd(true);
+    const t = setTimeout(() => setOverAsk(true), 700);
+    return () => clearTimeout(t);
+  }, [score, phase]); // eslint-disable-line
+
   /* ★ 8판 — units 로 센다 (사용자 지적 · 복식에서 이닝이 안 올라감).
         차례(turns)는 next()·hit() 에서 units[…].key 로 쌓인다.
         편으로 칠 때 그 열쇠는 "T0" · "T1" 인데 여기서는 사람 열쇠로 찾고 있었다.
@@ -3208,7 +3357,14 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
                  바탕을 올리고 같은 노랑으로 테두리를 두른다 */
           /* ★ 어두운 바탕에 노란 글씨라 멀리서 안 보였다. 시작과 같은 파랑으로 채운다.
                  대신 시작과 색이 같아져 잘못 누르기 쉬우므로 한 번 물어본다 */
-          { label: "종료", onClick: () => setEndAsk(true), color: "#fff", size: RAIL_TXT, bg: "#1E88E5" },
+          /* ★ 판이 끝났는데 눌러야 할 단추가 어느 것인지 모르면 소용이 없다.
+                당구대에서 폰을 안 보고 치시므로 ★노랗게 깜빡여 눈에 띄게 한다.
+                누르면 곧 멈춘다 */
+          { label: "종료", onClick: () => { setBlinkEnd(false); setEndAsk(true); },
+            color: blinkEnd ? "#141200" : "#fff", size: RAIL_TXT,
+            bg: blinkEnd ? "#E8B838" : "#1E88E5",
+            border: blinkEnd ? "2px solid #FFF3C4" : undefined,
+            className: blinkEnd ? "blinkEnd" : undefined },
           /* ★ 무슨 단추인지 알 수가 없었습니다 (사용자 지적).
                  ⤢ 만 파랗게 떠 있어 눈에 안 띄었습니다 — 테두리를 두르고 글자를 붙입니다.
                  누르면 "화면 최대 크게" 가 2.4초 떴다 사라집니다 */
@@ -3301,13 +3457,18 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
                   name={p.name}
                   value={sc(p.key)}
                   size={NUMSIZE}
-                  bg={i === active ? BALL[ballOf(i)] : DIM[ballOf(i)]}
-                  fg={i === active ? "#000" : "rgba(255,255,255,.34)"}
+                  /* ★ 목표에 닿은 사람은 «없는 것으로» 보이게 한다 (2026-09-11).
+                        차례가 안 오므로 공 색도 안 보여준다 — 보여주면 기다리는 줄 안다 */
+                  bg={i === active && !isDone(i) ? BALL[ballOf(i)] : DIM[ballOf(i)]}
+                  fg={i === active && !isDone(i) ? "#000" : "rgba(255,255,255,.34)"}
                   accent={BALL[ballOf(i)]}
-                  dim={i !== active}
-                  badge={finishOrder.includes(p.key)
-                    ? { text: `${finishOrder.indexOf(p.key) + 1}위 도달`, color: "#E8B838" } : null}
-                  dot={autoBall ? { color: BALL[ballOf(i)], text: BALLNAME[ballOf(i)] } : null}
+                  dim={i !== active || isDone(i)}
+                  badge={isDone(i)
+                    ? { text: finishOrder.includes(p.key)
+                        ? `${finishOrder.indexOf(p.key) + 1}위 도달 ✓` : "도달 ✓", color: "#E8B838" }
+                    : (finishOrder.includes(p.key)
+                        ? { text: `${finishOrder.indexOf(p.key) + 1}위 도달`, color: "#E8B838" } : null)}
+                  dot={autoBall && !isDone(i) ? { color: BALL[ballOf(i)], text: BALLNAME[ballOf(i)] } : null}
                   stats={[
                     ["하이런", Math.max(high[p.key] || 0, i === active ? run : 0)],
                     ["에버", fmtAvg(avg(sc(p.key), tn(p.key) || 1), mode)],
@@ -3373,6 +3534,82 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
         )}
       </BoardArea>
 
+      {/* ★ 시간이 다 됐을 때 · 한 사람만 남았을 때 — «저절로» 뜨는 안내 (2026-09-11)
+             ⛔ 이 창이 «몰래 처리하지» 않는다. 판을 끝내는 결정은 ★언제나 [종료] 창에서 한다.
+                그래야 길이 하나가 된다 — 2인도 3인 이상도 같은 말, 같은 길.
+             ★ 닫으면 [종료] 가 노랗게 깜빡인다. 어디를 눌러야 하는지 보이게 */}
+      {(timeAsk || overAsk) && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,.72)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 22,
+        }}>
+          <div style={{
+            width: "100%", maxWidth: 350, background: "var(--card)",
+            border: "1px solid var(--line)", borderRadius: 16, padding: 22,
+          }}>
+            <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 11 }}>
+              {overAsk ? "이번 판이 종료되었습니다" : "경기 시간이 종료되었습니다"}
+            </div>
+            <div style={{ fontSize: 14, color: "var(--chalk)", lineHeight: 1.75, marginBottom: 18 }}>
+              {overAsk ? (() => {
+                const done = units.filter((p) => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi));
+                const alive = units.find((p) => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
+                return (<>
+                  {done.map((p) => p.name).join(" · ")} {done.length > 1 ? "님들이" : "님이"} 목표에 닿았습니다.<br />
+                  {alive ? `${alive.name}님만 남았습니다.` : ""}<br />
+                  아래 <b style={{ color: "#E8B838" }}>[종료]</b> 를 누르고 다음 판을 시작하십시오.
+                </>);
+              })() : (<>
+                {limitMin}분이 지났고 아직 아무도 목표에 닿지 못했습니다.<br />
+                무승부로 처리하시려면 <b style={{ color: "#E8B838" }}>[종료]</b> 를 누르고
+                다음 판을 시작하십시오.
+              </>)}
+            </div>
+            <button className="prim" style={{ width: "100%", padding: 15, fontSize: 16, borderRadius: 12 }}
+              onClick={() => {
+                setTimeAsk(false); setOverAsk(false);
+                setBlinkEnd(true);
+                setEndAsk(true);            /* ★ [종료] 를 누른 것과 «똑같은» 창을 연다 */
+              }}>종료 창 열기</button>
+            {!overAsk && (
+              <button style={{
+                width: "100%", padding: 15, fontSize: 16, borderRadius: 12, marginTop: 9,
+                background: "#1C4E80", color: "#fff",
+              }} onClick={() => { setTimeAsk(false); setRunning(true); wakeOn(); }}>
+                계속 진행하기
+              </button>
+            )}
+            {overAsk && (
+              <button style={{
+                width: "100%", padding: 14, fontSize: 15, borderRadius: 12, marginTop: 9,
+                background: "#1C4E80", color: "#fff",
+              }} onClick={() => { setOverAsk(false); setRunning(true); wakeOn(); }}>
+                알겠습니다 · 마저 치기
+              </button>
+            )}
+            <div style={{ fontSize: 11.5, color: "var(--chalk)", marginTop: 12, lineHeight: 1.6 }}>
+              {overAsk
+                ? "남은 분의 점수를 마저 적으신 뒤에 눌러도 됩니다. 다시 묻지 않습니다."
+                : "계속 진행하면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ★ 목표에 닿은 사람을 눌렀을 때 — 점수는 안 오르고 왜 그런지 말해준다 */}
+      {doneMsg && (
+        <div style={{
+          position: "fixed", left: "50%", top: "42%", transform: "translate(-50%,-50%)",
+          zIndex: 95, background: "rgba(0,0,0,.86)", color: "#fff",
+          border: "1px solid var(--line)", borderRadius: 14,
+          padding: "16px 20px", fontSize: 15, textAlign: "center", lineHeight: 1.7,
+          maxWidth: 300, pointerEvents: "none",
+        }}>
+          {doneMsg}<br />
+          <span style={{ fontSize: 13, color: "var(--chalk)" }}>아직 치고 계신 분을 눌러주세요</span>
+        </div>
+      )}
+
       {endAsk && (() => {
         const nowDrew = finishOrder.length === 0;
         const elapsedMin = Math.max(0, Math.round(elapsed / 60));
@@ -3400,6 +3637,7 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
             notStarted={!begun && !log.length && !Object.values(score).some((v) => v > 0)}
             gameNo={gameNo} nextNo={gameNo + 1} willEndSeries={willEndSeries}
             seriesLine={line} unitWord={unitWord} single={bestOf === 1}
+            canGrow={canGrow && willEndSeries} growWord={growWord} onGrow={growMore}
             nextWord={nthOf(gameNo + 1)}
             onBack={() => setEndAsk(false)}
             onHome={() => { setEndAsk(false); wakeOff(); goHome(); }}
@@ -3583,6 +3821,36 @@ function seriesList(games) {
 }
 
 /* 승점이 같으면 공동 순위로 묶고 그다음을 건너뛴다 (7판 5장 ⑩) */
+/* ★ 시리즈 «최종» 줄 — 기록 화면과 카톡 글이 «같은 것» 을 써야 한다 (9장 ①).
+      🔴 2026-09-13 — 따로 계산하고 있었고, ★둘 다 승수가 같은지를 안 봤다.
+        「무승부 · 이인승 승 · 류승현 승」이면 1 : 1 인데 ★「류승현 1 : 1 승」 으로 나왔다.
+      ⇒ 한 곳으로 모은다. 맨 위 둘의 승수가 같으면 «무승부» 다 */
+const finalOf = (score) => {
+  const tot = [...(score || [])].sort((a, b) => (b.w || 0) - (a.w || 0));
+  const nums = tot.map((x) => x.w || 0).join(" : ");
+  const tie = tot.length > 1 && (tot[0].w || 0) === (tot[1].w || 0);
+  return { tot, nums, tie, name: tie ? "" : (tot[0]?.name || "") };
+};
+
+/* ★ 3인 이상 «최종» 줄 — 승점이 같으면 «공동 N등» 으로 묶는다.
+      ⚠ 무승부 판은 승점을 똑같이 나눠 주므로(evenPt) 같아지는 일이 흔하다.
+      ⇒ 기록 화면과 카톡 글이 «같은 것» 을 쓴다 (9장 ①) */
+const tieRanksOf = (score) => {
+  const tot = [...(score || [])].sort((a, b) => (b.pt || 0) - (a.pt || 0));
+  const out = [];
+  for (let i = 0; i < tot.length;) {
+    const v = tot[i].pt || 0;
+    let j = i;
+    while (j < tot.length && (tot[j].pt || 0) === v) j++;
+    out.push({ no: i + 1, tie: j - i > 1, names: tot.slice(i, j).map((x) => x.name), pt: v });
+    i = j;
+  }
+  return out;
+};
+const tieGroupsOf = (score) => tieRanksOf(score)
+  .map((g) => `${g.tie ? "공동 " : ""}${g.no}등 ${g.names.join(" · ")} (${g.pt}점)`)
+  .join("  ");
+
 const rankNoOf = (arr, i, key) => {
   let n = 1;
   for (let k = 0; k < i; k++) if (arr[k][key] > arr[i][key]) n = k + 2;
@@ -3658,16 +3926,20 @@ function MatchCard({ m, onSheet, onDel }) {
       <div style={{ fontSize: 13.5, marginTop: m.bestOf > 1 ? 9 : 0, lineHeight: 1.75 }}>
         <span style={{ fontSize: 11.5, color: "var(--chalk)", marginRight: 5 }}>최종</span>
         {m.many ? (
-          fin.map((u, i) => (
-            <span key={u.name + i} style={{ color: rankNoOf(fin, i, "pt") === 1 ? "var(--accent)" : "#B9CCDA" }}>
-              {i > 0 ? " " : ""}{rankNoOf(fin, i, "pt")}등 {u.name} ({u.pt}점)&nbsp;
+          /* ★ 카톡 글과 «같은» tieRanksOf 를 쓴다. 따로 세면 어긋난다 */
+          tieRanksOf(m.score).map((g, i) => (
+            <span key={g.no + "-" + i} style={{ color: g.no === 1 ? "var(--accent)" : "#B9CCDA" }}>
+              {i > 0 ? " " : ""}{g.tie ? "공동 " : ""}{g.no}등 {g.names.join(" · ")} ({g.pt}점)&nbsp;
             </span>
           ))
-        ) : m.bestOf > 1 ? (
-          <span style={{ color: "var(--accent)" }}>
-            {fin[0]?.name} &nbsp;{fin.map((u) => u.w).join(" : ")} 승
-          </span>
-        ) : (
+        ) : m.bestOf > 1 ? (() => {
+          const f = finalOf(m.score);
+          return (
+            <span style={{ color: "var(--accent)" }}>
+              {f.tie ? <>{f.nums}&nbsp; 무승부</> : <>{f.name} &nbsp;{f.nums} 승</>}
+            </span>
+          );
+        })() : (
           <>
             <span style={{ color: "var(--accent)" }}>
               {m.rounds[0]?.drew ? "무승부" : `${m.rounds[0]?.win || fin[0]?.name} 승`}
@@ -3788,7 +4060,17 @@ function buildText(g, tail) {
   m.rounds.forEach((r, i) => {
     const no = r.no || i + 1;
     if (m.many) {
-      L.push(`${no}게임  ${(r.names || []).map((x, j) => `${j + 1}등 ${x.name}`).join("  ")}`);
+      /* 🔴 2026-09-13 — 여기가 ★r.drew 를 «안 봤다».
+            3인 이상은 무승부 판도 「1등 … 2등 …」 으로 적혀서
+            무승부라는 말이 ★어디에도 없었다. 그런데 속으로는 무승부로 다뤄
+            승점을 «똑같이» 나눠 준다 (evenPt) — 읽는 사람이 헷갈린다.
+         ⇒ 무승부 판은 등수를 «안 매기고» 점수만 남긴다. 누가 몇 점 쳤는지는 기록이다 */
+      if (r.drew) {
+        const sc = (r.names || []).map((x) => x.score).join(" : ");
+        L.push(`${no}게임  무승부  (${sc})`);
+      } else {
+        L.push(`${no}게임  ${(r.names || []).map((x, j) => `${j + 1}등 ${x.name}`).join("  ")}`);
+      }
     } else {
       const sc = (r.names || []).map((x) => x.score).join(" : ");
       const win = r.drew ? "무승부" : `${r.win || (r.names || [])[0]?.name || ""} 승`;
@@ -3798,11 +4080,13 @@ function buildText(g, tail) {
 
   L.push("─────────────");
   if (m.many) {
-    const tot = [...m.score].sort((a, b) => (b.pt || 0) - (a.pt || 0));
-    L.push(`최종  ${tot.map((x, i) => `${rankNoOf(tot, i, "pt")}등 ${x.name} (${x.pt || 0}점)`).join("  ")}`);
+    /* ★ 승점이 같으면 «공동 1등» 이다. 등수 번호만 같게 주고 말을 안 붙이면
+          「1등 김성곤 (7점)  1등 류승현 (7점)」 처럼 어색하게 나간다 */
+    L.push(`최종  ${tieGroupsOf(m.score)}`);
   } else if (m.bestOf > 1) {
-    const tot = [...m.score].sort((a, b) => (b.w || 0) - (a.w || 0));
-    L.push(`최종  ${tot[0]?.name || ""}  ${tot.map((x) => x.w || 0).join(" : ")} 승`);
+    /* ★ 기록 화면과 «같은» finalOf 를 쓴다 (60-log.jsx). 따로 세면 어긋난다 */
+    const f = finalOf(m.score);
+    L.push(f.tie ? `최종  ${f.nums} 무승부` : `최종  ${f.name}  ${f.nums} 승`);
   } else {
     const r = m.rounds[0] || {};
     L.push(`최종  ${r.drew ? "무승부" : `${r.win || ""} 승`}`);
@@ -3941,13 +4225,9 @@ function Sheet({ game, onClose, say }) {
       계정이 바뀌면 기록만 창고(vault)에 넣어 가른다 */
 
 function Account({ data, save, say, sync, syncNow, onClose }) {
-  const [tab, setTab] = useState(data.me ? "me" : "in");
-  const [email, setEmail] = useState(data.lastEmail || "");
-  const [pw, setPw] = useState("");
-  const [pw2, setPw2] = useState("");
-  const [nick, setNick] = useState("");
-  const [show, setShow] = useState(false);
-  const [busy, setBusy] = useState(false);
+  /* ★ 2026-09-10 밤 — 이메일 가입·로그인을 걷어내면서 딸린 상태도 함께 지웠다.
+        남은 것은 「내 계정」이냐 「로그인」이냐 두 갈래뿐이다 */
+  const [tab] = useState(data.me ? "me" : "in");
   const acc = data.profile || null;
 
   const pend = data.games.filter((g) => !g.sid).length;
@@ -3958,62 +4238,11 @@ function Account({ data, save, say, sync, syncNow, onClose }) {
   /* ★ splitGames 는 00-head 로 옮겼다 (2026-09-10).
         카카오는 앱이 뜰 때 로그인되므로 이 창을 안 거친다 — 같은 계산이 두 곳에 있으면 어긋난다 */
 
-  const signIn = async () => {
-    const e = email.trim().toLowerCase();
-    if (!e || !pw) return say("이메일과 비밀번호를 넣어주세요");
-    if (busy) return;
-    setBusy(true);
-    try {
-      const t = await sbSignIn(e, pw);
-      const uid = t?.user?.id;
-      /* ★ 부를 이름은 pickName 하나로 정한다 (20-sb.jsx · 차례 다섯 줄) */
-      const pf = await sbProfile(t.access_token, uid);
-      const nm = pickName(pf, t?.user?.user_metadata, e);
-      const { games, vault } = splitGames(data, uid);
-      save({
-        ...data, games, vault, me: uid, nick: nm, lastEmail: e,
-        profile: { id: uid, email: e, nickname: nm },
-        session: sessOf(t),
-      });
-      say(`${nm}님, 반갑습니다`);
-      setBusy(false); onClose();
-    } catch (err) {
-      setBusy(false);
-      const m = String(err.message || "");
-      if (/Invalid login/i.test(m)) return say("이메일이나 비밀번호가 맞지 않습니다");
-      if (/Email not confirmed/i.test(m)) return say("이메일 인증을 먼저 마쳐주세요");
-      if (/fetch|network/i.test(m)) return say("연결에 실패했습니다. 인터넷을 확인해 주세요");
-      say(m);
-    }
-  };
-
-  const signUp = async () => {
-    const e = email.trim().toLowerCase();
-    if (!e || !pw) return say("이메일과 비밀번호를 넣어주세요");
-    if (pw.length < 6) return say("비밀번호는 여섯 자 이상이어야 합니다");
-    if (pw !== pw2) return say("비밀번호가 서로 다릅니다");
-    if (!nick.trim()) return say("이름을 넣어주세요");
-    if (busy) return;
-    setBusy(true);
-    try {
-      await sbSignUp(e, pw, { nickname: nick.trim() });
-      setBusy(false);
-      say("가입 메일을 보냈습니다. 메일에서 인증을 마친 뒤 로그인해 주세요");
-      setTab("in");
-    } catch (err) {
-      setBusy(false);
-      const m = String(err.message || "");
-      if (/already/i.test(m)) return say("이미 가입된 이메일입니다");
-      say(m);
-    }
-  };
-
-  const reset = async () => {
-    const e = email.trim().toLowerCase();
-    if (!e) return say("이메일을 먼저 넣어주세요");
-    try { await sbReset(e); say("비밀번호 재설정 메일을 보냈습니다"); }
-    catch (err) { say(String(err.message || "보내지 못했습니다")); }
-  };
+  /* ⛔ signIn · signUp · reset 을 지웠다 (2026-09-10 밤).
+        이메일 길을 남겨두면 같은 분이 카카오와 이메일로 «두 계정» 이 되고
+        ★지갑이 갈라진다. 관리자는 admin.html 에 자기 로그인이 따로 있다.
+        ⛔ 20-sb.jsx 의 sbSignIn · sbSignUp · sbReset 은 «남겨 둔다» —
+          되살릴 일이 생기면 화면만 다시 붙이면 된다 */
 
   const signOut = () => {
     if (!confirm("로그아웃할까요? 폰에 있는 기록은 그대로 남습니다")) return;
@@ -4035,7 +4264,7 @@ function Account({ data, save, say, sync, syncNow, onClose }) {
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <span style={{ fontSize: 16, fontWeight: 700 }}>
-            {tab === "me" ? "내 계정" : tab === "up" ? "가입하기" : "로그인"}
+            {tab === "me" ? "내 계정" : "로그인"}
           </span>
           <button onClick={onClose} style={{ color: "var(--chalk)", fontSize: 13, padding: 6 }}>닫기</button>
         </div>
@@ -4076,65 +4305,30 @@ function Account({ data, save, say, sync, syncNow, onClose }) {
           </>
         ) : (
           <>
-            {/* ★ 카카오로 시작 — 맨 위 (2026-09-10 · 골프온·명카페와 같은 모양)
-                   ⛔ 아래 이메일 칸을 «지우지 말 것» — 관리자 두 분이 그 길로 들어온다 */}
+            {/* ★ 카카오 «하나» 만 남긴다 (2026-09-10 밤 · 대표님 · 명연재 쪽지 05)
+                   🔴 이메일 가입·로그인을 걷어냈다 — 두면 계정이 «둘로 갈라진다».
+                      같은 분이 카카오로도 이메일로도 가입하면 user_id 가 달라지고
+                      ★지갑(mc_wallet)이 user_id 에 붙어 있어 «충전한 돈을 못 쓴다».
+                   ⛔ Supabase 의 Email Provider 는 «끄지 않는다» — 화면만 없앤 것이다.
+                   ⚠ 관리자 두 분은 admin.html 에 «자기 로그인» 이 따로 있다 (198줄).
+                     그래서 여기서 걷어내도 관리자는 그대로 들어온다 — 값으로 확인했다. */}
             <button onClick={sbKakaoGo} style={{
               width: "100%", padding: 15, fontSize: 15, fontWeight: 700,
               background: "#FEE500", color: "#191600", borderRadius: 10,
             }}>카카오로 3초 만에 시작</button>
-            <div style={{ fontSize: 11.5, color: "#6F8598", lineHeight: 1.7, margin: "9px 0 14px" }}>
+
+            <div style={{ fontSize: 12.5, color: "var(--ivory)", lineHeight: 1.7, marginTop: 13 }}>
+              처음 오셨어도 이 단추 하나면 됩니다. 따로 가입하실 것이 없어요.
+            </div>
+            <div style={{ fontSize: 11.5, color: "#6F8598", lineHeight: 1.7, marginTop: 8 }}>
               명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다.
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-              <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
-              <span style={{ fontSize: 11.5, color: "var(--chalk)" }}>또는 이메일로</span>
-              <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
-            </div>
 
-            <span className="lbl">이메일</span>
-            <input value={email} onChange={(e) => setEmail(e.target.value)}
-              inputMode="email" placeholder="name@example.com" style={{ marginBottom: 11 }} />
-
-            <span className="lbl">비밀번호</span>
-            <div style={{ position: "relative", marginBottom: 11 }}>
-              <input type={show ? "text" : "password"} value={pw} onChange={(e) => setPw(e.target.value)}
-                placeholder="여섯 자 이상" style={{ paddingRight: 54 }} />
-              <button onClick={() => setShow(!show)} style={{
-                position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
-                fontSize: 11.5, color: "var(--chalk)", padding: "6px 8px",
-              }}>{show ? "숨김" : "보기"}</button>
-            </div>
-
-            {tab === "up" && (
-              <>
-                <span className="lbl">비밀번호 다시</span>
-                <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} style={{ marginBottom: 11 }} />
-                <span className="lbl">이름</span>
-                <input value={nick} onChange={(e) => setNick(e.target.value)}
-                  placeholder="동호회에서 부르는 이름" style={{ marginBottom: 11 }} />
-              </>
-            )}
-
-            <button className="prim" disabled={busy} onClick={tab === "up" ? signUp : signIn}
-              style={{ padding: 15, fontSize: 15, marginTop: 4 }}>
-              {busy ? "잠시만요…" : tab === "up" ? "가입하기" : "로그인"}
-            </button>
-
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
-              <button onClick={() => { setTab(tab === "up" ? "in" : "up"); setPw(""); setPw2(""); }}
-                style={{ fontSize: 12.5, color: "var(--accent)", padding: 6 }}>
-                {tab === "up" ? "이미 계정이 있습니다" : "처음이신가요? 가입하기"}
-              </button>
-              {tab === "in" && (
-                <button onClick={reset} style={{ fontSize: 12.5, color: "var(--chalk)", padding: 6 }}>
-                  비밀번호를 잊었어요
-                </button>
-              )}
-            </div>
-
+            {/* ⚠ 09-08 「로그인 필수」로 정해졌지만 관문(WALLET_GATE_ON)이 아직 꺼져 있다.
+                  지금은 로그인 없이도 실제로 써지므로 이 줄을 «남긴다».
+                  ★관문을 켜는 날 이 줄을 지워야 한다 — 말과 실제가 어긋나면 안 된다 */}
             <div style={{ fontSize: 11, color: "#6F8598", lineHeight: 1.7, marginTop: 14 }}>
               로그인하지 않아도 앱은 그대로 쓸 수 있습니다. 다만 기록이 이 폰 안에만 남습니다.
-              명연재 계정이 있으면 그대로 쓰시면 됩니다.
             </div>
           </>
         )}
@@ -4159,14 +4353,12 @@ function Ask({ say }) {
 
       <a href={`mailto:${MAIL}?subject=${encodeURIComponent("큐보드 문의")}`}
         style={{ textDecoration: "none" }}>
-        <div className="prim" style={{ padding: 15, fontSize: 15, textAlign: "center", marginBottom: 9 }}>
+        <div className="prim" style={{ padding: 15, fontSize: 15, textAlign: "center", marginBottom: 20 }}>
           ✉️ 메일로 보내기
         </div>
       </a>
-      <button className="ghost" onClick={async () => {
-        try { await navigator.clipboard.writeText(MAIL); say("메일 주소를 복사했습니다"); }
-        catch (e) { say(MAIL); }
-      }} style={{ fontSize: 13.5, marginBottom: 20 }}>주소 복사 ({MAIL})</button>
+      {/* ★ 2026-09-10 — [주소 복사] 단추를 없앴다 [대표님].
+             푸터 고객센터 줄에 메일과 전화번호가 이미 나온다 */}
 
       <div style={{
         paddingTop: 18, borderTop: "1px solid var(--line)",
@@ -4250,6 +4442,10 @@ export default function App() {
               profile: { id: uid, email: u?.email || "", nickname: nm },
             });
             put(n);
+            /* ★ 카카오로 돌아왔을 때 아무 말도 없으면 로그인이 된 줄 모른다.
+                  이메일 길에는 이 인사가 있었는데 카카오 길에는 없었다 */
+            setToast(`${nm}님, 반갑습니다`);
+            setTimeout(() => setToast(""), 2400);
             try { await window.storage.set(KEY, JSON.stringify(n)); } catch (e) {}
             setLoading(false);
             return;
