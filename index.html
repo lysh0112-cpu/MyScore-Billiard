@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-31 종료 창으로 길 모음 · 한 사람 남으면 안내 · 종료 깜빡임 -->
+<!-- build: 1판-32 무승부 두 가지 바로잡음 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -100,10 +100,13 @@ const B_INN = {
   "3": 25,
   "4": 30
 };
-const CSS = `
+
 /* ★ [종료] 깜빡임 — 판이 끝났는데 어느 단추를 눌러야 하는지 모르면 소용이 없다.
       당구대에서 폰을 멀리 두고 치시므로 «움직임» 이 있어야 눈에 든다.
-   ⛔ 너무 빠르면 거슬린다. 1.1초에 한 번씩 부드럽게 */@keyframes blinkEnd { 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.55); } }
+   ⛔ 너무 빠르면 거슬린다. 1.1초에 한 번씩 부드럽게
+   ⚠ 설명을 CSS 글 «안» 에 두지 말 것 — <style> 안 글자가 textContent 로 새어
+     검사가 화면 글자인 줄 알고 집는다 (2026-09-13 에 실제로 그랬다) */
+const CSS = `@keyframes blinkEnd { 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.55); } }
 .blinkEnd { animation: blinkEnd 1.1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .blinkEnd { animation: none; } }
 
@@ -4865,9 +4868,15 @@ function Billiard({
     /* ★ 무승부는 소리로 알리지 않는다 (사용자 지시).
           화면에는 그대로 "무승부" 로 나온다 — 소리만 안 낸다.
           다만 마지막 판이 무승부라도 경기 전체 승자는 있을 수 있으므로
-          그때는 승자만 부른다 */
-    if (drew && !last) return;
-    if (!last) {
+          그때는 승자만 부른다
+       🔴 2026-09-13 — 여기 `if (drew && !last) return;` 이 있었다.
+          «소리만» 건너뛰려던 것인데 ★함수 전체를 빠져나갔다.
+          ⇒ 무승부로 두고 다음 판을 고르면 nextGame() 까지 못 가서
+            ★점수가 안 지워지고 판 번호도 안 올라갔다 (결과표에 「1게임」이 두 번).
+          ⇒ 소리를 안 내는 것과 다음 판으로 가는 것은 «다른 일» 이다. 갈라놓는다 */
+    if (drew && !last) {
+      /* 소리 없음 */
+    } else if (!last) {
       say2(`${head}, ${win}`);
     } else {
       /* 마지막 판이면 경기 전체 승자까지 이어서 부른다 */
@@ -6172,6 +6181,21 @@ function seriesList(games) {
 }
 
 /* 승점이 같으면 공동 순위로 묶고 그다음을 건너뛴다 (7판 5장 ⑩) */
+/* ★ 시리즈 «최종» 줄 — 기록 화면과 카톡 글이 «같은 것» 을 써야 한다 (9장 ①).
+      🔴 2026-09-13 — 따로 계산하고 있었고, ★둘 다 승수가 같은지를 안 봤다.
+        「무승부 · 이인승 승 · 류승현 승」이면 1 : 1 인데 ★「류승현 1 : 1 승」 으로 나왔다.
+      ⇒ 한 곳으로 모은다. 맨 위 둘의 승수가 같으면 «무승부» 다 */
+const finalOf = score => {
+  const tot = [...(score || [])].sort((a, b) => (b.w || 0) - (a.w || 0));
+  const nums = tot.map(x => x.w || 0).join(" : ");
+  const tie = tot.length > 1 && (tot[0].w || 0) === (tot[1].w || 0);
+  return {
+    tot,
+    nums,
+    tie,
+    name: tie ? "" : tot[0]?.name || ""
+  };
+};
 const rankNoOf = (arr, i, key) => {
   let n = 1;
   for (let k = 0; k < i; k++) if (arr[k][key] > arr[i][key]) n = k + 2;
@@ -6308,11 +6332,14 @@ function MatchCard({
     style: {
       color: rankNoOf(fin, i, "pt") === 1 ? "var(--accent)" : "#B9CCDA"
     }
-  }, i > 0 ? " " : "", rankNoOf(fin, i, "pt"), "등 ", u.name, " (", u.pt, "점)\xA0")) : m.bestOf > 1 ? /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "var(--accent)"
-    }
-  }, fin[0]?.name, " \xA0", fin.map(u => u.w).join(" : "), " 승") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+  }, i > 0 ? " " : "", rankNoOf(fin, i, "pt"), "등 ", u.name, " (", u.pt, "점)\xA0")) : m.bestOf > 1 ? (() => {
+    const f = finalOf(m.score);
+    return /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "var(--accent)"
+      }
+    }, f.tie ? /*#__PURE__*/React.createElement(React.Fragment, null, f.nums, "\xA0 무승부") : /*#__PURE__*/React.createElement(React.Fragment, null, f.name, " \xA0", f.nums, " 승"));
+  })() : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--accent)"
     }
@@ -6501,8 +6528,9 @@ function buildText(g, tail) {
     const tot = [...m.score].sort((a, b) => (b.pt || 0) - (a.pt || 0));
     L.push(`최종  ${tot.map((x, i) => `${rankNoOf(tot, i, "pt")}등 ${x.name} (${x.pt || 0}점)`).join("  ")}`);
   } else if (m.bestOf > 1) {
-    const tot = [...m.score].sort((a, b) => (b.w || 0) - (a.w || 0));
-    L.push(`최종  ${tot[0]?.name || ""}  ${tot.map(x => x.w || 0).join(" : ")} 승`);
+    /* ★ 기록 화면과 «같은» finalOf 를 쓴다 (60-log.jsx). 따로 세면 어긋난다 */
+    const f = finalOf(m.score);
+    L.push(f.tie ? `최종  ${f.nums} 무승부` : `최종  ${f.name}  ${f.nums} 승`);
   } else {
     const r = m.rounds[0] || {};
     L.push(`최종  ${r.drew ? "무승부" : `${r.win || ""} 승`}`);
