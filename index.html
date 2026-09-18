@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-35 ＋2판 더 — 한 줄로 모음 -->
+<!-- build: 1판-36 더 치기 뒤 시계가 다시 돌게 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -5976,8 +5976,19 @@ function Billiard({
         setEndAsk(false);
         wakeOff();
         goHome();
+      }
+      /* 🔴 2026-09-18 — 여기가 ★창만 닫고 «시계를 다시 안 돌렸다».
+            저절로 뜬 안내 창은 묻는 동안 시계를 멈춘다(맞는 일이다).
+            그 길로 들어와 [더 치기] 를 고르면 ★멈춘 채로 남아
+            40분 넘게 쳐도 결과표에 「6분」 으로 적혔다.
+         ⚠ [종료] 를 손으로 누른 길은 시계가 안 멈추므로 멀쩡했다 —
+           그래서 «될 때도 있고 안 될 때도 있는» 모양이었다.
+         ⇒ 두 길의 결과가 «같아야» 한다. [계속 진행하기] 와 똑같이 되돌린다 */,
+      onKeepPlaying: () => {
+        setEndAsk(false);
+        setRunning(true);
+        wakeOn();
       },
-      onKeepPlaying: () => setEndAsk(false),
       onNextGame: () => {
         setEndAsk(false);
         finish("next");
