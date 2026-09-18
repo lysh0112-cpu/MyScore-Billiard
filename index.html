@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-37 3인 이상도 ＋1판 더 -->
+<!-- build: 1판-38 3인 한 명 남으면 곧바로 끝 · 시계 멈춤 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -5210,13 +5210,18 @@ function Billiard({
     return () => clearTimeout(t);
   }, [score, phase, autoEnd]); // eslint-disable-line
 
-  /* ★ 3명 이상 — 한 사람만 남으면 그 판은 «사실상» 끝난 것이다 (2026-09-11 · 대표님).
-        ⛔ 저절로 끝내지는 않는다. 마지막 한 분의 점수를 적어야 등수가 나온다.
-           ⇒ 안내만 하고, [종료] 를 ★깜빡여 어디를 눌러야 하는지 알려 준다.
-        ★ 한 번만 뜬다 (lastOne) */
+  /* ★ 3명 이상 — 한 사람만 남으면 그 판은 «끝난 것» 이다 (2026-09-11 · 고침 2026-09-18).
+        남은 한 분의 등수는 이미 꼴찌로 정해졌다. 더 칠 까닭이 없다 [대표님].
+     🔴 2026-09-18 — 전에는 안내를 ★0.7초 뒤에 띄웠다.
+        그 사이에 점수를 한 번 더 누르면 예약이 «취소되고», lastOne 이 이미 켜져 있어
+        ★다시 예약되지 않았다. 게다가 hit() 의 「안 돌고 있으면 시작」 때문에
+        ★시계만 다시 돌았다 — 「경기가 끝났는데 시간이 간다」가 이것이었다.
+     ⇒ ★늦추지 않고 «곧바로» 띄운다. 창이 화면을 덮으므로 점수를 못 누르고,
+        시계가 다시 돌 길이 없다.
+     ⛔ 「마저 치기」는 없앴다 [대표님] — 끝난 판을 더 치게 두지 않는다 */
   useEffect(() => {
     if (phase !== "board" || !multiSeat) return;
-    const alive = units.filter((p, i) => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
+    const alive = units.filter(p => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
     if (alive.length !== 1 || units.length < 3) {
       if (alive.length > 1) lastOne.current = false;
       return;
@@ -5226,8 +5231,7 @@ function Billiard({
     setRunning(false);
     wakeOff();
     setBlinkEnd(true);
-    const t = setTimeout(() => setOverAsk(true), 700);
-    return () => clearTimeout(t);
+    setOverAsk(true);
   }, [score, phase]); // eslint-disable-line
 
   /* ★ 8판 — units 로 센다 (사용자 지적 · 복식에서 이닝이 안 올라감).
@@ -5900,29 +5904,14 @@ function Billiard({
       setRunning(true);
       wakeOn();
     }
-  }, "계속 진행하기"), overAsk && /*#__PURE__*/React.createElement("button", {
-    style: {
-      width: "100%",
-      padding: 14,
-      fontSize: 15,
-      borderRadius: 12,
-      marginTop: 9,
-      background: "#1C4E80",
-      color: "#fff"
-    },
-    onClick: () => {
-      setOverAsk(false);
-      setRunning(true);
-      wakeOn();
-    }
-  }, "알겠습니다 · 마저 치기"), /*#__PURE__*/React.createElement("div", {
+  }, "계속 진행하기"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "var(--chalk)",
       marginTop: 12,
       lineHeight: 1.6
     }
-  }, overAsk ? "남은 분의 점수를 마저 적으신 뒤에 눌러도 됩니다. 다시 묻지 않습니다." : "계속 진행하면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."))), doneMsg && /*#__PURE__*/React.createElement("div", {
+  }, overAsk ? "남은 분의 등수는 이미 정해졌습니다. 시계도 멈췄습니다." : "계속 진행하면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."))), doneMsg && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       left: "50%",
