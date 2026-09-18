@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-40 승점 3·2·1 · 1등만 나오면 공동 2등 · 단판도 승점 -->
+<!-- build: 1판-41 시간 끝 · 1등만 나오면 판 종료 · 공동 2등 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -4549,11 +4549,23 @@ function Billiard({
       navigator.vibrate?.([300, 150, 300]);
     } catch (e) {}
     say2(`${limitMin}분이 다 됐습니다`);
-    /* ★ 누군가 이미 목표에 닿아 있으면 무승부가 아니다 — 승부가 난 것이다 */
-    if (units.some(p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi))) return;
-    /* 목표에 닿았을 때와 같게 — 묻는 동안 시계를 멈춘다 */
+    /* 시간이 다 됐으면 어느 쪽이든 ★시계를 멈춘다 */
     setRunning(false);
     wakeOff();
+    /* 🔴 2026-09-18 — 전에는 「닿은 사람이 있으면 그냥 return」 이었다.
+          무승부가 아니니 물을 것이 없다는 뜻이었는데, ★판을 끝내지도 시계를 멈추지도
+          않아서 「시간 종료」 글자만 뜬 채 계속 돌았다 [대표님이 찾음].
+       ⇒ 갈래는 둘이다 —
+          ① 아무도 못 닿음        → 무승부로 할지 «묻는다» (timeAsk)
+          ② ★한 명이라도 닿음     → 그 판은 «끝난» 것이다. 1등은 정해졌고
+                                   못 닿은 분들은 ★공동 2등이다 (ptsOf 가 그렇게 센다) */
+    if (multiSeat && finishOrder.length > 0) {
+      lastOne.current = true; /* 「한 사람만 남음」 안내와 겹치지 않게 */
+      setBlinkEnd(true);
+      setOverAsk(true);
+      return;
+    }
+    if (units.some(p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi))) return;
     setTimeAsk(true);
   }, [elapsed, limitMin, running]); // eslint-disable-line
   const wakeOn = async () => {
@@ -5885,8 +5897,9 @@ function Billiard({
     }
   }, overAsk ? (() => {
     const done = units.filter(p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi));
-    const alive = units.find(p => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
-    return /*#__PURE__*/React.createElement(React.Fragment, null, done.map(p => p.name).join(" · "), " ", done.length > 1 ? "님들이" : "님이", " 목표에 닿았습니다.", /*#__PURE__*/React.createElement("br", null), alive ? `${alive.name}님만 남았습니다.` : "", /*#__PURE__*/React.createElement("br", null), "아래 ", /*#__PURE__*/React.createElement("b", {
+    const rest = units.filter(p => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
+    const tie = rest.length > 1; /* ★ 시간이 끝나 여럿이 남았다 — 공동 등수다 */
+    return /*#__PURE__*/React.createElement(React.Fragment, null, tie ? `${limitMin}분이 다 됐습니다. ` : "", done.map(p => p.name).join(" · "), " ", done.length > 1 ? "님들이" : "님이", " 목표에 닿았습니다.", /*#__PURE__*/React.createElement("br", null), tie ? `${rest.map(p => p.name).join(" · ")} 님은 공동 ${done.length + 1}등입니다.` : rest[0] ? `${rest[0].name}님만 남았습니다.` : "", /*#__PURE__*/React.createElement("br", null), "아래 ", /*#__PURE__*/React.createElement("b", {
       style: {
         color: "#E8B838"
       }
@@ -6405,13 +6418,15 @@ function MatchCard({
     }
   }, m.rounds.map((r, i) => /*#__PURE__*/React.createElement("div", {
     key: i
-  }, r.no || i + 1, "번 게임\xA0", m.many ? (/* ★ 세 명 이상은 등수만 (사용자 지시) */
-  (r.names || []).map((x, j) => /*#__PURE__*/React.createElement("span", {
+  }, r.no || i + 1, "번 게임\xA0", m.many ? (
+  /* ★ 세 명 이상은 등수만 (사용자 지시).
+        ⚠ 승점이 같으면 «공동» 이다 — 카톡 글과 같은 tieRanksOf 를 쓴다 (9장 ①) */
+  tieRanksOf(r.names || []).map((g, j) => /*#__PURE__*/React.createElement("span", {
     key: j,
     style: {
-      color: j === 0 ? "var(--accent)" : "#B9CCDA"
+      color: g.no === 1 ? "var(--accent)" : "#B9CCDA"
     }
-  }, j > 0 ? " " : "", j + 1, "등 ", x.name, "\xA0"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+  }, j > 0 ? " " : "", g.tie ? "공동 " : "", g.no, "등 ", g.names.join(" · "), "\xA0"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--ivory)"
     }
@@ -6631,7 +6646,10 @@ function buildText(g, tail) {
         const sc = (r.names || []).map(x => x.score).join(" : ");
         L.push(`${no}게임  무승부  (${sc})`);
       } else {
-        L.push(`${no}게임  ${(r.names || []).map((x, j) => `${j + 1}등 ${x.name}`).join("  ")}`);
+        /* ★ 판별 등수도 «승점» 으로 묶는다 (2026-09-18).
+              시간이 끝나 1등만 나온 판은 나머지가 ★공동 2등이다.
+              등수 번호만 1·2·3 으로 매기면 최종 줄과 어긋난다 (9장 ①) */
+        L.push(`${no}게임  ${tieRanksOf(r.names || []).map(g => `${g.tie ? "공동 " : ""}${g.no}등 ${g.names.join(" · ")}`).join("  ")}`);
       }
     } else {
       const sc = (r.names || []).map(x => x.score).join(" : ");
