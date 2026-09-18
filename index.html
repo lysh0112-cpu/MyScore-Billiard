@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-38 3인 한 명 남으면 곧바로 끝 · 시계 멈춤 -->
+<!-- build: 1판-39 고르는 곳을 종료 창 한 군데로 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -5889,29 +5889,14 @@ function Billiard({
       setBlinkEnd(true);
       setEndAsk(true); /* ★ [종료] 를 누른 것과 «똑같은» 창을 연다 */
     }
-  }, "종료 창 열기"), !overAsk && /*#__PURE__*/React.createElement("button", {
-    style: {
-      width: "100%",
-      padding: 15,
-      fontSize: 16,
-      borderRadius: 12,
-      marginTop: 9,
-      background: "#1C4E80",
-      color: "#fff"
-    },
-    onClick: () => {
-      setTimeAsk(false);
-      setRunning(true);
-      wakeOn();
-    }
-  }, "계속 진행하기"), /*#__PURE__*/React.createElement("div", {
+  }, "종료 창 열기"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "var(--chalk)",
       marginTop: 12,
       lineHeight: 1.6
     }
-  }, overAsk ? "남은 분의 등수는 이미 정해졌습니다. 시계도 멈췄습니다." : "계속 진행하면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."))), doneMsg && /*#__PURE__*/React.createElement("div", {
+  }, overAsk ? "남은 분의 등수는 이미 정해졌습니다. 시계도 멈췄습니다." : "종료 창에서 [더 치기] 를 고르시면 승부가 날 때까지 칩니다. 다시 묻지 않습니다."))), doneMsg && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       left: "50%",
