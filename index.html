@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-39 고르는 곳을 종료 창 한 군데로 -->
+<!-- build: 1판-40 승점 3·2·1 · 1등만 나오면 공동 2등 · 단판도 승점 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -54,6 +54,21 @@ const {
    원본: score-hub.jsx 8판 (11종목)
    ══════════════════════════════════════════════ */
 
+/* ★ 3인 이상 «등수 점수» — 한 곳에서만 센다 (2026-09-18 대표님이 정함).
+      🔴 전에는 finish() 와 commit() 두 군데서 따로 셌다. 두 군데면 반드시 어긋난다 (9장 ①).
+      세 명이면 1등 3점 · 2등 2점 · 3등 1점. ⛔ 다만 «목표에 닿은 사람 수» 로 갈린다 —
+        닿은 사람 0명 (무승부)   → 모두 같은 점수 (셋이면 2점씩)
+        ★닿은 사람 1명          → 1등만 제 점수, 나머지는 ★«공동 2등» 으로 같은 점수
+                                 (시간이 끝나 둘 다 못 닿았으니 가릴 수가 없다)
+        닿은 사람 2명 이상       → 도달 순서대로 3 · 2 · 1
+      ⚠ 둘이 닿고 한 명만 남은 판은 «승부가 난» 것이다 — 남은 한 분은 3등(1점)이다 [대표님]
+   n=사람 수 · done=목표에 닿은 사람 수 · r=그 사람 등수(0부터, 못 닿았으면 -1) */
+const ptsOf = (n, done, r) => {
+  const even = Math.round((n + 1) / 2);
+  if (!done) return even;
+  if (done === 1) return r === 0 ? n : n - 1;
+  return r < 0 ? 1 : n - r;
+};
 const KEY = "billiard:app:v1"; /* 이 앱의 자료 */
 
 /* ★ 자매 앱 · 약관 · 회사 정보 (2026-09-10 · 명카페 전달문 03)
@@ -4842,6 +4857,9 @@ function Billiard({
       startAt: startAt || Date.now() - elapsed * 1000,
       endAt: Date.now(),
       order: rank.map(u => u.key),
+      /* ★ 목표에 닿은 사람 수 — 승점을 나중에 다시 셀 때 필요하다 (ptsOf) */
+      done: finishOrder.length,
+      reached: [...finishOrder],
       teams: units.map(u => ({
         key: u.key,
         name: u.name,
@@ -4871,10 +4889,11 @@ function Billiard({
       const n = {
         ...x
       };
-      /* 무승부면 모두 같은 점수를 준다. 순서를 매기면 안 된다 */
-      const evenPt = Math.round((units.length + 1) / 2);
+      /* ★ 셈은 ptsOf 한 곳에서만 한다 (00-head.jsx) */
+      const done = finishOrder.length;
       rank.forEach((u, i) => {
-        n[u.key] = (n[u.key] || 0) + (drew ? evenPt : units.length - i);
+        const r = finishOrder.indexOf(u.key);
+        n[u.key] = (n[u.key] || 0) + ptsOf(units.length, done, r);
       });
       return n;
     });
@@ -5035,17 +5054,13 @@ function Billiard({
       }),
       byRank: units.length > 2,
       rounds: log.map((e, i) => {
-        /* ★ 판마다 등수 점수를 함께 담는다 (7판 · 사용자 요청).
-              finish() 가 pts 에 더할 때 쓴 식과 똑같이 센다 — 한 곳에서 두 번 세면 어긋난다.
-              e.order 는 그 판의 순위(1등부터)이고, 세 명이면 3·2·1 점이 된다.
-              ★ 당구는 동점이 없다. 꼴찌 한 사람만 남을 때까지 치므로 순위가 늘 갈린다 */
+        /* ★ 판마다 등수 점수를 함께 담는다.
+              🔴 2026-09-18 — 여기서 «따로» 세다가 finish() 와 어긋났다.
+                 이제 둘 다 ptsOf 하나만 부른다 (00-head.jsx · 9장 ①) */
         const n = e.teams.length;
-        const evenPt = Math.round((n + 1) / 2);
-        const ptOf = k => {
-          if (e.drew) return evenPt;
-          const r = (e.order || []).indexOf(k);
-          return r < 0 ? 1 : n - r;
-        };
+        const reach = e.reached || (e.drew ? [] : e.order || []);
+        const done = e.done != null ? e.done : reach.length;
+        const ptOf = k => ptsOf(n, done, reach.indexOf(k));
         return {
           no: e.no,
           line: e.teams.map(x => `${x.name} ${x.score}`).join(" : "),
@@ -5114,6 +5129,11 @@ function Billiard({
         startAt: e.startAt,
         endAt: e.endAt,
         order: e.order,
+        /* ★ 단판에는 요약(series)이 없다. 그래서 승점을 나중에 다시 세야 하는데
+              «목표에 닿은 사람» 을 모르면 셀 수가 없었다 — 전부 0점이 됐다 (2026-09-18).
+           ⇒ 줄마다 함께 담는다. 옛 기록에는 없으므로 읽는 쪽이 없어도 견뎌야 한다 */
+        reached: e.reached || [],
+        done: e.done != null ? e.done : 0,
         innings: Math.max(1, ...e.teams.map(t => t.inn)),
         team,
         players: flat,
@@ -6131,7 +6151,9 @@ const unitsOf = g => {
       score: Number(p.score) || 0,
       handi: Number(p.handicap) || 0,
       inn: Number(p.inn) || Number(g.innings) || 0,
-      high: Number(p.high) || 0
+      high: Number(p.high) || 0,
+      /* ★ 자리 열쇠 — order·reached 가 이 값으로 저장된다 (7판에 찾은 버그와 같은 자리) */
+      seatKey: p.seatKey || null
     });
   });
   return seen;
@@ -6149,11 +6171,17 @@ function matchOf(first, list) {
   /* 판별 줄 — 여러 판이면 요약에서, 단판이면 그 판에서 */
   const rounds = sum ? sum.rounds || [] : [{
     no: 1,
-    names: us.map(u => ({
-      name: u.name,
-      score: u.score,
-      pt: 0
-    })),
+    /* ★ 단판도 승점을 센다 — ptsOf 한 곳에서 (00-head.jsx).
+          ⚠ reached 가 없는 «옛 기록» 은 order 로 갈음한다. 그래도 없으면 0 */
+    names: (() => {
+      const reach = first.reached || (first.drew ? [] : first.order || []);
+      const done = first.done != null ? first.done : reach.length;
+      return us.map(u => ({
+        name: u.name,
+        score: u.score,
+        pt: us.length > 2 ? ptsOf(us.length, done, reach.indexOf(u.seatKey)) : 0
+      }));
+    })(),
     drew: !!first.drew,
     win: first.team ? first.winnerSide || "" : (first.players || []).find(p => p.won === true)?.name || ""
   }];
@@ -6234,9 +6262,15 @@ const finalOf = score => {
   };
 };
 
-/* ★ 3인 이상 «최종» 줄 — 승점이 같으면 «공동 N등» 으로 묶는다.
-      ⚠ 무승부 판은 승점을 똑같이 나눠 주므로(evenPt) 같아지는 일이 흔하다.
+/* ★ 3인 이상 «최종» 줄 — 승점으로 센다 (1등 3점 · 2등 2점 · 3등 1점).
+      🔴 2026-09-18 — 단판일 때 ★승점이 «비어» 있어 전부 0이 되고
+        「공동 1등 김경석 · 류승현 · 이성은 (0점)」 이 나왔다.
+        commit() 이 bestOf > 1 일 때만 요약(series)을 만들었기 때문이다.
+      ⇒ 요약이 없으면 그 판의 줄에서 승점을 모아 쓴다. 승점은 «늘» 적는다 [대표님].
       ⇒ 기록 화면과 카톡 글이 «같은 것» 을 쓴다 (9장 ①) */
+/* ★ 승점이 같으면 «공동 N등» 으로 묶는다.
+      ⚠ 무승부 판은 승점을 똑같이 나눠 주고, 1등만 나온 판은 나머지가 «공동 2등» 이라
+        같아지는 일이 흔하다 */
 const tieRanksOf = score => {
   const tot = [...(score || [])].sort((a, b) => (b.pt || 0) - (a.pt || 0));
   const out = [];
@@ -6254,7 +6288,19 @@ const tieRanksOf = score => {
   }
   return out;
 };
-const tieGroupsOf = score => tieRanksOf(score).map(g => `${g.tie ? "공동 " : ""}${g.no}등 ${g.names.join(" · ")} (${g.pt}점)`).join("  ");
+const manyPtsOf = m => {
+  if ((m.score || []).some(x => (x.pt || 0) > 0)) return m.score;
+  const by = {};
+  (m.rounds || []).forEach(r => (r.names || []).forEach(x => {
+    by[x.name] = (by[x.name] || 0) + (Number(x.pt) || 0);
+  }));
+  return (m.score || []).map(x => ({
+    ...x,
+    pt: by[x.name] || 0
+  }));
+};
+const manyRanksOf = m => tieRanksOf(manyPtsOf(m));
+const manyGroupsOf = m => manyRanksOf(m).map(g => `${g.tie ? "공동 " : ""}${g.no}등 ${g.names.join(" · ")} (${g.pt}점)`).join("  ");
 const rankNoOf = (arr, i, key) => {
   let n = 1;
   for (let k = 0; k < i; k++) if (arr[k][key] > arr[i][key]) n = k + 2;
@@ -6387,7 +6433,7 @@ function MatchCard({
       marginRight: 5
     }
   }, "최종"), m.many ? (/* ★ 카톡 글과 «같은» tieRanksOf 를 쓴다. 따로 세면 어긋난다 */
-  tieRanksOf(m.score).map((g, i) => /*#__PURE__*/React.createElement("span", {
+  manyRanksOf(m).map((g, i) => /*#__PURE__*/React.createElement("span", {
     key: g.no + "-" + i,
     style: {
       color: g.no === 1 ? "var(--accent)" : "#B9CCDA"
@@ -6597,7 +6643,7 @@ function buildText(g, tail) {
   if (m.many) {
     /* ★ 승점이 같으면 «공동 1등» 이다. 등수 번호만 같게 주고 말을 안 붙이면
           「1등 김성곤 (7점)  1등 류승현 (7점)」 처럼 어색하게 나간다 */
-    L.push(`최종  ${tieGroupsOf(m.score)}`);
+    L.push(`최종  ${manyGroupsOf(m)}`);
   } else if (m.bestOf > 1) {
     /* ★ 기록 화면과 «같은» finalOf 를 쓴다 (60-log.jsx). 따로 세면 어긋난다 */
     const f = finalOf(m.score);
