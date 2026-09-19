@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-41 시간 끝 · 1등만 나오면 판 종료 · 공동 2등 -->
+<!-- build: 1판-42 무승부 뒤 다음 판 · 첫 판 기록이 남게 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -4959,6 +4959,14 @@ function Billiard({
       } else if (champ) say2(`${tail}, 최종 ${champ} 게임 승리했습니다`);else if (!drew) say2(tail);
     }
     if (go === "next") {
+      /* 🔴 2026-09-18 — 단판에서 [무승부로 두고 다음 판] 을 골라도 ★bestOf 가 1 그대로였다.
+            commit() 은 bestOf > 1 일 때만 요약(series)을 만들므로 ★여러 판을 묶을 자리가
+            없어졌고, 기록에 ★마지막 한 판만 남았다 (첫 판 무승부가 통째로 사라짐).
+         ⇒ 정해둔 판 수를 다 쓴 채로 «다음 판» 으로 가면 판 수를 늘린다.
+            늘리는 단위는 [＋판 더] 와 «같다» — 2인·복식 2판씩 · 3인 이상 1판씩 [대표님] */
+      if (gameNo >= bestOf) {
+        setBestOf(multiSeat ? bestOf + 1 : bestOf === 1 ? 3 : bestOf + 2);
+      }
       nextGame();
       return;
     }
