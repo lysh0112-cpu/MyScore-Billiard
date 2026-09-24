@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-42 무승부 뒤 다음 판 · 첫 판 기록이 남게 -->
+<!-- build: 1판-43 치던 경기 이어서 치기 · 화면 꺼짐 고침 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -40,8 +40,7 @@ window.addEventListener('error', function(e){
 });
 </script>
 
-<script>
-
+<script>function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
   useState,
   useEffect,
@@ -100,6 +99,39 @@ const CO = {
   biz: "296-86-04182",
   addr: "서울특별시 강북구 솔매로45길 95, 2층 (미아동)",
   tel: "010-6493-2252" /* ★2026-09-10 개통 · 세 앱이 같은 번호 */
+};
+/* ★ 치던 경기를 담아두는 곳 (2026-09-24 · 대표님).
+      「갤럭시탭에서 잘못 눌러 점수판을 빠져나가면 지금까지 친 점수가 사라진다」
+      ⇒ 점수가 바뀔 때마다 조용히 담아두고, 홈에서 «이어서 치기» 로 돌아간다.
+   ⛔ 이 폰 안에만 담는다. 서버에 안 보낸다.
+   ⚠ 12시간이 지난 것은 안 보여준다 — 어제 것이 오늘 뜨면 헷갈린다 */
+const LIVE = "billiard:live:v1";
+const LIVE_HOURS = 12;
+const liveGet = () => {
+  try {
+    const r = JSON.parse(localStorage.getItem(LIVE) || "null");
+    if (!r || !r.at) return null;
+    if (Date.now() - r.at > LIVE_HOURS * 3600 * 1000) {
+      localStorage.removeItem(LIVE);
+      return null;
+    }
+    return r;
+  } catch (e) {
+    return null;
+  }
+};
+const livePut = v => {
+  try {
+    localStorage.setItem(LIVE, JSON.stringify({
+      ...v,
+      at: Date.now()
+    }));
+  } catch (e) {}
+};
+const liveClear = () => {
+  try {
+    localStorage.removeItem(LIVE);
+  } catch (e) {}
 };
 const HUB = "score:hub:v1"; /* ★ My Score 가 쓰던 자료. 처음 켤 때 당구만 가져온다 */
 
@@ -766,7 +798,7 @@ function ScorePad({
       color: "#6f6f6f",
       marginLeft: 7
     }
-  }, "⇄")), badge && /*#__PURE__*/React.createElement("div", {
+  }, "\u21C4")), badge && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: PAD_LBL,
       color: badge.color || "#E8B838",
@@ -1768,7 +1800,7 @@ function ReplaySheet({
       color: "#5B7186",
       width: 32
     }
-  }, "-", CAM_SEC, "초"), /*#__PURE__*/React.createElement("div", {
+  }, "-", CAM_SEC, "\uCD08"), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       height: 24,
@@ -1817,14 +1849,14 @@ function ReplaySheet({
       width: 24,
       textAlign: "right"
     }
-  }, "지금")), /*#__PURE__*/React.createElement("div", {
+  }, "\uC9C0\uAE08")), /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       fontSize: 11,
       color: "#6F8598",
       marginBottom: 9
     }
-  }, "노란 손잡이를 끌어 저장할 곳을 맞추세요 · 최대 ", GIF_MAX_SEC, "초"), /*#__PURE__*/React.createElement("div", {
+  }, "\uB178\uB780 \uC190\uC7A1\uC774\uB97C \uB04C\uC5B4 \uC800\uC7A5\uD560 \uACF3\uC744 \uB9DE\uCD94\uC138\uC694 \xB7 \uCD5C\uB300 ", GIF_MAX_SEC, "\uCD08"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 7,
@@ -1842,7 +1874,7 @@ function ReplaySheet({
       color: "#B9CCDA",
       fontSize: 12.5
     }
-  }, "🖼 사진 한 장"), /*#__PURE__*/React.createElement("button", {
+  }, "\uD83D\uDDBC \uC0AC\uC9C4 \uD55C \uC7A5"), /*#__PURE__*/React.createElement("button", {
     onClick: saveGif,
     disabled: !!busy,
     style: {
@@ -1854,14 +1886,14 @@ function ReplaySheet({
       fontSize: 13,
       fontWeight: 700
     }
-  }, "▶ 움직이는 사진 만들기", /*#__PURE__*/React.createElement("span", {
+  }, "\u25B6 \uC6C0\uC9C1\uC774\uB294 \uC0AC\uC9C4 \uB9CC\uB4E4\uAE30", /*#__PURE__*/React.createElement("span", {
     style: {
       fontWeight: 400,
       fontSize: 11,
       color: "#5C4A0F",
       marginLeft: 6
     }
-  }, "약 ", Math.max(1, Math.round((pick.b - pick.a + 1) * 34 / 100) / 10), "MB")))) :
+  }, "\uC57D ", Math.max(1, Math.round((pick.b - pick.a + 1) * 34 / 100) / 10), "MB")))) :
   /*#__PURE__*/
   /* ── 평소 ── */
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
@@ -1877,7 +1909,7 @@ function ReplaySheet({
       color: "#5B7186",
       width: 32
     }
-  }, "-", CAM_SEC, "초"), /*#__PURE__*/React.createElement("input", {
+  }, "-", CAM_SEC, "\uCD08"), /*#__PURE__*/React.createElement("input", {
     type: "range",
     min: 0,
     max: Math.max(0, total - 1),
@@ -1899,7 +1931,7 @@ function ReplaySheet({
       width: 24,
       textAlign: "right"
     }
-  }, "지금")), /*#__PURE__*/React.createElement("div", {
+  }, "\uC9C0\uAE08")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -1916,23 +1948,23 @@ function ReplaySheet({
       ...key,
       width: 40
     },
-    "aria-label": "맨 앞으로",
+    "aria-label": "\uB9E8 \uC55E\uC73C\uB85C",
     onClick: () => {
       setPlay(false);
       setI(0);
     }
-  }, "⏮"), /*#__PURE__*/React.createElement("button", {
+  }, "\u23EE"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...key,
       width: 40,
       fontSize: 17
     },
-    "aria-label": "한 장 뒤로",
+    "aria-label": "\uD55C \uC7A5 \uB4A4\uB85C",
     onClick: () => {
       setPlay(false);
       setI(n => Math.max(0, n - 1));
     }
-  }, "‹"), /*#__PURE__*/React.createElement("button", {
+  }, "\u2039"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...key,
       width: 52,
@@ -1940,7 +1972,7 @@ function ReplaySheet({
       color: "#141200",
       fontSize: 17
     },
-    "aria-label": "재생",
+    "aria-label": "\uC7AC\uC0DD",
     onClick: () => {
       if (i >= total - 1) setI(0);
       setPlay(!play);
@@ -1951,12 +1983,12 @@ function ReplaySheet({
       width: 40,
       fontSize: 17
     },
-    "aria-label": "한 장 앞으로",
+    "aria-label": "\uD55C \uC7A5 \uC55E\uC73C\uB85C",
     onClick: () => {
       setPlay(false);
       setI(n => Math.min(total - 1, n + 1));
     }
-  }, "›")), /*#__PURE__*/React.createElement("span", {
+  }, "\u203A")), /*#__PURE__*/React.createElement("span", {
     style: bar
   }), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1977,7 +2009,7 @@ function ReplaySheet({
       background: rate === r ? ACCENT : "rgba(0,0,0,.32)",
       color: rate === r ? "#141200" : "#61798C"
     }
-  }, r, "배"))), /*#__PURE__*/React.createElement("span", {
+  }, r, "\uBC30"))), /*#__PURE__*/React.createElement("span", {
     style: bar
   }), /*#__PURE__*/React.createElement("button", {
     onClick: openPick,
@@ -1992,7 +2024,7 @@ function ReplaySheet({
       border: "1px solid rgba(232,184,56,.5)",
       color: ACCENT
     }
-  }, "⏬ 저장"), /*#__PURE__*/React.createElement("button", {
+  }, "\u23EC \uC800\uC7A5"), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
       flexShrink: 0,
@@ -2003,7 +2035,7 @@ function ReplaySheet({
       background: "rgba(255,255,255,.06)",
       color: "#B9CCDA"
     }
-  }, "점수판"))), busy > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "\uC810\uC218\uD310"))), busy > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       inset: 0,
@@ -2020,7 +2052,7 @@ function ReplaySheet({
       fontSize: 15,
       fontWeight: 700
     }
-  }, "움직이는 사진을 만드는 중…"), /*#__PURE__*/React.createElement("div", {
+  }, "\uC6C0\uC9C1\uC774\uB294 \uC0AC\uC9C4\uC744 \uB9CC\uB4DC\uB294 \uC911\u2026"), /*#__PURE__*/React.createElement("div", {
     style: {
       width: "60%",
       maxWidth: 300,
@@ -2041,7 +2073,7 @@ function ReplaySheet({
       fontSize: 11.5,
       color: "#6F8598"
     }
-  }, "몇 초 걸립니다. 그대로 두세요"))));
+  }, "\uBA87 \uCD08 \uAC78\uB9BD\uB2C8\uB2E4. \uADF8\uB300\uB85C \uB450\uC138\uC694"))));
 }
 
 /* ── QR 로 카메라 주소 넣기 ────────────────────
@@ -2166,14 +2198,14 @@ function QrScan({
       fontSize: 15,
       fontWeight: 700
     }
-  }, "QR 찍기"), /*#__PURE__*/React.createElement("button", {
+  }, "QR \uCC0D\uAE30"), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
       fontSize: 12.5,
       color: "#B9CCDA",
       padding: "4px 6px"
     }
-  }, "닫기 ✕")), /*#__PURE__*/React.createElement("div", {
+  }, "\uB2EB\uAE30 \u2715")), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative",
       width: 200,
@@ -2242,18 +2274,18 @@ function QrScan({
       margin: "0 auto",
       fontSize: 14
     }
-  }, "닫고 직접 넣기")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "\uB2EB\uACE0 \uC9C1\uC811 \uB123\uAE30")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13.5,
       color: "#F4EEDF",
       marginBottom: 4
     }
-  }, "테이블 옆 QR을 네모 안에 맞추세요"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD14C\uC774\uBE14 \uC606 QR\uC744 \uB124\uBAA8 \uC548\uC5D0 \uB9DE\uCD94\uC138\uC694"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "#8fa6b8"
     }
-  }, "찍히면 저절로 닫힙니다"))));
+  }, "\uCC0D\uD788\uBA74 \uC800\uC808\uB85C \uB2EB\uD799\uB2C8\uB2E4"))));
 }
 /* ── 홈 = 경기 준비 ──────────────────────────
    ★ 11종목 앱의 홈은 "무엇을 할지 고르는 곳" 이었지만,
@@ -2281,7 +2313,7 @@ function Banner() {
     }
   }, ok ? /*#__PURE__*/React.createElement("img", {
     src: "logo.jpg",
-    alt: "큐보드",
+    alt: "\uD050\uBCF4\uB4DC",
     onError: () => setOk(false),
     style: {
       width: "86%",
@@ -2359,7 +2391,7 @@ const Sisters = () => /*#__PURE__*/React.createElement("div", {
     fontSize: 15,
     color: "var(--chalk)"
   }
-}, "›"))))), /*#__PURE__*/React.createElement("div", {
+}, "\u203A"))))), /*#__PURE__*/React.createElement("div", {
   style: {
     fontSize: 10.5,
     color: "var(--chalk)",
@@ -2367,7 +2399,7 @@ const Sisters = () => /*#__PURE__*/React.createElement("div", {
     marginTop: 7,
     lineHeight: 1.6
   }
-}, "사주·상담 · 골프 스코어 — 지갑은 세 곳이 함께 씁니다"));
+}, "\uC0AC\uC8FC\xB7\uC0C1\uB2F4 \xB7 \uACE8\uD504 \uC2A4\uCF54\uC5B4 \u2014 \uC9C0\uAC11\uC740 \uC138 \uACF3\uC774 \uD568\uAED8 \uC501\uB2C8\uB2E4"));
 
 /* ★ 약관 두 줄 — ⛔ 큐보드에 만들지 않는다. 명카페 한 벌로 보낸다 (00-head 의 TERMS·PRIVACY)
       ★ 같은 창으로 연다 (이 앱에 target="_blank" 가 한 곳도 없다) */
@@ -2389,17 +2421,17 @@ const LegalLinks = ({
     color: "inherit",
     textDecoration: "underline"
   }
-}, "이용약관"), /*#__PURE__*/React.createElement("span", {
+}, "\uC774\uC6A9\uC57D\uAD00"), /*#__PURE__*/React.createElement("span", {
   style: {
     opacity: .5
   }
-}, "·"), /*#__PURE__*/React.createElement("a", {
+}, "\xB7"), /*#__PURE__*/React.createElement("a", {
   href: PRIVACY,
   style: {
     color: "inherit",
     textDecoration: "underline"
   }
-}, "개인정보처리방침"));
+}, "\uAC1C\uC778\uC815\uBCF4\uCC98\uB9AC\uBC29\uCE68"));
 
 /* 알약 한 줄 — 고른 것은 노랑, 안 고른 것은 어두운 바탕에 흐린 글씨.
    ★ 테두리만 두면 대비가 약해 무엇을 골랐는지 한눈에 안 들어온다 */
@@ -2481,23 +2513,23 @@ const HandiBox = ({
   }
 }, /*#__PURE__*/React.createElement("button", {
   onClick: () => set(String((Number(value) || 0) + step)),
-  "aria-label": "목표 올리기",
+  "aria-label": "\uBAA9\uD45C \uC62C\uB9AC\uAE30",
   style: {
     fontSize: 9,
     lineHeight: 1,
     color: "#7E9AB0",
     padding: "2px 3px"
   }
-}, "▲"), /*#__PURE__*/React.createElement("button", {
+}, "\u25B2"), /*#__PURE__*/React.createElement("button", {
   onClick: () => set(String(Math.max(0, (Number(value) || 0) - step))),
-  "aria-label": "목표 내리기",
+  "aria-label": "\uBAA9\uD45C \uB0B4\uB9AC\uAE30",
   style: {
     fontSize: 9,
     lineHeight: 1,
     color: "#7E9AB0",
     padding: "2px 3px"
   }
-}, "▼")));
+}, "\u25BC")));
 
 /* 공 두 개 — 어두운 알약 위에 얹어 "누르는 것" 으로 보이게 한다.
    ★ 쓰는 쪽에 노란 테두리. 아래 설명 문구는 없앴다 (모양으로 알 수 있어야 한다) */
@@ -2565,7 +2597,7 @@ function PlayerRow({
     onPick: onBall
   }), /*#__PURE__*/React.createElement("input", {
     value: p.name,
-    placeholder: "이름",
+    placeholder: "\uC774\uB984",
     onChange: e => onName(e.target.value),
     onFocus: () => setTip(true),
     onBlur: () => setTimeout(() => setTip(false), 180),
@@ -2585,7 +2617,7 @@ function PlayerRow({
   }), /*#__PURE__*/React.createElement("button", {
     onClick: onUp,
     disabled: i === 0,
-    "aria-label": "위로 옮기기",
+    "aria-label": "\uC704\uB85C \uC62E\uAE30\uAE30",
     style: {
       width: 28,
       height: 28,
@@ -2595,9 +2627,9 @@ function PlayerRow({
       border: "1px solid rgba(255,255,255,.18)",
       color: i === 0 ? "#2E4358" : "#7E9AB0"
     }
-  }, "▲"), canDel && /*#__PURE__*/React.createElement("button", {
+  }, "\u25B2"), canDel && /*#__PURE__*/React.createElement("button", {
     onClick: onDel,
-    "aria-label": "빼기",
+    "aria-label": "\uBE7C\uAE30",
     style: {
       width: 28,
       height: 28,
@@ -2607,7 +2639,7 @@ function PlayerRow({
       border: "1px solid rgba(255,255,255,.18)",
       color: "#7E9AB0"
     }
-  }, "✕")), cand.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "\u2715")), cand.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       left: 60,
@@ -2681,12 +2713,12 @@ function TeamCard({
       fontWeight: 700,
       color: first ? ACCENT : "#7E9AB0"
     }
-  }, si + 1, "편", first ? " · 선공" : ""), /*#__PURE__*/React.createElement("span", {
+  }, si + 1, "\uD3B8", first ? " · 선공" : ""), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 11.5,
       color: "#7E9AB0"
     }
-  }, "편 핸디 ", sum)), idxs.map((j, at) => /*#__PURE__*/React.createElement("div", {
+  }, "\uD3B8 \uD578\uB514 ", sum)), idxs.map((j, at) => /*#__PURE__*/React.createElement("div", {
     key: ps[j]?.key || j,
     style: {
       display: "flex",
@@ -2696,7 +2728,7 @@ function TeamCard({
     }
   }, /*#__PURE__*/React.createElement("input", {
     value: ps[j]?.name || "",
-    placeholder: "이름",
+    placeholder: "\uC774\uB984",
     onChange: e => onName(j, e.target.value),
     style: {
       flex: 1,
@@ -2714,7 +2746,7 @@ function TeamCard({
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => onUp(si, at),
     disabled: at === 0,
-    "aria-label": "먼저 치게",
+    "aria-label": "\uBA3C\uC800 \uCE58\uAC8C",
     style: {
       width: 28,
       height: 28,
@@ -2724,9 +2756,9 @@ function TeamCard({
       border: "1px solid rgba(255,255,255,.18)",
       color: at === 0 ? "#2E4358" : "#7E9AB0"
     }
-  }, "▲"), /*#__PURE__*/React.createElement("button", {
+  }, "\u25B2"), /*#__PURE__*/React.createElement("button", {
     onClick: () => onCross(si, at),
-    "aria-label": "상대 편과 맞바꾸기",
+    "aria-label": "\uC0C1\uB300 \uD3B8\uACFC \uB9DE\uBC14\uAFB8\uAE30",
     style: {
       width: 28,
       height: 28,
@@ -2736,7 +2768,7 @@ function TeamCard({
       border: "1px solid rgba(232,184,56,.4)",
       color: ACCENT
     }
-  }, "⇄"))));
+  }, "\u21C4"))));
 }
 function Home({
   data,
@@ -2918,7 +2950,7 @@ function Home({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setTv(!tv),
-    title: "큰 화면 모드",
+    title: "\uD070 \uD654\uBA74 \uBAA8\uB4DC",
     style: {
       width: 34,
       height: 34,
@@ -2927,7 +2959,7 @@ function Home({
       opacity: tv ? 1 : .7,
       border: "1px solid " + (tv ? ACCENT : "rgba(255,255,255,.2)")
     }
-  }, "🖥"), /*#__PURE__*/React.createElement("button", {
+  }, "\uD83D\uDDA5"), /*#__PURE__*/React.createElement("button", {
     onClick: onLogin,
     title: me ? "내 계정" : "로그인",
     style: {
@@ -2976,7 +3008,7 @@ function Home({
       fontSize: 19,
       fontWeight: 700
     }
-  }, "새 게임 설정"), /*#__PURE__*/React.createElement("button", {
+  }, "\uC0C8 \uAC8C\uC784 \uC124\uC815"), /*#__PURE__*/React.createElement("button", {
     onClick: fillLast,
     style: {
       display: "inline-flex",
@@ -2988,15 +3020,15 @@ function Home({
       fontSize: 11.5,
       color: "#9FBBD0"
     }
-  }, "↺ 불러오기")), /*#__PURE__*/React.createElement("div", {
+  }, "\u21BA \uBD88\uB7EC\uC624\uAE30")), /*#__PURE__*/React.createElement("div", {
     style: {
       ...card,
       marginBottom: 22
     }
-  }, /*#__PURE__*/React.createElement(Lbl, null, "당구장"), /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement(Lbl, null, "\uB2F9\uAD6C\uC7A5"), /*#__PURE__*/React.createElement("input", {
     value: place,
     onChange: e => setPlace(e.target.value),
-    placeholder: "이름을 넣으세요",
+    placeholder: "\uC774\uB984\uC744 \uB123\uC73C\uC138\uC694",
     style: {
       background: "rgba(0,0,0,.35)",
       border: "none",
@@ -3014,7 +3046,7 @@ function Home({
       flex: 1,
       minWidth: 0
     }
-  }, /*#__PURE__*/React.createElement(Lbl, null, "종목"), /*#__PURE__*/React.createElement(Pills, {
+  }, /*#__PURE__*/React.createElement(Lbl, null, "\uC885\uBAA9"), /*#__PURE__*/React.createElement(Pills, {
     value: mode,
     set: changeMode,
     items: [["3", "3쿠션"], ["4", "4구"]]
@@ -3023,7 +3055,7 @@ function Home({
       flex: 1.15,
       minWidth: 0
     }
-  }, /*#__PURE__*/React.createElement(Lbl, null, "방식"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Lbl, null, "\uBC29\uC2DD"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1.25fr",
@@ -3039,7 +3071,7 @@ function Home({
       background: !team ? ACCENT : "rgba(0,0,0,.32)",
       color: !team ? "#141200" : "#61798C"
     }
-  }, "단식"), /*#__PURE__*/React.createElement("button", {
+  }, "\uB2E8\uC2DD"), /*#__PURE__*/React.createElement("button", {
     onClick: toDoubles,
     style: {
       borderRadius: 10,
@@ -3049,7 +3081,7 @@ function Home({
       background: team ? ACCENT : "rgba(0,0,0,.32)",
       color: team ? "#141200" : ps.length === 4 ? "#61798C" : "#40566B"
     }
-  }, "복식·4명")))), /*#__PURE__*/React.createElement(Lbl, null, "게임 수"), /*#__PURE__*/React.createElement(Pills, {
+  }, "\uBCF5\uC2DD\xB74\uBA85")))), /*#__PURE__*/React.createElement(Lbl, null, "\uAC8C\uC784 \uC218"), /*#__PURE__*/React.createElement(Pills, {
     cols: "repeat(4,1fr)",
     value: bestOf,
     set: setBestOf,
@@ -3097,7 +3129,7 @@ function Home({
       color: "#B9CCDA",
       marginBottom: 20
     }
-  }, "⇅ 1편 ⇄ 2편 · 선공 바꾸기")) : /*#__PURE__*/React.createElement(React.Fragment, null, ps.map((p, i) => /*#__PURE__*/React.createElement(PlayerRow, {
+  }, "\u21C5 1\uD3B8 \u21C4 2\uD3B8 \xB7 \uC120\uACF5 \uBC14\uAFB8\uAE30")) : /*#__PURE__*/React.createElement(React.Fragment, null, ps.map((p, i) => /*#__PURE__*/React.createElement(PlayerRow, {
     key: p.key,
     p: p,
     i: i,
@@ -3123,7 +3155,7 @@ function Home({
       color: ACCENT,
       marginBottom: 20
     }
-  }, "＋ 선수 추가")), /*#__PURE__*/React.createElement("button", {
+  }, "\uFF0B \uC120\uC218 \uCD94\uAC00")), /*#__PURE__*/React.createElement("button", {
     onClick: () => setMore(!more),
     style: {
       width: "100%",
@@ -3140,14 +3172,14 @@ function Home({
     style: {
       fontSize: 15
     }
-  }, "⚙"), /*#__PURE__*/React.createElement("span", {
+  }, "\u2699"), /*#__PURE__*/React.createElement("span", {
     style: {
       flex: 1,
       fontSize: 14,
       fontWeight: 600,
       color: "#B9CCDA"
     }
-  }, "기타 설정"), /*#__PURE__*/React.createElement("span", {
+  }, "\uAE30\uD0C0 \uC124\uC815"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 11.5,
       color: "#7E9AB0"
@@ -3164,7 +3196,7 @@ function Home({
       padding: "15px 14px",
       marginBottom: 16
     }
-  }, /*#__PURE__*/React.createElement(Lbl, null, "샷 클락"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Lbl, null, "\uC0F7 \uD074\uB77D"), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -3177,7 +3209,7 @@ function Home({
       setClockSec(v);
     },
     items: [[0, "끔"], [40, "40초"], [60, "60초"]]
-  })), /*#__PURE__*/React.createElement(Lbl, null, "경기 시간"), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement(Lbl, null, "\uACBD\uAE30 \uC2DC\uAC04"), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -3214,13 +3246,13 @@ function Home({
       fontSize: 14,
       fontWeight: 600
     }
-  }, "분"), /*#__PURE__*/React.createElement("span", {
+  }, "\uBD84"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 11.5,
       color: "var(--chalk)",
       lineHeight: 1.5
     }
-  }, "1~180분 · 시험할 때는 짧게"))), /*#__PURE__*/React.createElement("div", {
+  }, "1~180\uBD84 \xB7 \uC2DC\uD5D8\uD560 \uB54C\uB294 \uC9E7\uAC8C"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -3232,7 +3264,7 @@ function Home({
       fontSize: 13.5,
       fontWeight: 600
     }
-  }, "소리로 이름 부르기"), /*#__PURE__*/React.createElement(Toggle, {
+  }, "\uC18C\uB9AC\uB85C \uC774\uB984 \uBD80\uB974\uAE30"), /*#__PURE__*/React.createElement(Toggle, {
     on: voice,
     set: setVoice
   })), canAuto ? /*#__PURE__*/React.createElement("div", {
@@ -3247,13 +3279,13 @@ function Home({
       fontSize: 13.5,
       fontWeight: 600
     }
-  }, "목표에 닿으면 자동 종료"), /*#__PURE__*/React.createElement("div", {
+  }, "\uBAA9\uD45C\uC5D0 \uB2FF\uC73C\uBA74 \uC790\uB3D9 \uC885\uB8CC"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "var(--chalk)",
       marginTop: 2
     }
-  }, "끄면 직접 [종료]를 누릅니다")), /*#__PURE__*/React.createElement(Toggle, {
+  }, "\uB044\uBA74 \uC9C1\uC811 [\uC885\uB8CC]\uB97C \uB204\uB985\uB2C8\uB2E4")), /*#__PURE__*/React.createElement(Toggle, {
     on: autoEnd,
     set: setAutoEnd
   })) : /*#__PURE__*/React.createElement("div", {
@@ -3262,13 +3294,13 @@ function Home({
       color: "rgba(159,187,208,.7)",
       lineHeight: 1.6
     }
-  }, "세 명 이상은 1등이 나와도 끝까지 칩니다. 자동 종료를 쓰지 않습니다."), /*#__PURE__*/React.createElement("div", {
+  }, "\uC138 \uBA85 \uC774\uC0C1\uC740 1\uB4F1\uC774 \uB098\uC640\uB3C4 \uB05D\uAE4C\uC9C0 \uCE69\uB2C8\uB2E4. \uC790\uB3D9 \uC885\uB8CC\uB97C \uC4F0\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4."), /*#__PURE__*/React.createElement("div", {
     style: {
       borderTop: "1px solid rgba(255,255,255,.1)",
       marginTop: 16,
       paddingTop: 14
     }
-  }, /*#__PURE__*/React.createElement(Lbl, null, "카메라 주소 (다시 보기)"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Lbl, null, "\uCE74\uBA54\uB77C \uC8FC\uC18C (\uB2E4\uC2DC \uBCF4\uAE30)"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 7
@@ -3300,14 +3332,14 @@ function Home({
       background: "rgba(232,184,56,.14)",
       border: "1px solid rgba(232,184,56,.45)"
     }
-  }, "▣ QR")), /*#__PURE__*/React.createElement("div", {
+  }, "\u25A3 QR")), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "#6F8598",
       marginTop: 6,
       lineHeight: 1.6
     }
-  }, "테이블 옆 QR을 찍으면 자동으로 들어갑니다. 직접 쳐도 됩니다.", cam ? "" : " 비워두면 [다시 보기] 가 안 나옵니다.")))), /*#__PURE__*/React.createElement("div", {
+  }, "\uD14C\uC774\uBE14 \uC606 QR\uC744 \uCC0D\uC73C\uBA74 \uC790\uB3D9\uC73C\uB85C \uB4E4\uC5B4\uAC11\uB2C8\uB2E4. \uC9C1\uC811 \uCCD0\uB3C4 \uB429\uB2C8\uB2E4.", cam ? "" : " 비워두면 [다시 보기] 가 안 나옵니다.")))), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "0 16px 16px"
     }
@@ -3319,7 +3351,7 @@ function Home({
       fontSize: 17,
       borderRadius: 14
     }
-  }, "점수판으로 이동"), /*#__PURE__*/React.createElement(LegalLinks, {
+  }, "\uC810\uC218\uD310\uC73C\uB85C \uC774\uB3D9"), /*#__PURE__*/React.createElement(LegalLinks, {
     style: {
       marginTop: 14
     }
@@ -3339,7 +3371,7 @@ const Toggle = ({
 }) => /*#__PURE__*/React.createElement("button", {
   onClick: () => !disabled && set(!on),
   disabled: disabled,
-  "aria-label": "스위치",
+  "aria-label": "\uC2A4\uC704\uCE58",
   style: {
     width: 50,
     height: 29,
@@ -3507,7 +3539,7 @@ function EndAsk({
   }, seriesLine))), notStarted ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: blue,
     onClick: onBack
-  }, "돌아가기"), /*#__PURE__*/React.createElement("button", {
+  }, "\uB3CC\uC544\uAC00\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...box,
       background: "#2b2b2b",
@@ -3516,34 +3548,34 @@ function EndAsk({
       fontSize: 13.5
     },
     onClick: onHome
-  }, "🏠 홈으로 나가기"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83C\uDFE0 \uD648\uC73C\uB85C \uB098\uAC00\uAE30"), /*#__PURE__*/React.createElement("div", {
     style: note
-  }, "지울 점수가 없습니다.")) : drew && !overTime ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+  }, "\uC9C0\uC6B8 \uC810\uC218\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.")) : drew && !overTime ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: blue,
     onClick: onBack
-  }, "잘못 눌렀으면 돌아가기"), /*#__PURE__*/React.createElement("button", {
+  }, "\uC798\uBABB \uB20C\uB800\uC73C\uBA74 \uB3CC\uC544\uAC00\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: red,
     onClick: onWipe
-  }, "이번 판만 지우기"), /*#__PURE__*/React.createElement("div", {
+  }, "\uC774\uBC88 \uD310\uB9CC \uC9C0\uC6B0\uAE30"), /*#__PURE__*/React.createElement("div", {
     style: note
-  }, "이번 판 점수만 지웁니다. 앞서 친 판은 그대로 남고, 점수판에 그대로 있습니다.")) : drew ?
+  }, "\uC774\uBC88 \uD310 \uC810\uC218\uB9CC \uC9C0\uC6C1\uB2C8\uB2E4. \uC55E\uC11C \uCE5C \uD310\uC740 \uADF8\uB300\uB85C \uB0A8\uACE0, \uC810\uC218\uD310\uC5D0 \uADF8\uB300\uB85C \uC788\uC2B5\uB2C8\uB2E4.")) : drew ?
   /*#__PURE__*/
   /* ③ 정한 시간이 지났는데 아무도 목표에 못 닿았다 */
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: blue,
     onClick: onKeepPlaying
-  }, "더 치기"), /*#__PURE__*/React.createElement("button", {
+  }, "\uB354 \uCE58\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: gold,
     onClick: onNextGame
-  }, "무승부로 두고 다음 판"), /*#__PURE__*/React.createElement("button", {
+  }, "\uBB34\uC2B9\uBD80\uB85C \uB450\uACE0 \uB2E4\uC74C \uD310"), /*#__PURE__*/React.createElement("button", {
     style: line,
     onClick: onFinishHere
-  }, "여기까지만 치고 끝내기"), /*#__PURE__*/React.createElement("button", {
+  }, "\uC5EC\uAE30\uAE4C\uC9C0\uB9CC \uCE58\uACE0 \uB05D\uB0B4\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: back,
     onClick: onBack
-  }, "돌아가기"), /*#__PURE__*/React.createElement("div", {
+  }, "\uB3CC\uC544\uAC00\uAE30"), /*#__PURE__*/React.createElement("div", {
     style: note
-  }, "무승부로 두고 다음 게임을 칩니다. 앞 게임은 무승부로 남습니다.")) : willEndSeries ?
+  }, "\uBB34\uC2B9\uBD80\uB85C \uB450\uACE0 \uB2E4\uC74C \uAC8C\uC784\uC744 \uCE69\uB2C8\uB2E4. \uC55E \uAC8C\uC784\uC740 \uBB34\uC2B9\uBD80\uB85C \uB0A8\uC2B5\uB2C8\uB2E4.")) : willEndSeries ?
   /*#__PURE__*/
   /* ② 이 판으로 시리즈가 끝난다 */
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
@@ -3562,24 +3594,24 @@ function EndAsk({
       opacity: .82,
       marginRight: 7
     }
-  }, "아쉬우시면"), "＋", growStep || 2, "판 더 · ", growWord), /*#__PURE__*/React.createElement("div", {
+  }, "\uC544\uC26C\uC6B0\uC2DC\uBA74"), "\uFF0B", growStep || 2, "\uD310 \uB354 \xB7 ", growWord), /*#__PURE__*/React.createElement("div", {
     style: note
-  }, "지금 판은 그대로 남고 ", growStep === 1 ? "승점" : "승수", "도 이어집니다.")), /*#__PURE__*/React.createElement("button", {
+  }, "\uC9C0\uAE08 \uD310\uC740 \uADF8\uB300\uB85C \uB0A8\uACE0 ", growStep === 1 ? "승점" : "승수", "\uB3C4 \uC774\uC5B4\uC9D1\uB2C8\uB2E4.")), /*#__PURE__*/React.createElement("button", {
     style: back,
     onClick: onBack
-  }, "돌아가기")) :
+  }, "\uB3CC\uC544\uAC00\uAE30")) :
   /*#__PURE__*/
   /* ① 목표는 채웠지만 시리즈는 아직 */
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: blue,
     onClick: onNextGame
-  }, nextWord || `${nextNo}${unitWord}`, " 시작하기"), /*#__PURE__*/React.createElement("button", {
+  }, nextWord || `${nextNo}${unitWord}`, " \uC2DC\uC791\uD558\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: line,
     onClick: onFinishHere
-  }, "이번 판까지만 치고 끝내기"), /*#__PURE__*/React.createElement("button", {
+  }, "\uC774\uBC88 \uD310\uAE4C\uC9C0\uB9CC \uCE58\uACE0 \uB05D\uB0B4\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: back,
     onClick: onBack
-  }, "돌아가기"))));
+  }, "\uB3CC\uC544\uAC00\uAE30"))));
 }
 
 /* ── 🏠 를 눌렀을 때 · 어디로 갈까요 ──  ★ 7판에서 만들었습니다
@@ -3641,14 +3673,14 @@ function HomeAsk({
       fontWeight: 700,
       marginBottom: 7
     }
-  }, "홈으로 나가시겠습니까?"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD648\uC73C\uB85C \uB098\uAC00\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12.5,
       color: "var(--chalk)",
       lineHeight: 1.6,
       marginBottom: 15
     }
-  }, line, /*#__PURE__*/React.createElement("br", null), "홈에서 선수와 방식을 다시 정할 수 있습니다."), canSave && /*#__PURE__*/React.createElement("button", {
+  }, line, /*#__PURE__*/React.createElement("br", null), "\uD648\uC5D0\uC11C \uC120\uC218\uC640 \uBC29\uC2DD\uC744 \uB2E4\uC2DC \uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."), canSave && /*#__PURE__*/React.createElement("button", {
     style: {
       ...box,
       background: "#E8B838",
@@ -3656,7 +3688,7 @@ function HomeAsk({
       color: "#141200"
     },
     onClick: onSave
-  }, "✓ 지금까지 기록을 남기고 나가기"), /*#__PURE__*/React.createElement("button", {
+  }, "\u2713 \uC9C0\uAE08\uAE4C\uC9C0 \uAE30\uB85D\uC744 \uB0A8\uAE30\uACE0 \uB098\uAC00\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...box,
       background: "#2e1a1a",
@@ -3664,7 +3696,7 @@ function HomeAsk({
       color: "#f0a9a9"
     },
     onClick: onWipe
-  }, "지우고 새로 시작하기"), /*#__PURE__*/React.createElement("button", {
+  }, "\uC9C0\uC6B0\uACE0 \uC0C8\uB85C \uC2DC\uC791\uD558\uAE30"), /*#__PURE__*/React.createElement("button", {
     style: {
       width: "100%",
       padding: "11px 0",
@@ -3675,7 +3707,7 @@ function HomeAsk({
       fontSize: 13.5
     },
     onClick: onBack
-  }, "돌아가서 계속 치기")));
+  }, "\uB3CC\uC544\uAC00\uC11C \uACC4\uC18D \uCE58\uAE30")));
 }
 
 /* ── 당구에 들어오면 맨 먼저 뜨는 창 ──
@@ -3774,7 +3806,7 @@ function HandiSheet({
       color: "var(--chalk)",
       flexShrink: 0
     }
-  }, many ? /*#__PURE__*/React.createElement(React.Fragment, null, "목표 ", /*#__PURE__*/React.createElement("b", {
+  }, many ? /*#__PURE__*/React.createElement(React.Fragment, null, "\uBAA9\uD45C ", /*#__PURE__*/React.createElement("b", {
     className: "num",
     style: {
       color: "var(--accent)",
@@ -3807,7 +3839,7 @@ function HandiSheet({
       fontWeight: 700,
       background: "rgba(255,255,255,.08)"
     }
-  }, "−"), /*#__PURE__*/React.createElement("input", {
+  }, "\u2212"), /*#__PURE__*/React.createElement("input", {
     type: "number",
     inputMode: "numeric",
     value: ps[j].handi,
@@ -3829,7 +3861,7 @@ function HandiSheet({
       fontWeight: 700,
       background: "rgba(255,255,255,.08)"
     }
-  }, "＋")))), /*#__PURE__*/React.createElement("div", {
+  }, "\uFF0B")))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "rgba(159,187,208,.65)",
@@ -3845,7 +3877,7 @@ function HandiSheet({
       say(`${title} 목표 ${sum}점`);
       onClose();
     }
-  }, "확인")));
+  }, "\uD655\uC778")));
 }
 
 /* ── 복식에서 편 이름을 눌렀을 때 — 편 짜기 ──
@@ -3932,14 +3964,14 @@ function TeamSheet({
       fontSize: 16,
       fontWeight: 700
     }
-  }, "편 짜기"), /*#__PURE__*/React.createElement("button", {
+  }, "\uD3B8 \uC9DC\uAE30"), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     style: {
       color: "var(--chalk)",
       fontSize: 12.5,
       padding: 5
     }
-  }, "닫기")), sides.map((idxs, si) => /*#__PURE__*/React.createElement("div", {
+  }, "\uB2EB\uAE30")), sides.map((idxs, si) => /*#__PURE__*/React.createElement("div", {
     key: si,
     style: {
       border: "1px solid var(--line)",
@@ -3959,7 +3991,7 @@ function TeamSheet({
       fontSize: 12.5,
       color: "var(--chalk)"
     }
-  }, si + 1, "편"), /*#__PURE__*/React.createElement("div", {
+  }, si + 1, "\uD3B8"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 7
@@ -4006,7 +4038,7 @@ function TeamSheet({
       color: at === 0 ? "#4a5a66" : "var(--ivory)",
       background: "transparent"
     }
-  }, "▲"), /*#__PURE__*/React.createElement("button", {
+  }, "\u25B2"), /*#__PURE__*/React.createElement("button", {
     onClick: () => move(si, at, 1),
     disabled: at === idxs.length - 1,
     style: {
@@ -4017,7 +4049,7 @@ function TeamSheet({
       color: at === idxs.length - 1 ? "#4a5a66" : "var(--ivory)",
       background: "transparent"
     }
-  }, "▼"), /*#__PURE__*/React.createElement("button", {
+  }, "\u25BC"), /*#__PURE__*/React.createElement("button", {
     onClick: () => cross(si, at),
     style: {
       border: "1px solid var(--line)",
@@ -4027,7 +4059,7 @@ function TeamSheet({
       color: "#9fbbd0",
       background: "transparent"
     }
-  }, 2 - si, "편과 바꾸기")))))), locked ? /*#__PURE__*/React.createElement("div", {
+  }, 2 - si, "\uD3B8\uACFC \uBC14\uAFB8\uAE30")))))), locked ? /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "rgba(159,187,208,.7)",
@@ -4035,11 +4067,11 @@ function TeamSheet({
       textAlign: "center",
       margin: "4px 0 11px"
     }
-  }, "시작한 뒤에는 편을 바꿀 수 없습니다 · ", /*#__PURE__*/React.createElement("b", {
+  }, "\uC2DC\uC791\uD55C \uB4A4\uC5D0\uB294 \uD3B8\uC744 \uBC14\uAFC0 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4 \xB7 ", /*#__PURE__*/React.createElement("b", {
     style: {
       color: "var(--ivory)"
     }
-  }, "점수 지움"), " 뒤에 가능", /*#__PURE__*/React.createElement("br", null), "공 색은 지금도 바꿀 수 있습니다") : /*#__PURE__*/React.createElement("button", {
+  }, "\uC810\uC218 \uC9C0\uC6C0"), " \uB4A4\uC5D0 \uAC00\uB2A5", /*#__PURE__*/React.createElement("br", null), "\uACF5 \uC0C9\uC740 \uC9C0\uAE08\uB3C4 \uBC14\uAFC0 \uC218 \uC788\uC2B5\uB2C8\uB2E4") : /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     style: {
       padding: 10,
@@ -4048,14 +4080,14 @@ function TeamSheet({
       width: "100%"
     },
     onClick: swap
-  }, "1편 ⇄ 2편 자리 바꾸기"), /*#__PURE__*/React.createElement("button", {
+  }, "1\uD3B8 \u21C4 2\uD3B8 \uC790\uB9AC \uBC14\uAFB8\uAE30"), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     style: {
       padding: 11,
       fontSize: 14
     },
     onClick: onClose
-  }, "닫기")));
+  }, "\uB2EB\uAE30")));
 }
 
 /* ── 이름을 눌렀을 때 — 순서와 공 색 ──
@@ -4173,13 +4205,13 @@ function SeatSheet({
       fontWeight: 700,
       marginBottom: 5
     }
-  }, "누구와 치십니까"), /*#__PURE__*/React.createElement("div", {
+  }, "\uB204\uAD6C\uC640 \uCE58\uC2ED\uB2C8\uAE4C"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "var(--chalk)",
       marginBottom: 16
     }
-  }, "지난 기록에 나온 이름입니다. 직접 적어도 됩니다."), /*#__PURE__*/React.createElement("div", {
+  }, "\uC9C0\uB09C \uAE30\uB85D\uC5D0 \uB098\uC628 \uC774\uB984\uC785\uB2C8\uB2E4. \uC9C1\uC811 \uC801\uC5B4\uB3C4 \uB429\uB2C8\uB2E4."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexWrap: "wrap",
@@ -4202,10 +4234,10 @@ function SeatSheet({
     }
   }, " ", m.handi) : null))), /*#__PURE__*/React.createElement("span", {
     className: "lbl"
-  }, "명단에 없는 사람"), /*#__PURE__*/React.createElement("input", {
+  }, "\uBA85\uB2E8\uC5D0 \uC5C6\uB294 \uC0AC\uB78C"), /*#__PURE__*/React.createElement("input", {
     value: typed,
     onChange: e => setTyped(e.target.value),
-    placeholder: "이름을 적으세요"
+    placeholder: "\uC774\uB984\uC744 \uC801\uC73C\uC138\uC694"
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -4218,14 +4250,14 @@ function SeatSheet({
       flex: 1
     },
     onClick: () => setPick(null)
-  }, "취소"), /*#__PURE__*/React.createElement("button", {
+  }, "\uCDE8\uC18C"), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     style: {
       flex: 1.4,
       padding: 14
     },
     onClick: () => put(null)
-  }, "고르기"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "\uACE0\uB974\uAE30"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -4244,7 +4276,7 @@ function SeatSheet({
       background: "rgba(255,255,255,.08)",
       color: i === 0 ? "#4a5a66" : "var(--ivory)"
     }
-  }, "◀ 앞으로"), /*#__PURE__*/React.createElement("div", {
+  }, "\u25C0 \uC55E\uC73C\uB85C"), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       minWidth: 0,
@@ -4280,7 +4312,7 @@ function SeatSheet({
       color: "var(--chalk)",
       marginTop: 2
     }
-  }, i + 1, "번째")), /*#__PURE__*/React.createElement("button", {
+  }, i + 1, "\uBC88\uC9F8")), /*#__PURE__*/React.createElement("button", {
     onClick: () => move(1),
     disabled: i === ps.length - 1,
     style: {
@@ -4292,12 +4324,12 @@ function SeatSheet({
       background: "rgba(255,255,255,.08)",
       color: i === ps.length - 1 ? "#4a5a66" : "var(--ivory)"
     }
-  }, "뒤로 ▶")), /*#__PURE__*/React.createElement("span", {
+  }, "\uB4A4\uB85C \u25B6")), /*#__PURE__*/React.createElement("span", {
     className: "lbl",
     style: {
       marginBottom: 7
     }
-  }, "초구 색"), autoBall ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "\uCD08\uAD6C \uC0C9"), autoBall ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -4327,14 +4359,14 @@ function SeatSheet({
       borderRadius: "50%",
       background: BALL[b]
     }
-  }), BALLNAME[b], "부터"))), /*#__PURE__*/React.createElement("div", {
+  }), BALLNAME[b], "\uBD80\uD130"))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "rgba(159,187,208,.65)",
       lineHeight: 1.6,
       marginBottom: 11
     }
-  }, "차례가 넘어갈 때마다 공이 저절로 바뀝니다. 모두에게 적용됩니다.")) : /*#__PURE__*/React.createElement("div", {
+  }, "\uCC28\uB840\uAC00 \uB118\uC5B4\uAC08 \uB54C\uB9C8\uB2E4 \uACF5\uC774 \uC800\uC808\uB85C \uBC14\uB01D\uB2C8\uB2E4. \uBAA8\uB450\uC5D0\uAC8C \uC801\uC6A9\uB429\uB2C8\uB2E4.")) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "center",
@@ -4369,11 +4401,11 @@ function SeatSheet({
       lineHeight: 1.6,
       textAlign: "center"
     }
-  }, "치는 중에는 선수를 바꿀 수 없습니다 · ", /*#__PURE__*/React.createElement("b", {
+  }, "\uCE58\uB294 \uC911\uC5D0\uB294 \uC120\uC218\uB97C \uBC14\uAFC0 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4 \xB7 ", /*#__PURE__*/React.createElement("b", {
     style: {
       color: "var(--ivory)"
     }
-  }, "점수 지움"), " 뒤에 가능") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+  }, "\uC810\uC218 \uC9C0\uC6C0"), " \uB4A4\uC5D0 \uAC00\uB2A5") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     style: {
       padding: 10,
@@ -4383,7 +4415,7 @@ function SeatSheet({
       setTyped("");
       setPick("swap");
     }
-  }, "다른 사람으로 바꾸기"), /*#__PURE__*/React.createElement("div", {
+  }, "\uB2E4\uB978 \uC0AC\uB78C\uC73C\uB85C \uBC14\uAFB8\uAE30"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 7
@@ -4400,7 +4432,7 @@ function SeatSheet({
       setTyped("");
       setPick("add");
     }
-  }, "＋ 선수 추가"), /*#__PURE__*/React.createElement("button", {
+  }, "\uFF0B \uC120\uC218 \uCD94\uAC00"), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     style: {
       flex: 1,
@@ -4411,7 +4443,7 @@ function SeatSheet({
     },
     disabled: ps.length <= 2,
     onClick: drop
-  }, "이 선수 빼기")))), /*#__PURE__*/React.createElement("button", {
+  }, "\uC774 \uC120\uC218 \uBE7C\uAE30")))), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     onClick: onClose,
     style: {
@@ -4419,7 +4451,86 @@ function SeatSheet({
       fontSize: 14,
       marginTop: 11
     }
-  }, "닫기"))));
+  }, "\uB2EB\uAE30"))));
+}
+/* ★ 「치던 경기가 있습니다」 한 줄 (2026-09-24 · 대표님).
+      ⛔ 새 경기를 시작하면 지운다 (Home 의 go 에서 liveClear).
+      ⛔ 기록에 저장되면 지운다 (commit 에서 liveClear).
+      ⚠ [지우고 새로 시작하기] 로 나간 경우에는 ★남긴다 — 잘못 누르는 일이 더 흔하다 */
+function ResumeBar({
+  onResume,
+  say
+}) {
+  const [r, setR] = useState(() => liveGet());
+  if (!r) return null;
+  /* ★ 점수 열쇠 — 복식은 "T0" · "T1", 개인전은 사람의 key (점수판의 units 와 같다) */
+  const team = !!r.setup?.team;
+  const us = team && r.sides && r.ps ? r.sides.map(sd => sd.map(i => r.ps[i]?.name).filter(Boolean).join(" · ") || "편") : (r.ps || []).map(p => p.name || "선수");
+  const keys = team && r.sides ? r.sides.map((sd, i) => "T" + i) : (r.ps || []).map(p => p.key);
+  const sc = keys.map(k => (r.score || {})[k] || 0);
+  const mins = Math.max(1, Math.round((Date.now() - (r.at || Date.now())) / 60000));
+  const ago = mins < 60 ? `${mins}분 전` : `${Math.round(mins / 60)}시간 전`;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px 16px 0"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(232,184,56,.10)",
+      border: "1px solid rgba(232,184,56,.45)",
+      borderRadius: 14,
+      padding: "13px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      color: "var(--accent)",
+      marginBottom: 5
+    }
+  }, "\u25B6 \uCE58\uB358 \uACBD\uAE30\uAC00 \uC788\uC2B5\uB2C8\uB2E4"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "var(--ivory)",
+      lineHeight: 1.65
+    }
+  }, [r.setup?.place, B_LABEL[r.setup?.mode] || "", r.gameNo > 1 ? `${r.gameNo}번째 판` : ""].filter(Boolean).join(" · ")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      color: "var(--chalk)",
+      lineHeight: 1.65,
+      marginBottom: 11
+    }
+  }, us.map((n, i) => `${n} ${sc[i] ?? 0}`).join("  :  "), " \xB7 ", ago), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr auto",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    style: {
+      padding: 13,
+      fontSize: 15,
+      borderRadius: 11
+    },
+    onClick: () => onResume(r)
+  }, "\uC774\uC5B4\uC11C \uCE58\uAE30"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      padding: "13px 18px",
+      fontSize: 14,
+      borderRadius: 11,
+      background: "rgba(0,0,0,.3)",
+      color: "var(--chalk)",
+      border: "1px solid var(--line)"
+    },
+    onClick: () => {
+      if (!confirm("치던 경기를 지울까요? 점수는 되돌릴 수 없습니다")) return;
+      liveClear();
+      setR(null);
+      say("지웠습니다");
+    }
+  }, "\uC9C0\uC6B0\uAE30"))));
 }
 function Billiard({
   data,
@@ -4431,12 +4542,15 @@ function Billiard({
   tv,
   goHome
 }) {
+  /* ★ 되살릴 것이 있으면 setup 에 실려 온다 (App 의 [이어서 치기]).
+        ⛔ 없으면 R 은 {} 이고 아래 useState 들이 모두 «처음 값» 을 쓴다 */
+  const R = setup.__live || {};
   const [phase, setPhase] = useState("board");
   /* ★ 설정 화면이 없다. 홈에서 다 정하고 들어온다 (당구 전용 · 사용자 지시) */
   const mode = setup.mode;
   const [date] = useState(today());
   const place = setup.place;
-  const [ps, setPs] = useState(() => setup.ps.map((p, i) => ({
+  const [ps, setPs] = useState(() => R.ps || setup.ps.map((p, i) => ({
     ...p,
     c: i % 2
   })));
@@ -4444,12 +4558,12 @@ function Billiard({
         「너무 빨리 끝나서 싱겁다」 ⇒ 끝낼까요? 창에서 두 판을 더 붙인다.
      ⛔ 줄이지는 않는다. 이미 친 판이 사라지면 기록이 어긋난다.
      ⛔ 3인 이상(multiSeat)은 안 한다 — 선승제가 아니라 판 수를 정해 치는 방식이다 [대표님] */
-  const [bestOfNow, setBestOf] = useState(setup.bestOf);
+  const [bestOfNow, setBestOf] = useState(R.bestOf ?? setup.bestOf);
   const bestOf = bestOfNow;
   const useClock = !!setup.useClock;
   const clockSec = Number(setup.clockSec) || 40;
   const limitMin = Number(setup.limitMin) || 0;
-  const [overSaid, setOverSaid] = useState(false); // 시간 다 됐다고 한 번만 알린다
+  const [overSaid, setOverSaid] = useState(R.overSaid ?? false); // 시간 다 됐다고 한 번만 알린다
   const voice = !!setup.voice;
   const autoEnd = !!setup.autoEnd;
   /* ★ 공은 늘 차례마다 번갈아 간다 (당구 전용). 스위치를 없앴다 */
@@ -4457,19 +4571,19 @@ function Billiard({
   /* ★ 치다가 사람 이름과 공 색이 어긋나는 일이 있다 (사용자 지적).
         홈까지 나갔다 오지 않고 점수판에서 바로 고칠 수 있어야 한다.
         ⚠ 초구 색만 바꾼다 — 그다음은 무조건 나머지 한 색이다 (7판 6-3) */
-  const [firstBall, setFirstBall] = useState(Number(setup.firstBall) || 0);
-  const [turnNo, setTurnNo] = useState(0);
-  const [finishOrder, setFinishOrder] = useState([]);
-  const [startAt, setStartAt] = useState(null);
+  const [firstBall, setFirstBall] = useState(R.firstBall ?? (Number(setup.firstBall) || 0));
+  const [turnNo, setTurnNo] = useState(R.turnNo ?? 0);
+  const [finishOrder, setFinishOrder] = useState(R.finishOrder || []);
+  const [startAt, setStartAt] = useState(R.startAt ?? null);
   const team = !!setup.team;
-  const [sides, setSides] = useState(() => setup.team ? setup.sides || [[0, 1], [2, 3]] : [[0], [1]]);
+  const [sides, setSides] = useState(() => R.sides || (setup.team ? setup.sides || [[0, 1], [2, 3]] : [[0], [1]]));
   /* ★ 복식은 진 편이 다음 판을 먼저 친다 — 관례다 (사용자 확인).
         개인전은 사람마다 순서가 제각각이라 앱이 돌리지 않는다 (7판 6-3) */
-  const [loserFirst, setLoserFirst] = useState(true);
-  const [gameNo, setGameNo] = useState(1);
-  const [wins, setWins] = useState({});
-  const [pts, setPts] = useState({});
-  const [log, setLog] = useState([]);
+  const [loserFirst, setLoserFirst] = useState(R.loserFirst ?? true);
+  const [gameNo, setGameNo] = useState(R.gameNo ?? 1);
+  const [wins, setWins] = useState(R.wins || {});
+  const [pts, setPts] = useState(R.pts || {});
+  const [log, setLog] = useState(R.log || []);
   const [endAsk, setEndAsk] = useState(false); // [종료] 를 눌러 확인을 기다리는 중
   const [timeAsk, setTimeAsk] = useState(false); // ★ 정한 시간이 다 돼 저절로 뜬 창
   const [overAsk, setOverAsk] = useState(false); // ★ 3인 이상 · 한 사람만 남았다는 안내
@@ -4488,14 +4602,16 @@ function Billiard({
   const [replay, setReplay] = useState(null);
   /* ★ 단판에서 목표에 닿는 순간 이미 승부를 말했다는 표시. finish 에서 또 말하지 않는다 */
   const endSaid = useRef(false);
-  const [memo, setMemo] = useState("");
-  const [score, setScore] = useState({});
-  const [turns, setTurns] = useState({});
-  const [high, setHigh] = useState({});
-  const [run, setRun] = useState(0);
-  const [active, setActive] = useState(0);
+  const [memo, setMemo] = useState(R.memo || "");
+  const [score, setScore] = useState(R.score || {});
+  const [turns, setTurns] = useState(R.turns || {});
+  const [high, setHigh] = useState(R.high || {});
+  const [run, setRun] = useState(R.run ?? 0);
+  const [active, setActive] = useState(R.active ?? 0);
+  /* ⛔ 되살릴 때는 시계를 «멈춘 채» 연다. 손님이 점수를 누르면 그때 돈다.
+        빠져나가 있던 동안이 경기 시간에 얹히면 안 된다 */
   const [running, setRunning] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(R.elapsed ?? 0);
   const [shot, setShot] = useState(40);
   const [hist, setHist] = useState([]);
   const [winner, setWinner] = useState("");
@@ -4505,7 +4621,7 @@ function Billiard({
   const [teamOpen, setTeamOpen] = useState(false); // 편 짜기 창이 열려 있는가
   /* ★ [시작] 을 한 번이라도 눌렀는가. 편 짜기를 잠그는 기준입니다 (사용자 지시).
         ❙❙ 로 멈춰도 다시 안 풀립니다 — 판이 시작된 사실은 그대로이기 때문입니다 */
-  const [begun, setBegun] = useState(false);
+  const [begun, setBegun] = useState(R.begun ?? false);
   useEffect(() => {
     setBare(!endAsk && !goAsk && !timeAsk && phase === "board");
   }, [phase, endAsk, goAsk, timeAsk]); // eslint-disable-line
@@ -4583,6 +4699,67 @@ function Billiard({
     wakeOn();
     return wakeOff;
   }, []); // eslint-disable-line
+
+  /* ★ 치던 것을 조용히 담아둔다 (2026-09-24 · 대표님).
+        「잘못 눌러 빠져나가면 지금까지 친 점수가 사라진다. 오늘도 여러 번 그래서
+          수기 점수판을 썼다」
+     ⛔ 이 폰 안에만 담는다 (localStorage). 서버에 안 보낸다.
+     ⛔ 아직 한 점도 안 쳤으면 담지 않는다 — 홈에 빈 줄이 뜨면 거슬린다.
+     ⚠ 점수판을 보고 있을 때만 담는다. 결과표(done)로 넘어가면 commit 이 지운다 */
+  useEffect(() => {
+    if (phase !== "board") return;
+    const any = Object.values(score).some(v => Number(v) > 0);
+    if (!any && !log.length) return;
+    livePut({
+      setup,
+      ps,
+      bestOf: bestOfNow,
+      overSaid,
+      firstBall,
+      turnNo,
+      finishOrder,
+      startAt,
+      sides,
+      loserFirst,
+      gameNo,
+      wins,
+      pts,
+      log,
+      memo,
+      score,
+      turns,
+      high,
+      run,
+      active,
+      elapsed,
+      begun
+    });
+  }, [score, turns, high, run, active, elapsed, gameNo, log, phase]); // eslint-disable-line
+
+  /* 🔴 2026-09-24 — 태블릿 화면이 «언제부턴가» 까맣게 꺼진다 [대표님].
+        설정을 잘못 만지신 것이 아니다. ★브라우저가 그렇게 만들어져 있다 —
+        화면 잠금이 걸리거나 · 다른 앱으로 갔다 오거나 · 탭을 바꾸면
+        브라우저가 ★wakeLock 을 «스스로 놓아버린다». 그리고 «돌아와도 다시 안 잡는다».
+        전에는 앱이 뜰 때 «한 번만» 잡았으므로, 한 번 놓친 뒤로는 영영 꺼졌다.
+     ⇒ 화면이 다시 보일 때마다 ★다시 잡는다.
+     ⛔ 점수판(board)에서만 잡는다 — 홈·기록 화면까지 켜둘 이유가 없다 */
+  useEffect(() => {
+    const back = () => {
+      if (document.visibilityState !== "visible") return;
+      if (phase !== "board") return;
+      if (wake.current && !wake.current.released) return;
+      wakeOn();
+    };
+    document.addEventListener("visibilitychange", back);
+    window.addEventListener("focus", back);
+    /* 잠금이 스스로 풀렸을 때도 알 수 있게 — 다시 보이는 순간 back() 이 잡는다 */
+    const t = setInterval(back, 30000);
+    return () => {
+      document.removeEventListener("visibilitychange", back);
+      window.removeEventListener("focus", back);
+      clearInterval(t);
+    };
+  }, [phase]); // eslint-disable-line
 
   const units = team ? sides.map((idxs, i) => {
     const mem = idxs.map(j => ps[j]).filter(Boolean);
@@ -5214,6 +5391,8 @@ function Billiard({
           전에는 "경기가 끝났습니다" 창을 한 번 더 거쳐야 했다.
           결과표 창 안에 [홈으로 가기] 가 있으므로 한 단계가 준다.
           ⚠ 저장이 먼저다 — 창을 저장 앞에 두면 안 누르고 나갔을 때 기록을 잃는다 */
+    /* ★ 기록에 남았으니 담아둔 «치던 경기» 를 지운다 — 홈에 또 뜨면 안 된다 */
+    liveClear();
     wakeOff();
     setPhase("board");
     openSheet({
@@ -5334,7 +5513,7 @@ function Billiard({
       color: "var(--chalk)",
       marginTop: 4
     }
-  }, place, " · ", clock(elapsed)) : null), /*#__PURE__*/React.createElement("div", {
+  }, place, " \xB7 ", clock(elapsed)) : null), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 14
@@ -5386,7 +5565,7 @@ function Billiard({
       color: "var(--chalk)",
       width: 48
     }
-  }, tn(p.key) || 1, "이닝"), /*#__PURE__*/React.createElement("span", {
+  }, tn(p.key) || 1, "\uC774\uB2DD"), /*#__PURE__*/React.createElement("span", {
     className: "num",
     style: {
       fontSize: 14,
@@ -5401,7 +5580,7 @@ function Billiard({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "lbl"
-  }, "지금까지"), (multiSeat ? rankNow : units).map((p, i) => /*#__PURE__*/React.createElement("div", {
+  }, "\uC9C0\uAE08\uAE4C\uC9C0"), (multiSeat ? rankNow : units).map((p, i) => /*#__PURE__*/React.createElement("div", {
     key: p.key,
     style: {
       display: "flex",
@@ -5437,7 +5616,7 @@ function Billiard({
       fontSize: 12,
       color: "var(--chalk)"
     }
-  }, "1위 ", wins[p.key] || 0, "회"), multiSeat && /*#__PURE__*/React.createElement("span", {
+  }, "1\uC704 ", wins[p.key] || 0, "\uD68C"), multiSeat && /*#__PURE__*/React.createElement("span", {
     className: "num",
     style: {
       fontSize: 16,
@@ -5445,7 +5624,7 @@ function Billiard({
       width: 46,
       textAlign: "right"
     }
-  }, pts[p.key] || 0, "점"))), !seriesOver && /*#__PURE__*/React.createElement("div", {
+  }, pts[p.key] || 0, "\uC810"))), !seriesOver && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       fontSize: 12,
@@ -5458,12 +5637,12 @@ function Billiard({
       color: "rgba(232,184,56,.9)",
       textAlign: "center"
     }
-  }, "아무도 목표에 닿지 못했습니다 · 무승부"), seriesOver ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+  }, "\uC544\uBB34\uB3C4 \uBAA9\uD45C\uC5D0 \uB2FF\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4 \xB7 \uBB34\uC2B9\uBD80"), seriesOver ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "lbl"
-  }, "메모"), /*#__PURE__*/React.createElement("input", {
+  }, "\uBA54\uBAA8"), /*#__PURE__*/React.createElement("input", {
     value: memo,
     onChange: e => setMemo(e.target.value),
-    placeholder: "선택 입력"
+    placeholder: "\uC120\uD0DD \uC785\uB825"
   })), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     onClick: commit,
@@ -5471,14 +5650,14 @@ function Billiard({
       padding: 18,
       fontSize: 17
     }
-  }, "✓ ", bestOf > 1 ? `${log.length}게임 저장하고 결과표 만들기` : "저장하고 결과표 만들기"), /*#__PURE__*/React.createElement("div", {
+  }, "\u2713 ", bestOf > 1 ? `${log.length}게임 저장하고 결과표 만들기` : "저장하고 결과표 만들기"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "rgba(159,187,208,.65)",
       textAlign: "center",
       lineHeight: 1.6
     }
-  }, "이 단추를 눌러야 기록에 남습니다.")) : /*#__PURE__*/React.createElement(React.Fragment, null, team && /*#__PURE__*/React.createElement("div", {
+  }, "\uC774 \uB2E8\uCD94\uB97C \uB20C\uB7EC\uC57C \uAE30\uB85D\uC5D0 \uB0A8\uC2B5\uB2C8\uB2E4.")) : /*#__PURE__*/React.createElement(React.Fragment, null, team && /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 13,
@@ -5492,7 +5671,7 @@ function Billiard({
       fontSize: 13.5,
       fontWeight: 600
     }
-  }, "진 편이 먼저 치기"), /*#__PURE__*/React.createElement(Toggle, {
+  }, "\uC9C4 \uD3B8\uC774 \uBA3C\uC800 \uCE58\uAE30"), /*#__PURE__*/React.createElement(Toggle, {
     on: loserFirst,
     set: setLoserFirst
   })), /*#__PURE__*/React.createElement("button", {
@@ -5502,16 +5681,16 @@ function Billiard({
       padding: 16,
       fontSize: 16
     }
-  }, nthOf(gameNo + 1), " 시작 ▸"), /*#__PURE__*/React.createElement("button", {
+  }, nthOf(gameNo + 1), " \uC2DC\uC791 \u25B8"), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: () => setStopped(true)
-  }, "여기까지만 치고 끝내기")), /*#__PURE__*/React.createElement("button", {
+  }, "\uC5EC\uAE30\uAE4C\uC9C0\uB9CC \uCE58\uACE0 \uB05D\uB0B4\uAE30")), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: () => {
       setPhase("board");
       wakeOn();
     }
-  }, "점수판으로 돌아가기"));
+  }, "\uC810\uC218\uD310\uC73C\uB85C \uB3CC\uC544\uAC00\uAE30"));
 
   /* ── 점수판 ── */
   const ratio = useClock ? shot / clockSec : 1;
@@ -5537,7 +5716,7 @@ function Billiard({
            화살표를 빼고 글자만 두 줄로 크게 쓴다.
            누를 것이 없어도 테두리는 남긴다 — 아예 안 보이면 단추가 없는 줄 안다 */
     {
-      label: /*#__PURE__*/React.createElement(React.Fragment, null, "되돌", /*#__PURE__*/React.createElement("br", null), "리기"),
+      label: /*#__PURE__*/React.createElement(React.Fragment, null, "\uB418\uB3CC", /*#__PURE__*/React.createElement("br", null), "\uB9AC\uAE30"),
       onClick: undo,
       disabled: !hist.length,
       size: RAIL_TWO,
@@ -5547,7 +5726,7 @@ function Billiard({
       border: "1px solid #5aa8ad"
     }, /* ★ 되돌릴 수 없는 일이므로 붉은 계열로 따로 세운다 */
     {
-      label: /*#__PURE__*/React.createElement(React.Fragment, null, "점수", /*#__PURE__*/React.createElement("br", null), "지움"),
+      label: /*#__PURE__*/React.createElement(React.Fragment, null, "\uC810\uC218", /*#__PURE__*/React.createElement("br", null), "\uC9C0\uC6C0"),
       onClick: reset,
       size: RAIL_TWO,
       title: "이번 판 점수만 0으로",
@@ -5584,11 +5763,11 @@ function Billiard({
           display: "block",
           lineHeight: 1.1
         }
-      }, "⤢", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+      }, "\u2922", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 9.5
         }
-      }, "크게")),
+      }, "\uD06C\uAC8C")),
       onClick: () => {
         fullScreen();
         say("화면 최대 크게");
@@ -5605,11 +5784,11 @@ function Billiard({
           display: "block",
           lineHeight: 1.1
         }
-      }, "▶", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+      }, "\u25B6", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 9.5
         }
-      }, "다시", /*#__PURE__*/React.createElement("br", null), "보기")),
+      }, "\uB2E4\uC2DC", /*#__PURE__*/React.createElement("br", null), "\uBCF4\uAE30")),
       title: "최근 30초 다시 보기",
       size: RAIL_SYM,
       color: "#c9a6f0",
@@ -5631,11 +5810,11 @@ function Billiard({
           display: "block",
           lineHeight: 1.1
         }
-      }, "🏠", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+      }, "\uD83C\uDFE0", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 9.5
         }
-      }, "홈")),
+      }, "\uD648")),
       title: "홈으로 나가서 다시 정하기",
       size: RAIL_SYM,
       color: "#ddd",
@@ -5664,7 +5843,7 @@ function Billiard({
     key: p.key
   }, i === midAt && /*#__PURE__*/React.createElement(BoardMid, {
     big: inning,
-    cap: "이닝",
+    cap: "\uC774\uB2DD",
     width: twoUp ? "clamp(76px,15vw,206px)" : undefined,
     bottom: twoUp ?
     /*#__PURE__*/
@@ -5673,7 +5852,7 @@ function Billiard({
           "다음 선수 ▸" 는 가로로 길어 이 폭에 안 들어간다 — 두 줄로 접는다 */
     React.createElement("button", {
       onClick: next,
-      "aria-label": "다음 선수 차례",
+      "aria-label": "\uB2E4\uC74C \uC120\uC218 \uCC28\uB840",
       style: {
         width: "100%",
         marginBottom: 8,
@@ -5694,12 +5873,12 @@ function Billiard({
         fontSize: "clamp(15px,3.8vh,44px)",
         fontWeight: 700
       }
-    }, "다음"), /*#__PURE__*/React.createElement("span", {
+    }, "\uB2E4\uC74C"), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: "clamp(13px,3.4vh,40px)",
         color: "#9ecbe8"
       }
-    }, "⇒", run > 0 ? ` ${run}` : "")) : null,
+    }, "\u21D2", run > 0 ? ` ${run}` : "")) : null,
     top: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
@@ -5829,7 +6008,7 @@ function Billiard({
       transition: "background .2s",
       whiteSpace: "nowrap"
     }
-  }, "다음 ⇒", run > 0 ? ` ${run}` : ""), [[STEP, `+${STEP}`], [2 * STEP, `+${2 * STEP}`]].map(([d, l]) => /*#__PURE__*/React.createElement("button", {
+  }, "\uB2E4\uC74C \u21D2", run > 0 ? ` ${run}` : ""), [[STEP, `+${STEP}`], [2 * STEP, `+${2 * STEP}`]].map(([d, l]) => /*#__PURE__*/React.createElement("button", {
     key: l,
     onClick: () => addPt(d),
     style: {
@@ -5907,16 +6086,16 @@ function Billiard({
     const done = units.filter(p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi));
     const rest = units.filter(p => !(Number(p.handi) > 0 && sc(p.key) >= Number(p.handi)));
     const tie = rest.length > 1; /* ★ 시간이 끝나 여럿이 남았다 — 공동 등수다 */
-    return /*#__PURE__*/React.createElement(React.Fragment, null, tie ? `${limitMin}분이 다 됐습니다. ` : "", done.map(p => p.name).join(" · "), " ", done.length > 1 ? "님들이" : "님이", " 목표에 닿았습니다.", /*#__PURE__*/React.createElement("br", null), tie ? `${rest.map(p => p.name).join(" · ")} 님은 공동 ${done.length + 1}등입니다.` : rest[0] ? `${rest[0].name}님만 남았습니다.` : "", /*#__PURE__*/React.createElement("br", null), "아래 ", /*#__PURE__*/React.createElement("b", {
+    return /*#__PURE__*/React.createElement(React.Fragment, null, tie ? `${limitMin}분이 다 됐습니다. ` : "", done.map(p => p.name).join(" · "), " ", done.length > 1 ? "님들이" : "님이", " \uBAA9\uD45C\uC5D0 \uB2FF\uC558\uC2B5\uB2C8\uB2E4.", /*#__PURE__*/React.createElement("br", null), tie ? `${rest.map(p => p.name).join(" · ")} 님은 공동 ${done.length + 1}등입니다.` : rest[0] ? `${rest[0].name}님만 남았습니다.` : "", /*#__PURE__*/React.createElement("br", null), "\uC544\uB798 ", /*#__PURE__*/React.createElement("b", {
       style: {
         color: "#E8B838"
       }
-    }, "[종료]"), " 를 누르고 다음 판을 시작하십시오.");
-  })() : /*#__PURE__*/React.createElement(React.Fragment, null, limitMin, "분이 지났고 아직 아무도 목표에 닿지 못했습니다.", /*#__PURE__*/React.createElement("br", null), "무승부로 처리하시려면 ", /*#__PURE__*/React.createElement("b", {
+    }, "[\uC885\uB8CC]"), " \uB97C \uB204\uB974\uACE0 \uB2E4\uC74C \uD310\uC744 \uC2DC\uC791\uD558\uC2ED\uC2DC\uC624.");
+  })() : /*#__PURE__*/React.createElement(React.Fragment, null, limitMin, "\uBD84\uC774 \uC9C0\uB0AC\uACE0 \uC544\uC9C1 \uC544\uBB34\uB3C4 \uBAA9\uD45C\uC5D0 \uB2FF\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.", /*#__PURE__*/React.createElement("br", null), "\uBB34\uC2B9\uBD80\uB85C \uCC98\uB9AC\uD558\uC2DC\uB824\uBA74 ", /*#__PURE__*/React.createElement("b", {
     style: {
       color: "#E8B838"
     }
-  }, "[종료]"), " 를 누르고 다음 판을 시작하십시오.")), /*#__PURE__*/React.createElement("button", {
+  }, "[\uC885\uB8CC]"), " \uB97C \uB204\uB974\uACE0 \uB2E4\uC74C \uD310\uC744 \uC2DC\uC791\uD558\uC2ED\uC2DC\uC624.")), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     style: {
       width: "100%",
@@ -5930,7 +6109,7 @@ function Billiard({
       setBlinkEnd(true);
       setEndAsk(true); /* ★ [종료] 를 누른 것과 «똑같은» 창을 연다 */
     }
-  }, "종료 창 열기"), /*#__PURE__*/React.createElement("div", {
+  }, "\uC885\uB8CC \uCC3D \uC5F4\uAE30"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "var(--chalk)",
@@ -5960,7 +6139,7 @@ function Billiard({
       fontSize: 13,
       color: "var(--chalk)"
     }
-  }, "아직 치고 계신 분을 눌러주세요")), endAsk && (() => {
+  }, "\uC544\uC9C1 \uCE58\uACE0 \uACC4\uC2E0 \uBD84\uC744 \uB20C\uB7EC\uC8FC\uC138\uC694")), endAsk && (() => {
     const nowDrew = finishOrder.length === 0;
     const elapsedMin = Math.max(0, Math.round(elapsed / 60));
     /* 정한 시간이 지났는가 — 시간을 안 정했으면(0) 지난 것으로 안 본다 */
@@ -6081,7 +6260,7 @@ function Billiard({
       fontSize: 8.5,
       color: "#F09595"
     }
-  }, cam.secs, "초 담김"))), replay && /*#__PURE__*/React.createElement(ReplaySheet, {
+  }, cam.secs, "\uCD08 \uB2F4\uAE40"))), replay && /*#__PURE__*/React.createElement(ReplaySheet, {
     frames: replay,
     say: say,
     onClose: () => setReplay(null)
@@ -6094,7 +6273,9 @@ function Billiard({
       setGoAsk(false);
       setSaveNow(true);
       finish("done", true);
-    },
+    }
+    /* ★ [지우고 새로 시작하기] 로 나가도 담아둔 것은 ★«남긴다» [대표님 2026-09-24].
+          당구장에서 잘못 누르는 일이 더 흔하다. 홈의 [지우기] 로 없앨 수 있다 */,
     onWipe: () => {
       setGoAsk(false);
       wakeOff();
@@ -6393,7 +6574,7 @@ function MatchCard({
       fontWeight: 600,
       color: "var(--accent)"
     }
-  }, "결과표"))), /*#__PURE__*/React.createElement("div", {
+  }, "\uACB0\uACFC\uD45C"))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13.5,
       lineHeight: 1.65,
@@ -6405,7 +6586,7 @@ function MatchCard({
       color: "var(--chalk)",
       marginRight: 6
     }
-  }, "핸디"), m.score.map((u, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+  }, "\uD578\uB514"), m.score.map((u, i) => /*#__PURE__*/React.createElement(React.Fragment, {
     key: u.name + i
   }, i > 0 && /*#__PURE__*/React.createElement("span", {
     style: {
@@ -6426,7 +6607,7 @@ function MatchCard({
     }
   }, m.rounds.map((r, i) => /*#__PURE__*/React.createElement("div", {
     key: i
-  }, r.no || i + 1, "번 게임\xA0", m.many ? (
+  }, r.no || i + 1, "\uBC88 \uAC8C\uC784\xA0", m.many ? (
   /* ★ 세 명 이상은 등수만 (사용자 지시).
         ⚠ 승점이 같으면 «공동» 이다 — 카톡 글과 같은 tieRanksOf 를 쓴다 (9장 ①) */
   tieRanksOf(r.names || []).map((g, j) => /*#__PURE__*/React.createElement("span", {
@@ -6434,7 +6615,7 @@ function MatchCard({
     style: {
       color: g.no === 1 ? "var(--accent)" : "#B9CCDA"
     }
-  }, j > 0 ? " " : "", g.tie ? "공동 " : "", g.no, "등 ", g.names.join(" · "), "\xA0"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+  }, j > 0 ? " " : "", g.tie ? "공동 " : "", g.no, "\uB4F1 ", g.names.join(" · "), "\xA0"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--ivory)"
     }
@@ -6455,19 +6636,19 @@ function MatchCard({
       color: "var(--chalk)",
       marginRight: 5
     }
-  }, "최종"), m.many ? (/* ★ 카톡 글과 «같은» tieRanksOf 를 쓴다. 따로 세면 어긋난다 */
+  }, "\uCD5C\uC885"), m.many ? (/* ★ 카톡 글과 «같은» tieRanksOf 를 쓴다. 따로 세면 어긋난다 */
   manyRanksOf(m).map((g, i) => /*#__PURE__*/React.createElement("span", {
     key: g.no + "-" + i,
     style: {
       color: g.no === 1 ? "var(--accent)" : "#B9CCDA"
     }
-  }, i > 0 ? " " : "", g.tie ? "공동 " : "", g.no, "등 ", g.names.join(" · "), " (", g.pt, "점)\xA0"))) : m.bestOf > 1 ? (() => {
+  }, i > 0 ? " " : "", g.tie ? "공동 " : "", g.no, "\uB4F1 ", g.names.join(" · "), " (", g.pt, "\uC810)\xA0"))) : m.bestOf > 1 ? (() => {
     const f = finalOf(m.score);
     return /*#__PURE__*/React.createElement("span", {
       style: {
         color: "var(--accent)"
       }
-    }, f.tie ? /*#__PURE__*/React.createElement(React.Fragment, null, f.nums, "\xA0 무승부") : /*#__PURE__*/React.createElement(React.Fragment, null, f.name, " \xA0", f.nums, " 승"));
+    }, f.tie ? /*#__PURE__*/React.createElement(React.Fragment, null, f.nums, "\xA0 \uBB34\uC2B9\uBD80") : /*#__PURE__*/React.createElement(React.Fragment, null, f.name, " \xA0", f.nums, " \uC2B9"));
   })() : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--accent)"
@@ -6508,7 +6689,7 @@ function MatchCard({
       borderRadius: 999,
       padding: "4px 10px"
     }
-  }, "삭제")));
+  }, "\uC0AD\uC81C")));
 }
 function Log({
   data,
@@ -6548,7 +6729,7 @@ function Log({
       fontWeight: 700,
       marginBottom: 11
     }
-  }, "기록 보기"), /*#__PURE__*/React.createElement(Pills, {
+  }, "\uAE30\uB85D \uBCF4\uAE30"), /*#__PURE__*/React.createElement(Pills, {
     cols: "repeat(4,1fr)",
     value: range,
     set: setRange,
@@ -6589,7 +6770,7 @@ function Log({
       color: "#6F8598",
       marginTop: 9
     }
-  }, bound[0], " ~ ", bound[1], " · ", list.length, "경기")), /*#__PURE__*/React.createElement("div", {
+  }, bound[0], " ~ ", bound[1], " \xB7 ", list.length, "\uACBD\uAE30")), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "12px 14px 0"
     }
@@ -6601,12 +6782,12 @@ function Log({
       color: "var(--chalk)",
       lineHeight: 1.8
     }
-  }, "이 기간에 친 기록이 없습니다.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+  }, "\uC774 \uAE30\uAC04\uC5D0 \uCE5C \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       color: "#6F8598"
     }
-  }, "기간을 넓혀 보세요.")) : list.map(m => /*#__PURE__*/React.createElement(MatchCard, {
+  }, "\uAE30\uAC04\uC744 \uB113\uD600 \uBCF4\uC138\uC694.")) : list.map(m => /*#__PURE__*/React.createElement(MatchCard, {
     key: m.key,
     m: m,
     onSheet: () => openSheet(m.last),
@@ -6777,7 +6958,7 @@ function Sheet({
       fontSize: 13,
       padding: 6
     }
-  }, "닫기")), saved && /*#__PURE__*/React.createElement("div", {
+  }, "\uB2EB\uAE30")), saved && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(232,184,56,.1)",
       border: "1px solid rgba(232,184,56,.3)",
@@ -6788,7 +6969,7 @@ function Sheet({
       marginBottom: 12,
       lineHeight: 1.6
     }
-  }, "✓ ", game.gamesSaved > 1 ? `${game.gamesSaved}게임을 ` : "", "기록에 저장했습니다. 아래 글을 그대로 보내시면 됩니다."), edit ? /*#__PURE__*/React.createElement("textarea", {
+  }, "\u2713 ", game.gamesSaved > 1 ? `${game.gamesSaved}게임을 ` : "", "\uAE30\uB85D\uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4. \uC544\uB798 \uAE00\uC744 \uADF8\uB300\uB85C \uBCF4\uB0B4\uC2DC\uBA74 \uB429\uB2C8\uB2E4."), edit ? /*#__PURE__*/React.createElement("textarea", {
     value: shown,
     onChange: e => setOutText(e.target.value),
     rows: 14,
@@ -6814,11 +6995,11 @@ function Sheet({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "lbl"
-  }, "맨 아래에 덧붙일 말"), /*#__PURE__*/React.createElement("textarea", {
+  }, "\uB9E8 \uC544\uB798\uC5D0 \uB367\uBD99\uC77C \uB9D0"), /*#__PURE__*/React.createElement("textarea", {
     value: tail,
     onChange: e => setTail(e.target.value),
     rows: 2,
-    placeholder: "다음 주 토요일 같은 시간에 봅시다",
+    placeholder: "\uB2E4\uC74C \uC8FC \uD1A0\uC694\uC77C \uAC19\uC740 \uC2DC\uAC04\uC5D0 \uBD05\uC2DC\uB2E4",
     style: {
       fontSize: 13.5,
       lineHeight: 1.7,
@@ -6831,7 +7012,7 @@ function Sheet({
       marginTop: 4,
       lineHeight: 1.6
     }
-  }, "쓰면 위 글 맨 아래에 줄을 긋고 붙습니다. 기록에는 저장되지 않습니다.")), /*#__PURE__*/React.createElement("div", {
+  }, "\uC4F0\uBA74 \uC704 \uAE00 \uB9E8 \uC544\uB798\uC5D0 \uC904\uC744 \uAE0B\uACE0 \uBD99\uC2B5\uB2C8\uB2E4. \uAE30\uB85D\uC5D0\uB294 \uC800\uC7A5\uB418\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 7,
@@ -6845,7 +7026,7 @@ function Sheet({
       fontSize: 14
     },
     onClick: send
-  }, "카톡으로"), /*#__PURE__*/React.createElement("button", {
+  }, "\uCE74\uD1A1\uC73C\uB85C"), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     style: {
       flex: 1,
@@ -6853,7 +7034,7 @@ function Sheet({
       fontSize: 14
     },
     onClick: copy
-  }, "복사")), /*#__PURE__*/React.createElement("div", {
+  }, "\uBCF5\uC0AC")), /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       marginTop: 9
@@ -6868,7 +7049,7 @@ function Sheet({
       color: "var(--chalk)",
       padding: "8px 12px"
     }
-  }, "↺ 자동으로 되돌리기") : /*#__PURE__*/React.createElement("button", {
+  }, "\u21BA \uC790\uB3D9\uC73C\uB85C \uB418\uB3CC\uB9AC\uAE30") : /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setOutText(auto);
       setEdit(true);
@@ -6878,7 +7059,7 @@ function Sheet({
       color: "var(--chalk)",
       padding: "8px 12px"
     }
-  }, "✏️ 보내기 전에 고치기")), edit && /*#__PURE__*/React.createElement("div", {
+  }, "\u270F\uFE0F \uBCF4\uB0B4\uAE30 \uC804\uC5D0 \uACE0\uCE58\uAE30")), edit && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "#6F8598",
@@ -6886,7 +7067,7 @@ function Sheet({
       marginTop: 4,
       lineHeight: 1.6
     }
-  }, "고친 글은 저장되지 않습니다. 창을 닫으면 사라집니다."), saved && /*#__PURE__*/React.createElement("button", {
+  }, "\uACE0\uCE5C \uAE00\uC740 \uC800\uC7A5\uB418\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uCC3D\uC744 \uB2EB\uC73C\uBA74 \uC0AC\uB77C\uC9D1\uB2C8\uB2E4."), saved && /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: onClose,
     style: {
@@ -6894,7 +7075,7 @@ function Sheet({
       fontSize: 14,
       padding: 13
     }
-  }, "🏠 홈으로 가기")));
+  }, "\uD83C\uDFE0 \uD648\uC73C\uB85C \uAC00\uAE30")));
 }
 /* ── 계정 · 서버 백업 · 문의 ──────────────────
    ★ 하단 탭에서 [주고받기] 를 없앴다 (사용자 지시).
@@ -6990,7 +7171,7 @@ function Account({
       fontSize: 13,
       padding: 6
     }
-  }, "닫기")), tab === "me" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, "\uB2EB\uAE30")), tab === "me" ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       ...box,
       display: "flex",
@@ -7039,14 +7220,14 @@ function Account({
       fontWeight: 700,
       marginBottom: 5
     }
-  }, "서버에 보관"), /*#__PURE__*/React.createElement("div", {
+  }, "\uC11C\uBC84\uC5D0 \uBCF4\uAD00"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "var(--chalk)",
       lineHeight: 1.7,
       marginBottom: 11
     }
-  }, "기록 ", data.games.length, "건 중 ", pend ? `${pend}건이 아직 안 올라갔습니다` : "모두 보관돼 있습니다", ".", data.syncAt ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "마지막 보관 ", new Date(data.syncAt).toLocaleString("ko-KR")) : null), /*#__PURE__*/React.createElement("button", {
+  }, "\uAE30\uB85D ", data.games.length, "\uAC74 \uC911 ", pend ? `${pend}건이 아직 안 올라갔습니다` : "모두 보관돼 있습니다", ".", data.syncAt ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "\uB9C8\uC9C0\uB9C9 \uBCF4\uAD00 ", new Date(data.syncAt).toLocaleString("ko-KR")) : null), /*#__PURE__*/React.createElement("button", {
     className: "prim",
     disabled: sync.busy,
     onClick: () => syncNow(),
@@ -7068,13 +7249,13 @@ function Account({
       marginTop: 8,
       lineHeight: 1.6
     }
-  }, "폰을 바꾸면 여기서 로그인만 하시면 기록이 그대로 내려옵니다.")), /*#__PURE__*/React.createElement("button", {
+  }, "\uD3F0\uC744 \uBC14\uAFB8\uBA74 \uC5EC\uAE30\uC11C \uB85C\uADF8\uC778\uB9CC \uD558\uC2DC\uBA74 \uAE30\uB85D\uC774 \uADF8\uB300\uB85C \uB0B4\uB824\uC635\uB2C8\uB2E4.")), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: signOut,
     style: {
       fontSize: 13.5
     }
-  }, "로그아웃")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+  }, "\uB85C\uADF8\uC544\uC6C3")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     onClick: sbKakaoGo,
     style: {
       width: "100%",
@@ -7085,28 +7266,28 @@ function Account({
       color: "#191600",
       borderRadius: 10
     }
-  }, "카카오로 3초 만에 시작"), /*#__PURE__*/React.createElement("div", {
+  }, "\uCE74\uCE74\uC624\uB85C 3\uCD08 \uB9CC\uC5D0 \uC2DC\uC791"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12.5,
       color: "var(--ivory)",
       lineHeight: 1.7,
       marginTop: 13
     }
-  }, "처음 오셨어도 이 단추 하나면 됩니다. 따로 가입하실 것이 없어요."), /*#__PURE__*/React.createElement("div", {
+  }, "\uCC98\uC74C \uC624\uC168\uC5B4\uB3C4 \uC774 \uB2E8\uCD94 \uD558\uB098\uBA74 \uB429\uB2C8\uB2E4. \uB530\uB85C \uAC00\uC785\uD558\uC2E4 \uAC83\uC774 \uC5C6\uC5B4\uC694."), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "#6F8598",
       lineHeight: 1.7,
       marginTop: 8
     }
-  }, "명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다."), /*#__PURE__*/React.createElement("div", {
+  }, "\uBA85\uC5F0\uC7AC \xB7 \uACE8\uD504\uC628\uACFC \uAC19\uC740 \uACC4\uC815\uC785\uB2C8\uB2E4. \uD55C \uBC88 \uB85C\uADF8\uC778\uD558\uBA74 \uC138 \uACF3\uC5D0\uC11C \uADF8\uB300\uB85C \uC4F0\uC785\uB2C8\uB2E4."), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "#6F8598",
       lineHeight: 1.7,
       marginTop: 14
     }
-  }, "로그인하지 않아도 앱은 그대로 쓸 수 있습니다. 다만 기록이 이 폰 안에만 남습니다."))));
+  }, "\uB85C\uADF8\uC778\uD558\uC9C0 \uC54A\uC544\uB3C4 \uC571\uC740 \uADF8\uB300\uB85C \uC4F8 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uB2E4\uB9CC \uAE30\uB85D\uC774 \uC774 \uD3F0 \uC548\uC5D0\uB9CC \uB0A8\uC2B5\uB2C8\uB2E4."))));
 }
 
 /* ── 문의하기 ── */
@@ -7124,7 +7305,7 @@ function Ask({
       fontWeight: 700,
       marginBottom: 14
     }
-  }, "문의하기"), /*#__PURE__*/React.createElement("div", {
+  }, "\uBB38\uC758\uD558\uAE30"), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,255,255,.05)",
       borderRadius: 10,
@@ -7137,7 +7318,7 @@ function Ask({
       lineHeight: 1.8,
       color: "var(--chalk)"
     }
-  }, "쓰시다가 이상한 곳이 있거나 고쳤으면 하는 것이 있으면 알려주십시오. 어느 화면에서 어떻게 눌렀을 때 그랬는지 함께 적어주시면 훨씬 빨리 고칩니다.")), /*#__PURE__*/React.createElement("a", {
+  }, "\uC4F0\uC2DC\uB2E4\uAC00 \uC774\uC0C1\uD55C \uACF3\uC774 \uC788\uAC70\uB098 \uACE0\uCCE4\uC73C\uBA74 \uD558\uB294 \uAC83\uC774 \uC788\uC73C\uBA74 \uC54C\uB824\uC8FC\uC2ED\uC2DC\uC624. \uC5B4\uB290 \uD654\uBA74\uC5D0\uC11C \uC5B4\uB5BB\uAC8C \uB20C\uB800\uC744 \uB54C \uADF8\uB7AC\uB294\uC9C0 \uD568\uAED8 \uC801\uC5B4\uC8FC\uC2DC\uBA74 \uD6E8\uC52C \uBE68\uB9AC \uACE0\uCE69\uB2C8\uB2E4.")), /*#__PURE__*/React.createElement("a", {
     href: `mailto:${MAIL}?subject=${encodeURIComponent("큐보드 문의")}`,
     style: {
       textDecoration: "none"
@@ -7150,7 +7331,7 @@ function Ask({
       textAlign: "center",
       marginBottom: 20
     }
-  }, "✉️ 메일로 보내기")), /*#__PURE__*/React.createElement("div", {
+  }, "\u2709\uFE0F \uBA54\uC77C\uB85C \uBCF4\uB0B4\uAE30")), /*#__PURE__*/React.createElement("div", {
     style: {
       paddingTop: 18,
       borderTop: "1px solid var(--line)",
@@ -7164,7 +7345,7 @@ function Ask({
       fontWeight: 600,
       marginBottom: 3
     }
-  }, CO.name, " | 대표 ", CO.ceo), /*#__PURE__*/React.createElement("div", null, "사업자등록번호 ", CO.biz), /*#__PURE__*/React.createElement("div", null, CO.addr), /*#__PURE__*/React.createElement("div", {
+  }, CO.name, " | \uB300\uD45C ", CO.ceo), /*#__PURE__*/React.createElement("div", null, "\uC0AC\uC5C5\uC790\uB4F1\uB85D\uBC88\uD638 ", CO.biz), /*#__PURE__*/React.createElement("div", null, CO.addr), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 3
     }
@@ -7173,7 +7354,7 @@ function Ask({
       color: "rgba(244,238,223,.82)",
       fontWeight: 600
     }
-  }, "고객센터 "), /*#__PURE__*/React.createElement("span", {
+  }, "\uACE0\uAC1D\uC13C\uD130 "), /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--accent)"
     }
@@ -7181,7 +7362,7 @@ function Ask({
     style: {
       opacity: .5
     }
-  }, " · "), /*#__PURE__*/React.createElement("span", {
+  }, " \xB7 "), /*#__PURE__*/React.createElement("span", {
     style: {
       color: "var(--accent)"
     }
@@ -7194,7 +7375,7 @@ function Ask({
       color: "rgba(244,238,223,.82)",
       fontWeight: 600
     }
-  }, "개인정보 보호책임자 "), CO.ceo, " (대표이사)"), /*#__PURE__*/React.createElement(LegalLinks, {
+  }, "\uAC1C\uC778\uC815\uBCF4 \uBCF4\uD638\uCC45\uC784\uC790 "), CO.ceo, " (\uB300\uD45C\uC774\uC0AC)"), /*#__PURE__*/React.createElement(LegalLinks, {
     style: {
       marginTop: 12,
       justifyContent: "flex-start"
@@ -7204,7 +7385,7 @@ function Ask({
       marginTop: 10,
       color: "rgba(159,187,208,.45)"
     }
-  }, "© ", new Date().getFullYear(), " ", CO.name, ". All rights reserved.")));
+  }, "\xA9 ", new Date().getFullYear(), " ", CO.name, ". All rights reserved.")));
 }
 /* ── 앱 ─────────────────────────────────────
    ★ 종목 고르기가 없다. 열면 바로 홈(경기 준비)이다.
@@ -7450,7 +7631,7 @@ function App() {
     style: {
       color: "var(--chalk)"
     }
-  }, "불러오는 중…"));
+  }, "\uBD88\uB7EC\uC624\uB294 \uC911\u2026"));
   const ctx = {
     data,
     save,
@@ -7464,14 +7645,23 @@ function App() {
     style: {
       "--accent": ACCENT
     }
-  }, /*#__PURE__*/React.createElement("style", null, CSS), tab === "home" && !setup && /*#__PURE__*/React.createElement(Home, {
-    ...ctx,
+  }, /*#__PURE__*/React.createElement("style", null, CSS), tab === "home" && !setup && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ResumeBar, {
+    onResume: r => {
+      setSetup({
+        ...r.setup,
+        __live: r
+      });
+      setBoardKey(n => n + 1);
+    },
+    say: say
+  }), /*#__PURE__*/React.createElement(Home, _extends({}, ctx, {
     go: s => {
+      liveClear();
       setSetup(s);
     }
-  }), tab === "home" && setup && /*#__PURE__*/React.createElement(Billiard, {
-    key: boardKey,
-    ...ctx,
+  }))), tab === "home" && setup && /*#__PURE__*/React.createElement(Billiard, _extends({
+    key: boardKey
+  }, ctx, {
     setup: setup,
     setBare: setBare,
     openSheet: setSheet
@@ -7482,7 +7672,7 @@ function App() {
       setBare(false);
       setBoardKey(n => n + 1);
     }
-  }), tab === "log" && /*#__PURE__*/React.createElement(Log, {
+  })), tab === "log" && /*#__PURE__*/React.createElement(Log, {
     data: data,
     save: save,
     say: say,
