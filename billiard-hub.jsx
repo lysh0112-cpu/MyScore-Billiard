@@ -186,14 +186,11 @@ const CSS = `@keyframes blinkEnd { 0%,100%{ filter:brightness(1); } 50%{ filter:
 @keyframes glOut { to { opacity:0; } }
 @keyframes glIn { 0% { opacity:0; } 70% { opacity:.22; } 100% { opacity:0; } }
 @media (max-height:430px) { .statrow { padding:1px 0 0 !important; } }
-/* ★ 2026-11-05 — 번호판이 좁아지면 지표를 ★덜 중요한 것부터 감춘다.
-      폰 3인 화면은 번호판이 59px 인데 지표 줄은 161px 이 필요해 ★전부터 잘려 있었다
-      (1판-43 에서도 똑같이 잘렸다 — 재서 확인). 잘린 글자를 보여주느니 ★안 보이는 편이 낫다.
-   ⛔ 「목표」는 ★절대 안 감춘다 — 눌러서 핸디를 고치는 자리다.
-   ⚠ !important 가 ★있어야 한다. 지표 한 칸에 display:inline-flex 가 «인라인 스타일» 로
-     박혀 있어서, 그냥 display:none 으로는 ★안 먹는다 (재서 확인 — 그대로 flex 였다). */
-@container (max-width:230px) { .statrow .st-opt { display:none !important; } }
-@container (max-width:150px) { .statrow .st-av  { display:none !important; } }
+/* 🔴 2026-11-05 — 좁으면 하이런·에버를 ★감췄었다. 되돌린다 [대표님].
+      「폰에서도 보이게 해줘. 보기 싫으면 수정하자」
+   ⇒ 감추지 않는다. 대신 자리가 모자라면 ★두세 줄로 접는다 (flexWrap:"wrap").
+     잘린 글자도 아니고, 사라지지도 않는다.
+   ⛔ st-opt·st-av 라는 이름표는 ★남겨 둔다 — 다시 감춰야 하면 여기 두 줄만 되살리면 된다. */
 @media (orientation: landscape) { .rot { display:none !important; } }
 @media (prefers-reduced-motion:reduce){ .sq * { transition:none !important; } .ft,.fb { animation:none !important; display:none !important; } }
 `;
@@ -620,13 +617,15 @@ const MID_VAL  = "clamp(16px, 4.4vh, 46px)";
 /* ★ 2026-11-05 — ★칸 폭(cqw)으로 잰다. ScorePad 뿌리가 칸이다.
       치는 분 번호판만 넓어져 번호판 폭이 서로 달라졌으므로, 화면 높이(vh)로 재면
       ⛔ 좁아진 번호판에서 글자가 그대로여서 ★옆 번호판 지표와 붙는다 (실제로 붙었다). */
-const ST_LBL   = "clamp(9px, 5.2cqw, 22px)";
-const ST_VAL   = "clamp(12px, 7.6cqw, 34px)";
+/* ⚠ 제일 작은 값(7.5px·9.5px)은 ★작은 폰 3인(번호판 62px)에서 글자가
+      안 잘리게 하려고 잡은 값이다 — 재서 맞췄다. 더 올리면 그 화면에서 잘린다. */
+const ST_LBL   = "clamp(7.5px, 5.2cqw, 22px)";
+const ST_VAL   = "clamp(9.5px, 7.6cqw, 34px)";
 /* ★ 2026-11-05 — 히로가 붙어 ★넷이 되면 한 치수 작게 잡는다.
       게다가 에버가 「-10.00」 처럼 ★길어질 수 있다 (0 아래로 내려가므로).
       넷을 전과 같은 크기로 두면 태블릿 3인에서 ★양끝이 잘렸다 (재서 확인). */
-const ST_LBL4  = "clamp(8px, 4.2cqw, 19px)";
-const ST_VAL4  = "clamp(11px, 6.1cqw, 28px)";
+const ST_LBL4  = "clamp(7px, 4.2cqw, 19px)";
+const ST_VAL4  = "clamp(9px, 6.1cqw, 28px)";
 /* ★ 2026-11-05 — [다음 ⇒] 색 [대표님 「밝은 색으로 확실하게 보이게 해달라는 요청도 있었다」].
       전에는 #1b3d55 — 검은 바탕에 묻히는 짙은 남색이었다.
    ⛔ 초록(＋10)·빨강(−10)·노랑(목표 도달) 과 ★안 겹치는 색이어야 한다 ⇒ 파랑을 ★올렸다.
@@ -731,7 +730,9 @@ function ScorePad({ name, value, size, bg, fg, accent = "#F4EEDF", dim = false,
                 넷을 전과 같은 사이로 두면 태블릿 3인에서 ★19px 넘쳐 잘렸다 (재서 확인) */
           gap: stats.length >= 4 ? "clamp(3px,2.4cqw,16px)" : "clamp(4px,4.5cqw,30px)",
           padding: "7px 2px 5px",
-          flexWrap: "nowrap", whiteSpace: "nowrap", overflow: "hidden",
+          /* ★ 모자라면 ★접는다 (감추지 않는다). 한 칸 안에서는 안 접힌다 */
+          flexWrap: "wrap", whiteSpace: "nowrap", overflow: "hidden",
+          rowGap: "clamp(1px,1cqw,5px)",
         }}>
           {stats.map(([l, v, c, onStat, cls]) => (
             /* ★ 네 번째 값이 있으면 그 지표만 누를 수 있다 (목표 → 핸디 고치기).
@@ -3677,6 +3678,12 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
               «목표에 닿은 사람» 을 모르면 셀 수가 없었다 — 전부 0점이 됐다 (2026-09-18).
            ⇒ 줄마다 함께 담는다. 옛 기록에는 없으므로 읽는 쪽이 없어도 견뎌야 한다 */
         reached: e.reached || [], done: e.done != null ? e.done : 0,
+        /* ★ 2026-11-05 — 4구 마무리 «목표» 를 담는다 [대표님].
+              「카톡과 경기 기록표에 목표한 3쿠션+뱅크샷 숫자도 적어줘야 될 듯」
+           ⛔ 지금까지는 «친 개수» 만 담았다. 목표가 없으면 「1개 중 1개」인지
+             「3개 중 1개」인지 알 수가 없다.
+           ⛔ 어제까지 친 기록에는 이 값이 없다 — 읽는 쪽이 없어도 견뎌야 한다 */
+        goal3: mode === "4" ? fin3 : 0, goalB: mode === "4" ? finBank : 0,
         innings: Math.max(1, ...e.teams.map((t) => t.inn)),
         team, players: flat,
         teams: team ? e.teams.map((t) => ({
@@ -4477,6 +4484,9 @@ function matchOf(first, list) {
       seconds: Number(g.seconds) || 0,
     })).sort((a, b) => a.no - b.no),
     all,
+    /* ★ 마무리 목표 — 한 경기 안에서는 모든 판이 같은 값이다 */
+    goal3: Number(all.map((g) => g.goal3).find(Boolean)) || 0,
+    goalB: Number(all.map((g) => g.goalB).find(Boolean)) || 0,
     seconds: all.reduce((t, g) => t + (Number(g.seconds) || 0), 0),
     memo: all.map((g) => g.memo).filter(Boolean)[0] || "",
     ids: all.map((g) => g.id),
@@ -4581,6 +4591,13 @@ function MatchCard({ m, onSheet, onDel }) {
               {m.place}
             </span>
           </div>
+          {/* ★ 2026-11-05 — 전체 시간 [대표님 「나중에 보고 카톡으로 다시 보낼 수도 있잖아」].
+                 카톡 글과 ★같은 값·같은 함수를 쓴다 (9장 ①) */}
+          {m.span >= 60000 && (
+            <div className="num" style={{ fontSize: 11.5, color: "#6F8598", marginTop: 3, whiteSpace: "nowrap" }}>
+              🕐 {hhmm(m.startAt)} ~ {hhmm(m.endAt)} · 전체 {dur(m.span)}
+            </div>
+          )}
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 11.5, color: "#6F8598", marginBottom: 5 }}>{seriesWord}</div>
@@ -4604,11 +4621,22 @@ function MatchCard({ m, onSheet, onDel }) {
         ))}
       </div>
 
+      {/* ★ 마무리 목표 — 4구에서 정했을 때만. 카톡 글과 ★같은 말(finGoalTxt) */}
+      {finGoalTxt(m) && (
+        <div style={{ fontSize: 13, lineHeight: 1.65, marginTop: -4, marginBottom: 9 }}>
+          <span style={{ fontSize: 11.5, color: "var(--chalk)", marginRight: 6 }}>마무리</span>
+          <span style={{ color: "var(--accent)" }}>{finGoalTxt(m)}</span>
+        </div>
+      )}
+
       {/* 판별 */}
       {m.bestOf > 1 && (
         <div style={{ background: "rgba(255,255,255,.05)", borderRadius: 8, padding: "9px 11px", fontSize: 12.5, color: "#B9CCDA", lineHeight: 2 }}>
           {m.rounds.map((r, i) => (
-            <div key={i}>
+            /* ★ 그 판에 걸린 시간을 ★오른쪽 끝에 붙인다 — 화면은 오른쪽이 비어 있다.
+                  ⛔ 카톡 글에서는 ⏱ 한 줄로 모은다 (말풍선이 좁아 뒤에 붙이면 접힌다) */
+            <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
               {r.no || i + 1}번 게임&nbsp;
               {m.many ? (
                 /* ★ 세 명 이상은 등수만 (사용자 지시).
@@ -4628,6 +4656,16 @@ function MatchCard({ m, onSheet, onDel }) {
                   </span>
                 </>
               )}
+              </div>
+              {(() => {
+                const t = (m.times || []).find((x) => x.no === (r.no || i + 1));
+                const ok2 = t && t.startAt && t.endAt && t.endAt > t.startAt;
+                return ok2 ? (
+                  <span className="num" style={{ flexShrink: 0, fontSize: 11.5, color: "#6F8598" }}>
+                    {dur(t.endAt - t.startAt)}
+                  </span>
+                ) : null;
+              })()}
             </div>
           ))}
         </div>
@@ -4663,13 +4701,20 @@ function MatchCard({ m, onSheet, onDel }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginTop: 6 }}>
-        <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--chalk)", lineHeight: 1.7 }}>
-          <span style={{ color: "#6F8598" }}>avg</span>&nbsp;
+        {/* ★ 2026-11-05 — 「avg 한 줄」을 ★카톡 글과 같은 줄로 바꿨다 [대표님].
+               「카톡으로 보낸 내용이 그대로 나와야 되지 않을까?」
+            ⛔ 에버를 지운 적은 없다 — 더 적는 쪽으로 바꾼 것이다 */}
+        <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--chalk)", lineHeight: 1.85 }}>
           {m.score.map((u, i) => (
-            <React.Fragment key={u.name + i}>
-              {i > 0 && " · "}
-              {u.name} {fmtAvg(avg(u.total, u.inn || 1), m.mode)}
-            </React.Fragment>
+            <div key={u.name + i} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <span style={{ color: "var(--ivory)" }}>{u.name}</span>
+              &nbsp;<span className="num" style={{ color: "#B9CCDA" }}>{u.total}</span>점
+              &nbsp;<span className="num" style={{ color: "#B9CCDA" }}>{u.inn || 1}</span>이닝
+              &nbsp;&nbsp;<span style={{ color: "#6F8598" }}>에버</span>&nbsp;
+              <span className="num" style={{ color: "var(--accent)" }}>{fmtAvg(avg(u.total, u.inn || 1), m.mode)}</span>
+              &nbsp;&nbsp;<span style={{ color: "#6F8598" }}>하이런</span>&nbsp;
+              <span className="num" style={{ color: "#B9CCDA" }}>{u.high || 0}</span>
+            </div>
           ))}
         </div>
         <button onClick={onDel} style={{
@@ -4756,6 +4801,15 @@ const dur = (ms) => {
   return r ? `${h}시간 ${r}분` : `${h}시간`;
 };
 
+/* ★ 마무리 목표를 사람 말로 — 카톡 글과 기록 카드가 ★같은 말을 쓴다 (9장 ①).
+      정한 것이 없으면 빈 글자를 돌려준다 (옛 기록도 그렇다) */
+const finGoalTxt = (m) => {
+  const out = [];
+  if (Number(m.goal3) > 0) out.push(`3쿠션 ${m.goal3}`);
+  if (Number(m.goalB) > 0) out.push(`뱅크샷 ${m.goalB}`);
+  return out.join(" · ");
+};
+
 const hhmm = (t) => {
   const d = new Date(Number(t) || 0);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -4784,6 +4838,9 @@ function buildText(g, tail) {
 
   /* 핸디 */
   L.push(`핸디  ${m.score.map((u) => `${u.name} ${u.handi}`).join(m.team ? "  :  " : " · ")}`);
+  /* ★ 2026-11-05 — 마무리 목표 [대표님]. 4구에서 정했을 때만 나온다 */
+  const fg = finGoalTxt(m);
+  if (fg) L.push(`마무리  ${fg}`);
   L.push("");
 
   /* 판별 */
