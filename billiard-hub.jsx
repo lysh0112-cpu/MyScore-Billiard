@@ -583,7 +583,9 @@ function Flip({ value, bg, fg, size }) {
     <div className={"fh " + cls} style={{ background: b }}>
       {/* ⛔ value 는 ★글자/숫자 그대로여야 한다. 위 useEffect 가 p.v === value 로
              «바뀌었는지» 를 보기 때문에, 덩이(React 조각)를 넣으면 ★늘 뒤집힌다 */}
-      <div className="fi" style={{ color: f, fontSize: size }}>{n}</div>
+      {/* ★ "-10" 의 빼기표를 단추와 같은 − (U+2212) 로 바꿔 그린다.
+             글자 수는 그대로라 칸 계산에 영향이 없다 */}
+      <div className="fi" style={{ color: f, fontSize: size }}>{String(n).replace("-", "−")}</div>
       {fx && <><div className="sh" /><div className="gl" /></>}
     </div>
   );
@@ -620,6 +622,11 @@ const MID_VAL  = "clamp(16px, 4.4vh, 46px)";
       ⛔ 좁아진 번호판에서 글자가 그대로여서 ★옆 번호판 지표와 붙는다 (실제로 붙었다). */
 const ST_LBL   = "clamp(9px, 5.2cqw, 22px)";
 const ST_VAL   = "clamp(12px, 7.6cqw, 34px)";
+/* ★ 2026-11-05 — 히로가 붙어 ★넷이 되면 한 치수 작게 잡는다.
+      게다가 에버가 「-10.00」 처럼 ★길어질 수 있다 (0 아래로 내려가므로).
+      넷을 전과 같은 크기로 두면 태블릿 3인에서 ★양끝이 잘렸다 (재서 확인). */
+const ST_LBL4  = "clamp(8px, 4.2cqw, 19px)";
+const ST_VAL4  = "clamp(11px, 6.1cqw, 28px)";
 /* ★ 2026-11-05 — [다음 ⇒] 색 [대표님 「밝은 색으로 확실하게 보이게 해달라는 요청도 있었다」].
       전에는 #1b3d55 — 검은 바탕에 묻히는 짙은 남색이었다.
    ⛔ 초록(＋10)·빨강(−10)·노랑(목표 도달) 과 ★안 겹치는 색이어야 한다 ⇒ 파랑을 ★올렸다.
@@ -714,7 +721,7 @@ function ScorePad({ name, value, size, bg, fg, accent = "#F4EEDF", dim = false,
         <Flip value={value} size={size} bg={bg} fg={fg} />
       </button>
 
-      {stats.length > 0 && (
+      {stats.length > 0 && (() => { const many = stats.length >= 4; const SL = many ? ST_LBL4 : ST_LBL; const SV = many ? ST_VAL4 : ST_VAL; return (
         /* ★ 위아래 두 줄이던 것을 한 줄로 폈다.
                당구대에서 고개를 들어 보는 값이라 줄을 나누면 글자가 반으로 작아진다.
                "하이런 0  에버 0.000  목표 12" 처럼 라벨과 값을 나란히 둔다 */
@@ -731,25 +738,25 @@ function ScorePad({ name, value, size, bg, fg, accent = "#F4EEDF", dim = false,
                    이 줄은 번호판 단추 바깥이라, 눌러도 점수가 오르지 않는다.
                    눌러도 되는 줄 알도록 점선 밑줄을 깐다 */
             <span key={l} className={cls || undefined}
-              style={{ display: "inline-flex", alignItems: "baseline", gap: "clamp(4px,.8vw,9px)" }}>
+              style={{ display: "inline-flex", alignItems: "baseline", gap: "clamp(2px,1.4cqw,9px)" }}>
               {onStat ? (
                 <button onClick={onStat} aria-label={`${l} ${v}, 누르면 고치기`} style={{
-                  display: "inline-flex", alignItems: "baseline", gap: "clamp(4px,.8vw,9px)",
+                  display: "inline-flex", alignItems: "baseline", gap: "clamp(2px,1.4cqw,9px)",
                   background: "transparent", padding: "0 2px 2px", borderBottom: "1px dashed #5f7488",
                 }}>
-                  <span style={{ fontSize: ST_LBL, color: "#7d7d7d" }}>{l}</span>
-                  <span className="num" style={{ fontSize: ST_VAL, color: "#9fbbd0" }}>{v}</span>
+                  <span style={{ fontSize: SL, color: "#7d7d7d" }}>{l}</span>
+                  <span className="num" style={{ fontSize: SV, color: "#9fbbd0" }}>{v}</span>
                 </button>
               ) : (
                 <>
-                  <span style={{ fontSize: ST_LBL, color: "#7d7d7d" }}>{l}</span>
-                  <span className="num" style={{ fontSize: ST_VAL, color: c || accent }}>{v}</span>
+                  <span style={{ fontSize: SL, color: "#7d7d7d" }}>{l}</span>
+                  <span className="num" style={{ fontSize: SV, color: c || accent }}>{v}</span>
                 </>
               )}
             </span>
           ))}
         </div>
-      )}
+      ); })()}
     </div>
   );
 }
@@ -3091,6 +3098,17 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
   const nthOf = (n, last) => `${NTH[n] || `${n}번째`} ${last ? "마지막 " : ""}판`;
 
   const STEP = mode === "4" ? 10 : 1;
+  /* ★ 2026-11-05 — 4구는 점수가 ★0 아래로 내려갈 수 있다 [대표님].
+        「처음 초구를 치다가 히로를 한 경우 −10점이 되어야 하는데
+          ★0점으로 변동 없이 표시되고 있다」
+     ⇒ 히로는 ★벌점이다. 0 에서 치면 −10 이 맞다. 깎아 놓고 0 에 붙들면 안 된다.
+     ★ 「남은 점수」로 볼 때도 같다 — −10 이면 남은 점수가 ★160 이 된다.
+        처음에 말씀하신 「반칙을 범하면 목표점수가 10점씩 올라가는 방식」이 이것이다.
+     ⛔ 3쿠션은 0 아래로 안 내려간다 — 거기엔 히로가 없고,
+        [−1] 은 잘못 눌렀을 때 되돌리는 단추일 뿐이다.
+     ⚠ 0 에 붙들면 ★더 나쁜 일도 생긴다 — 이미 −10 인데 [−10] 을 누르면
+        Math.max(0, −20) 이 되어 점수가 ★올라가 버린다. */
+  const clampSc = (v) => (mode === "4" ? v : Math.max(0, v));
   /* ★ 수구 색은 "몇 번째 차례인가" 로만 정한다 (7판 · 사용자 지시).
         초구 색을 고르면(firstBall) 그다음은 무조건 나머지 한 색이다.
         공은 흰공·노란공 두 가지뿐이므로 계속 번갈아 간다.
@@ -3201,7 +3219,7 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     setBegun(true);
     if (!startAt) setStartAt(Date.now());
     snap();
-    const now = Math.max(0, sc(k) + d);
+    const now = clampSc(sc(k) + d);
     setScore((s) => ({ ...s, [k]: now }));
     setRun((r) => Math.max(0, r + d));
     setShot(clockSec);
@@ -3340,7 +3358,7 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     if (!startAt) setStartAt(Date.now());
     snap();
     setFouls((f) => ({ ...f, [k]: (f[k] || 0) + 1 }));
-    setScore((s) => ({ ...s, [k]: Math.max(0, (s[k] || 0) - 10) }));
+    setScore((s) => ({ ...s, [k]: clampSc((s[k] || 0) - 10) }));
     setHigh((h) => ({ ...h, [k]: Math.max(h[k] || 0, run) }));
     setTurns((t) => ({ ...t, [k]: (t[k] || 0) + 1 }));
     setRun(0);
