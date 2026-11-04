@@ -145,6 +145,14 @@ const CSS = `@keyframes blinkEnd { 0%,100%{ filter:brightness(1); } 50%{ filter:
 @keyframes glOut { to { opacity:0; } }
 @keyframes glIn { 0% { opacity:0; } 70% { opacity:.22; } 100% { opacity:0; } }
 @media (max-height:430px) { .statrow { padding:1px 0 0 !important; } }
+/* ★ 2026-11-05 — 번호판이 좁아지면 지표를 ★덜 중요한 것부터 감춘다.
+      폰 3인 화면은 번호판이 59px 인데 지표 줄은 161px 이 필요해 ★전부터 잘려 있었다
+      (1판-43 에서도 똑같이 잘렸다 — 재서 확인). 잘린 글자를 보여주느니 ★안 보이는 편이 낫다.
+   ⛔ 「목표」는 ★절대 안 감춘다 — 눌러서 핸디를 고치는 자리다.
+   ⚠ !important 가 ★있어야 한다. 지표 한 칸에 display:inline-flex 가 «인라인 스타일» 로
+     박혀 있어서, 그냥 display:none 으로는 ★안 먹는다 (재서 확인 — 그대로 flex 였다). */
+@container (max-width:230px) { .statrow .st-opt { display:none !important; } }
+@container (max-width:150px) { .statrow .st-av  { display:none !important; } }
 @media (orientation: landscape) { .rot { display:none !important; } }
 @media (prefers-reduced-motion:reduce){ .sq * { transition:none !important; } .ft,.fb { animation:none !important; display:none !important; } }
 `;
@@ -525,10 +533,9 @@ function Flip({ value, bg, fg, size }) {
 
   const half = (cls, n, b, f, fx) => (
     <div className={"fh " + cls} style={{ background: b }}>
-      {/* ★ 숫자는 bigNum 을 거친다 — 150 은 15⁰ 로 나온다 (위 설명).
-             ⛔ value 자체는 ★글자/숫자 그대로 두어야 한다. 위 useEffect 가
-               p.v === value 로 «바뀌었는지» 를 보기 때문에 덩이를 넣으면 늘 뒤집힌다 */}
-      <div className="fi" style={{ color: f, fontSize: size }}>{bigNum(n)}</div>
+      {/* ⛔ value 는 ★글자/숫자 그대로여야 한다. 위 useEffect 가 p.v === value 로
+             «바뀌었는지» 를 보기 때문에, 덩이(React 조각)를 넣으면 ★늘 뒤집힌다 */}
+      <div className="fi" style={{ color: f, fontSize: size }}>{n}</div>
       {fx && <><div className="sh" /><div className="gl" /></>}
     </div>
   );
@@ -560,35 +567,27 @@ const PAD_LBL  = "clamp(9.5px, 1.5vh, 16px)";
 const MID_LBL  = "clamp(11px, 2.2vh, 26px)";
 const MID_VAL  = "clamp(16px, 4.4vh, 46px)";
 /* 지표 한 줄 — 하이런 0 · 에버 0.000 · 목표 12 */
-const ST_LBL   = "clamp(10px, 2vh, 20px)";
-const ST_VAL   = "clamp(14px, 3.3vh, 32px)";
+/* ★ 2026-11-05 — ★칸 폭(cqw)으로 잰다. ScorePad 뿌리가 칸이다.
+      치는 분 번호판만 넓어져 번호판 폭이 서로 달라졌으므로, 화면 높이(vh)로 재면
+      ⛔ 좁아진 번호판에서 글자가 그대로여서 ★옆 번호판 지표와 붙는다 (실제로 붙었다). */
+const ST_LBL   = "clamp(9px, 5.2cqw, 22px)";
+const ST_VAL   = "clamp(12px, 7.6cqw, 34px)";
+/* ★ 2026-11-05 — [다음 ⇒] 색 [대표님 「밝은 색으로 확실하게 보이게 해달라는 요청도 있었다」].
+      전에는 #1b3d55 — 검은 바탕에 묻히는 짙은 남색이었다.
+   ⛔ 초록(＋10)·빨강(−10)·노랑(목표 도달) 과 ★안 겹치는 색이어야 한다 ⇒ 파랑을 ★올렸다.
+   ★ 하이런 3점 이상이면 한 번 더 밝아지는 것은 그대로 둔다 */
+const NEXT_BG = "#2F86D9";
+const NEXT_HI = "#4AA8F0";
 /* 점수 단추 (−2 −1 +1 +2) — 알약 모양 */
 const PT_PAD   = "clamp(8px, 2.1vh, 22px) 0";
 const PT_FS    = "clamp(14px, 3.2vh, 38px)";
 
-/* ★ 2026-11-04 — 10점 단위 숫자를 ★크게 보이게 하는 꼴 [대표님].
-      「4구 점수가 10점 단위가 되면 10점 미만일 때에 비해 숫자가 너무 작아 보인다」
-      ⇒ 세 자리 이상이고 ★끝이 0 이면 「15」 를 크게, 끝 「0」 을 작게 붙인다 (15⁰).
-      ⛔ 10 으로 ★안 나눠지면(143) 그냥 세 자리로 쓴다 — 숫자를 속여 보이면 안 된다.
-      ⛔ 두 자리(40)는 그냥 둔다 — 이미 충분히 크다. */
-/* ⚠ {2,} 다음에 0 이 와야 ★모두 세 자리다. {3,}0 으로 쓰면 ★네 자리부터라
-      150 이 안 걸렸다 — 새 검사(four-test 6장)가 ★값으로 잡아냈다 */
-const TENS = /^[0-9]{2,}0$/;
-const bigNum = (v) => {
-  const s = String(v);
-  if (!TENS.test(s)) return s;
-  return (
-    <>
-      {s.slice(0, -1)}
-      <span style={{ fontSize: ".58em", verticalAlign: ".40em", opacity: .88 }}>0</span>
-    </>
-  );
-};
-/* 글자 크기를 정할 때 쓰는 ★«보이는 자릿수». 15⁰ 는 3 이 아니라 2.6 칸이다 */
-const numLen = (v) => {
-  const s = String(v);
-  return TENS.test(s) ? (s.length - 1) + 0.6 : s.length;
-};
+/* 🔴 2026-11-05 — 15⁰ 꼴(큰 15 + 작은 0)을 ★걷어냈다 [대표님].
+      「150 숫자가 조금 낯설고 어색하다. 숫자를 약간 줄이더라도 ★같은 크기로 보여달라」
+   ⇒ 숫자는 그냥 150 이다. 당구장 점수판과 같은 모양이다.
+   ★ 줄어든 것이 아니다 — 아래 padSize 를 바로잡은 덕에 1판-43 의 128px 보다
+     여전히 ★30% 크다 (167px · 태블릿 1500×800 3인에서 잼).
+     즉 커진 까닭은 15⁰ 가 아니라 ★잘못 잡혀 있던 두 값이었다. */
 
 /* 자릿수가 늘어나도 칸을 안 넘도록 글자 크기를 줄인다.
    ★ 2026-11-04 — 한 자리 폭을 ★재서 바로잡았다 [대표님 「숫자가 너무 작다」].
@@ -599,7 +598,7 @@ const numLen = (v) => {
         브라우저가 단추에 좌우 6px 씩 넣어 두어, 폰 3인 화면에서는 59px 중
         ★47px 만 세고 있었다 (재서 확인: 25.87px = 55% × 47). 그래서 padding:0 을 줬다.
      ⇒ 이제 번호판 폭의 ★82% 를 숫자가 쓴다 (전에는 ★51%).
-        두 자리 74cqw · 세 자리 49cqw · 15⁰(2.6) 는 57cqw */
+        두 자리 74cqw · 세 자리 49cqw */
 const padSize = (maxLen) => `min(104cqh, ${Math.round(86 / (0.58 * Math.max(1, maxLen)))}cqw)`;
 
 /*  name    이름
@@ -609,12 +608,18 @@ const padSize = (maxLen) => `min(104cqh, ${Math.round(86 / (0.58 * Math.max(1, m
     dim     지금 차례가 아니다 (이름을 흐리게)
     badge   이름 밑 한 줄        { text, color }
     dot     이름 밑 동그라미 한 줄 { color, text, on }  on:false 면 자리만 잡고 감춤
-    stats   맨 밑 지표 줄        [[라벨, 값, 색?], ...]
+    stats   맨 밑 지표 줄        [[라벨, 값, 색?, 누를때?, 좁으면감출class?], ...]
     onTap   번호판을 눌렀을 때                                     */
 function ScorePad({ name, value, size, bg, fg, accent = "#F4EEDF", dim = false,
                     badge = null, dot = null, stats = [], onTap, onName, ariaLabel }) {
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+    /* ★ 2026-11-05 — 뿌리를 ★칸(container)으로 삼았다.
+          치는 분 번호판만 넓어지면서 번호판마다 폭이 ★달라졌기 때문이다.
+          지표 줄(하이런·에버·목표) 글자를 ★그 번호판 폭(cqw)에 맞춰야
+          좁아진 쪽에서 글자가 서로 붙지 않는다 (실제로 붙었다).
+       ⛔ inline-size 다. size 로 하면 높이까지 칸이 되어 flex:1 이 무너진다 */
+    <div style={{ flex: 1, containerType: "inline-size",
+                  display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
       {/* ★ 이름을 누르면 순서·공 색을 바꾸는 작은 창이 뜬다.
              판이 끝날 때마다 순서를 바꾸는데, 그때마다 설정 서랍을 여는 건 번거롭다.
              눌러도 되는 줄 알도록 ⇄ 를 붙인다 */}
@@ -667,17 +672,18 @@ function ScorePad({ name, value, size, bg, fg, accent = "#F4EEDF", dim = false,
                "하이런 0  에버 0.000  목표 12" 처럼 라벨과 값을 나란히 둔다 */
         <div className="statrow" style={{
           display: "flex", justifyContent: "center", alignItems: "baseline",
-          /* ★ 2026-11-04 — 히로가 붙어 넷이 되면 ★사이를 좁힌다.
-                넷을 전과 같은 사이로 두면 태블릿 3인 화면에서 ★19px 넘쳐 잘렸다 (재서 확인) */
-          gap: stats.length >= 4 ? "clamp(4px,1.1vw,15px)" : "clamp(9px,2.2vw,30px)",
+          /* ★ 사이도 ★칸 폭(cqw)으로 잰다. 히로가 붙어 넷이 되면 더 좁힌다 —
+                넷을 전과 같은 사이로 두면 태블릿 3인에서 ★19px 넘쳐 잘렸다 (재서 확인) */
+          gap: stats.length >= 4 ? "clamp(3px,2.4cqw,16px)" : "clamp(4px,4.5cqw,30px)",
           padding: "7px 2px 5px",
           flexWrap: "nowrap", whiteSpace: "nowrap", overflow: "hidden",
         }}>
-          {stats.map(([l, v, c, onStat]) => (
+          {stats.map(([l, v, c, onStat, cls]) => (
             /* ★ 네 번째 값이 있으면 그 지표만 누를 수 있다 (목표 → 핸디 고치기).
                    이 줄은 번호판 단추 바깥이라, 눌러도 점수가 오르지 않는다.
                    눌러도 되는 줄 알도록 점선 밑줄을 깐다 */
-            <span key={l} style={{ display: "inline-flex", alignItems: "baseline", gap: "clamp(4px,.8vw,9px)" }}>
+            <span key={l} className={cls || undefined}
+              style={{ display: "inline-flex", alignItems: "baseline", gap: "clamp(4px,.8vw,9px)" }}>
               {onStat ? (
                 <button onClick={onStat} aria-label={`${l} ${v}, 누르면 고치기`} style={{
                   display: "inline-flex", alignItems: "baseline", gap: "clamp(4px,.8vw,9px)",
@@ -3684,7 +3690,7 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
         「남은 점수」 를 켜면 화면에 뜨는 것은 150 쪽이고, 15⁰ 꼴은 2.6 칸이다.
      ⛔ 전에는 sc(친 점수) 로 쟀다 — 0 : 0 으로 시작하는 남은점수 화면에서
         ★한 자리로 잡아 150 이 칸을 넘었을 것이다. */
-  const maxLen = Math.max(1, ...units.map((p) => numLen(shownOf(p))));
+  const maxLen = Math.max(1, ...units.map((p) => String(shownOf(p)).length));
   const NUMSIZE = padSize(maxLen);
   const F = tv ? 1.55 : 1;
 
@@ -3878,7 +3884,7 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
                     <button onClick={next} aria-label="다음 선수 차례" style={{
                       width: "100%", marginBottom: 8, borderRadius: "clamp(10px,2.4vh,22px)",
                       height: "clamp(56px,17vh,150px)", flexShrink: 0,
-                      background: run >= 3 ? "#2a6ea0" : "#1b3d55", color: "#fff",
+                      background: run >= 3 ? NEXT_HI : NEXT_BG, color: "#fff",
                       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                       lineHeight: 1.05, transition: "background .2s",
                     }}>
@@ -3924,7 +3930,15 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
               {/* ★ 두 자리일 때는 ± 단추가 그 사람 번호판 밑에 붙는다.
                      왼쪽은 빼기, 오른쪽은 더하기. 누구 것인지 헷갈릴 일이 없다.
                      세 자리 이상은 칸이 좁아 예전처럼 아래 한 줄로 모은다 */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+              {/* ★ 2026-11-05 — 지금 치는 분 번호판만 ★1.38배 넓힌다 [대표님 ㉯].
+                     「그 점수판에 해당되는 선수의 점수판만을 조금 더 키워 보이게」
+                  ★ 숫자 크기는 cqw(칸 폭)로 정해져 있어 ★저절로 따라 커진다.
+                  ⛔ 끝난 분(isDone)은 안 넓힌다 — 차례가 안 온다.
+                  ★ 0.2초로 스르륵 — 툭 바뀌면 눈이 못 따라간다 */}
+              <div style={{
+                flex: (i === active && !isDone(i)) ? 1.38 : 1,
+                transition: "flex-grow .2s ease",
+                display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
                 <ScorePad
                   name={p.name}
                   /* ★ 「남은 점수」 를 켜면 goal − 친 점수 (150 → 140 → …) */
@@ -3947,11 +3961,11 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
                         ? { text: `${finishOrder.indexOf(p.key) + 1}위 도달`, color: "#E8B838" } : null))}
                   dot={autoBall && !isDone(i) ? { color: BALL[ballOf(i)], text: BALLNAME[ballOf(i)] } : null}
                   stats={[
-                    ["하이런", Math.max(high[p.key] || 0, i === active ? run : 0)],
-                    ["에버", fmtAvg(avg(sc(p.key), tn(p.key) || 1), mode)],
+                    ["하이런", Math.max(high[p.key] || 0, i === active ? run : 0), null, null, "st-opt"],
+                    ["에버", fmtAvg(avg(sc(p.key), tn(p.key) || 1), mode), null, null, "st-av"],
                     /* ★ 히로를 센 것은 ★있을 때만 낸다 — 0 을 내면 줄만 좁아진다 */
                     ...(foul10 && (fouls[p.key] || 0) > 0
-                      ? [["히로", fouls[p.key], "#d99e99"]] : []),
+                      ? [["히로", fouls[p.key], "#d99e99", null, "st-opt"]] : []),
                     ["목표", Number(p.handi) || (mode === "3" ? 15 : 150), "#999",
                       /* 개인전은 그 사람 하나, 복식은 그 편 사람들을 다 연다 */
                       () => setHandi(team
@@ -3988,8 +4002,8 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
                 fontSize: PT_FS, fontWeight: 700, borderRadius: 999,
               }}>{l}</button>
             ))}
-            <button onClick={next} style={{
-              background: run >= 3 ? "#2a6ea0" : "#1b3d55", color: "#fff",
+            <button onClick={next} aria-label="다음 선수 차례" style={{
+              background: run >= 3 ? NEXT_HI : NEXT_BG, color: "#fff",
               padding: PT_PAD, fontSize: PT_FS,
               fontWeight: 700, borderRadius: 999, transition: "background .2s", whiteSpace: "nowrap",
             }}>다음 ⇒{run > 0 ? ` ${run}` : ""}</button>
