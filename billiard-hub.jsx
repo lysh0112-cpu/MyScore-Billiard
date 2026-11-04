@@ -244,11 +244,18 @@ function primeTTS() {
     window.speechSynthesis.cancel();
   } catch (e) {}
 }
+/* ★ 2026-11-05 — 읽는 법을 바로잡는다 [대표님].
+      「3쿠션」을 기계가 ★「삼쿠션」이라 읽는데, 당구 치는 분들은 ★「쓰리쿠션」이라 한다.
+   ⛔ ★화면 글자는 안 바꾼다 — 「3쿠션」 그대로다. ★읽을 때만 바꾼다.
+   ★ 한 곳(speakKo)에서만 바꾼다. 말하는 자리마다 고치면 반드시 하나를 빠뜨린다 (9장 ①).
+      뱅크샷은 그대로 읽어도 맞다 [대표님]. */
+const sayFix = (t) => String(t).replace(/3\s*쿠션/g, "쓰리쿠션");
+
 function speakKo(text) {
   if (!ttsOK() || !text) return false;
   const S = window.speechSynthesis;
   try {
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(sayFix(text));
     const v = koVoice();
     if (v) u.voice = v;
     u.lang = "ko-KR"; u.rate = 1.12; u.volume = 1; u.pitch = 1;
@@ -3096,6 +3103,15 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     return { c: Math.max(0, fin3 - (f.c || 0)), b: Math.max(0, finBank - (f.b || 0)) };
   };
   const finLeft = (k) => { const n = finNeed(k); return n.c + n.b; };
+  /* ★ 2026-11-05 — 마무리는 ★점수로 센다 [대표님].
+        「통상 3쿠션은 1점으로, 뱅크샷은 2점으로 처리해서 계산을 한다」
+     ⛔ 「다 쳤다」를 가르는 것은 ★개수다 (3쿠션 n개 · 뱅크샷 m개를 각각).
+        점수는 ★보여주고 기록에 남기는 값이다 — 대표님이 ㉮로 고르셨다. */
+  const FIN_PT = { c: 1, b: 2 };
+  const finPts = (k) => { const f = finOf(k); return (f.c || 0) * FIN_PT.c + (f.b || 0) * FIN_PT.b; };
+  /* 번호판을 그냥 눌렀을 때 ★무엇을 친 것으로 볼지 — 3쿠션이 남았으면 3쿠션,
+     다 쳤으면 뱅크샷. 「순서 없이 남은 것 아무거나」 [대표님 ㉢] 에 맞는다 */
+  const finPick = (k) => (finNeed(k).c > 0 ? "c" : "b");
   const ptGoal = (p) => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi);
   const reachedOf = (p) => ptGoal(p) && (!finOn || finLeft(p.key) === 0);
   /* 마무리 진행을 ● ○ 로 보여준다 — ● 친 것 · ○ 남은 것.
@@ -3105,11 +3121,17 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     const dots = (made, want) => "●".repeat(Math.min(made, want)) + "○".repeat(Math.max(0, want - made));
     if (fin3) out.push(`3쿠션 ${dots(f.c || 0, fin3)}`);
     if (finBank) out.push(`뱅크샷 ${dots(f.b || 0, finBank)}`);
-    return out.join(" ");
+    /* ★ 「마무리」를 ★꼭 붙인다 — 큰 숫자가 마무리 점수로 바뀌었으므로,
+          이 말이 없으면 150 을 치다 갑자기 3 이 뜬 것으로 보인다 */
+    return `마무리 ${out.join(" ")}`;
   };
   /* 큰 숫자에 ★무엇을 쓸지 — 「남은 점수」 를 고르면 goal − 친 점수 */
   const shownOf = (p) => {
     const g = Number(p.handi) || 0;
+    /* ★ 2026-11-05 — 목표를 다 쳤는데 마무리가 남았으면
+          큰 숫자가 ★「마무리 점수」로 바뀌어 0 부터 올라간다 [대표님].
+          「3구처럼 터치할 때마다 1점씩 올라가게」 */
+    if (finOn && ptGoal(p) && finLeft(p.key) > 0) return finPts(p.key);
     if (!scoreDown || g <= 0) return sc(p.key);
     return Math.max(0, g - sc(p.key));
   };
@@ -3127,14 +3149,13 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
   };
   const addPt = (d) => {
     const p = units[active], k = p.key;
-    /* ⛔ 마무리를 치는 중에는 점수를 ★더 올리지 않는다 [대표님].
-          그 자리에 [3쿠션 ✓] [뱅크샷 ✓] 단추가 나온다.
-       ★ 되돌리는 쪽(−10)은 막지 않는다 — 잘못 누른 것을 풀어야 한다 */
-    if (d > 0 && finOn && ptGoal(p)) {
-      setDoneMsg(`${p.name}님은 마무리만 남았습니다`);
-      setTimeout(() => setDoneMsg(""), 1600);
-      return;
-    }
+    /* 🔴 2026-11-05 — 전에는 여기서 ★막고 「마무리만 남았습니다」라고만 했다.
+          ⛔ 그래서 번호판이 죽어 버렸고, 다 친 분이 ★이어서 칠 길이 없었다 [대표님].
+            「사람들은 4구를 모두 친 뒤 ★곧바로 3쿠션이나 뱅크샷을 바로 친다」
+       ⇒ 막지 말고 ★마무리를 치는 것으로 돌린다. 차례는 그대로다.
+       ★ 되돌리는 쪽(−10)은 그냥 둔다 — 점수를 잘못 눌렀을 때 풀어야 한다 */
+    if (d > 0 && finOn && ptGoal(p) && finLeft(k) > 0) { finHit(finPick(k)); return; }
+    if (d > 0 && finOn && ptGoal(p)) return;     /* 다 쳤다 — 더 올릴 것이 없다 */
     if (!running) setRunning(true);
     setBegun(true);
     if (!startAt) setStartAt(Date.now());
@@ -3305,17 +3326,18 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     setShot(clockSec);
     const leftC = Math.max(0, fin3 - nx.c), leftB = Math.max(0, finBank - nx.b);
     const nm = w === "c" ? "3쿠션" : "뱅크샷";
+    const got = nx.c * FIN_PT.c + nx.b * FIN_PT.b;     /* 지금까지 쌓인 마무리 점수 */
     if (leftC + leftB === 0) {
       setFinishOrder((o) => (o.includes(k) ? o : [...o, k]));
       const already = finishOrder.filter((x) => x !== k).length + 1;
       const remain = units.length - already;
-      if (units.length <= 2 || remain <= 1) say2(`${nm} 성공, 마무리까지 끝났습니다`);
-      else say2(`${nm} 성공, ${already}위 도달, ${remain}명 계속 진행`);
+      if (units.length <= 2 || remain <= 1) say2(`${nm} ${FIN_PT[w]}점, 마무리 ${got}점으로 끝났습니다`);
+      else say2(`${nm} ${FIN_PT[w]}점, ${already}위 도달, ${remain}명 계속 진행`);
     } else {
       const bits = [];
       if (leftC) bits.push(`3쿠션 ${leftC}개`);
       if (leftB) bits.push(`뱅크샷 ${leftB}개`);
-      say2(`${nm} 성공, ${bits.join(" ")} 남았습니다`);
+      say2(`${nm} ${FIN_PT[w]}점, 마무리 ${got}점. ${bits.join(" ")} 남았습니다`);
     }
   };
 
@@ -3364,6 +3386,11 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
       teams: units.map((u) => ({
         key: u.key, name: u.name, handicap: Number(u.handi) || 0, c: u.c,
         score: sc(u.key), inn: tu[u.key] || 1, high: hi[u.key] || 0,
+        /* ★ 2026-11-05 — 4구 마무리·히로를 ★기록에 남긴다 [대표님].
+              「통상 3쿠션은 1점, 뱅크샷은 2점으로 처리해서 ★계산을 한다」
+           ⛔ 4구에서 쓴 것이 없으면 0 이라 기록에 아무 자국도 안 남는다 */
+        fin3: finOf(u.key).c || 0, finB: finOf(u.key).b || 0,
+        finPt: finPts(u.key), fouls: fouls[u.key] || 0,
         members: u.members.map((m) => ({ key: m.key, memberId: m.memberId, name: m.name })),
       })),
     }]);
@@ -3517,16 +3544,20 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
             이닝 수가 판마다 달라 짧은 판이 과하게 반영된다.
             하이런은 판별 중 제일 높은 하나. */
       score: units.map((p) => {
-        let pt2 = 0, inn = 0, hi = 0;
+        let pt2 = 0, inn = 0, hi = 0, fin2 = 0, fl2 = 0;
         log.forEach((e) => {
           const t = (e.teams || []).find((x) => x.key === p.key);
           if (!t) return;
           pt2 += Number(t.score) || 0;
           inn += Number(t.inn) || 0;
           hi = Math.max(hi, Number(t.high) || 0);
+          fin2 += Number(t.finPt) || 0;
+          fl2 += Number(t.fouls) || 0;
         });
         return { name: p.name, w: wins[p.key] || 0, pt: pts[p.key] || 0,
-          total: pt2, inn, high: hi, handi: Number(p.handi) || 0 };
+          total: pt2, inn, high: hi, handi: Number(p.handi) || 0,
+          /* ★ 마무리 점수·히로는 ★판마다 쌓아 경기 전체로 센다 (위와 같은 방식) */
+          finPt: fin2, fouls: fl2 };
       }),
       byRank: units.length > 2,
       rounds: log.map((e, i) => {
@@ -3654,7 +3685,13 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     wakeOff();
     const t = setTimeout(() => setEndAsk(true), 1200);
     return () => clearTimeout(t);
-  }, [score, phase, autoEnd]); // eslint-disable-line
+    /* 🔴 2026-11-05 — fin 이 ★빠져 있었다 [대표님이 실제 경기에서 찾음].
+          「2명 경기에서 한 분이 4구 목표와 3쿠션을 다 쳤는데 안 끝나고,
+            ★못 끝낸 선수를 눌러야 종료 메시지가 나온다」
+       ⇒ 마무리(3쿠션·뱅크샷)를 치면 ★score 가 안 바뀐다. fin 만 바뀐다.
+         그래서 이 효과가 ★다시 안 돌았고, 다른 분 점수를 눌러 score 가 바뀌어야
+         그제서야 돌면서 종료 창이 떴던 것이다. */
+  }, [score, fin, phase, autoEnd]); // eslint-disable-line
 
   /* ★ 3명 이상 — 한 사람만 남으면 그 판은 «끝난 것» 이다 (2026-09-11 · 고침 2026-09-18).
         남은 한 분의 등수는 이미 꼴찌로 정해졌다. 더 칠 까닭이 없다 [대표님].
@@ -3675,7 +3712,9 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     wakeOff();
     setBlinkEnd(true);
     setOverAsk(true);
-  }, [score, phase]); // eslint-disable-line
+    /* 🔴 2026-11-05 — 위와 ★같은 뿌리. 3인 경기에서 두 분이 마무리까지 끝냈는데
+          판이 안 끝나던 것 [대표님]. fin 을 안 보고 있었다. */
+  }, [score, fin, phase]); // eslint-disable-line
 
   /* ★ 8판 — units 로 센다 (사용자 지적 · 복식에서 이닝이 안 올라감).
         차례(turns)는 next()·hit() 에서 units[…].key 로 쌓인다.
@@ -4045,12 +4084,12 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
                   style={btn("#3a1d28", "#e79ab4")}>히로 −10</button>
               )}
               {need.c > 0 && (
-                <button onClick={() => finHit("c")} aria-label="3쿠션 성공"
-                  style={btn("#16304a", "#8fc0e0")}>3쿠션 ✓{need.c > 1 ? ` ${need.c}` : ""}</button>
+                <button onClick={() => finHit("c")} aria-label="3쿠션 성공, 1점"
+                  style={btn("#16304a", "#8fc0e0")}>3쿠션 ＋{FIN_PT.c}{need.c > 1 ? ` (${need.c})` : ""}</button>
               )}
               {need.b > 0 && (
-                <button onClick={() => finHit("b")} aria-label="뱅크샷 성공"
-                  style={btn("#16304a", "#8fc0e0")}>뱅크샷 ✓{need.b > 1 ? ` ${need.b}` : ""}</button>
+                <button onClick={() => finHit("b")} aria-label="뱅크샷 성공, 2점"
+                  style={btn("#16304a", "#8fc0e0")}>뱅크샷 ＋{FIN_PT.b}{need.b > 1 ? ` (${need.b})` : ""}</button>
               )}
             </div>
           );
