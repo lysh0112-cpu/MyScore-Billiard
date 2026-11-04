@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-46 마무리 이어치기(3쿠션 1점·뱅크샷 2점) · 끝나면 곧바로 종료 · 쓰리쿠션 발음 -->
+<!-- build: 1판-47 저장칸 되살림(기록이 기계에 안 남던 것) -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -120,6 +120,78 @@ const liveClear = () => {
     localStorage.removeItem(LIVE);
   } catch (e) {}
 };
+
+/* 🔴🔴 2026-11-05 — window.storage 가 ★한 곳도 «만들어져» 있지 않았다
+      [대표님 「저장 실패라는 의미 없는 메시지가 뜬다」].
+
+   ⛔ 이 앱은 원래 Claude 화면 «안에서» 돌았고, 거기에는 window.storage 가 ★주어졌다.
+      cue.myjae.kr 로 옮긴 뒤로는 ★없다. 그런데 코드는 그대로 그것을 쓰고 있었다.
+      ⇒ 값으로 잼 — 배포본에서 window.storage 를 «쓰는 곳» 5, «만드는 곳» ★0.
+        브라우저에서 typeof window.storage === "undefined".
+      ⇒ 그래서 save() 가 ★매번 터졌고, 「저장 실패」가 떴다.
+        게다가 그 쪽지는 setToast 로만 띄워 ★시계가 없어서 ★안 사라졌다.
+      ⇒ 더 나쁜 것은, 기록이 ★이 기계에 안 남았다는 것이다.
+        (로그인돼 있으면 1.5초 뒤 서버로는 올라갔다 — 그래서 안 날아갔다)
+
+   ⇒ localStorage 로 ★같은 모양을 만들어 둔다. 이미 있으면 손대지 않는다
+     (Claude 화면 안에서 열 때 · 검사가 넣어 줄 때).
+   ⛔ 절대 터지지 않게 한다 — 비밀 모드처럼 localStorage 가 막힌 곳에서는
+      기계 안 기억(in-memory)으로 버틴다. 저장은 안 되지만 앱은 돌아간다. */
+if (typeof window !== "undefined" && !window.storage) {
+  const PRE = "cueboard:kv:";
+  const mem = new Map();
+  /* ⚠ ★window.localStorage 라고 또박또박 쓴다. 그냥 localStorage 라고 쓰면
+        검사(jsdom)에서는 전역에 없어서 ★못 찾고 기억 쪽으로 빠진다 —
+        그러면 「기계에 저장됐는가」를 ★검사가 못 본다 (실제로 못 봤다). */
+  const ls = () => {
+    try {
+      const L = window.localStorage;
+      const t = "__cb_t";
+      L.setItem(t, "1");
+      L.removeItem(t);
+      return L;
+    } catch (e) {
+      return null;
+    }
+  };
+  const L = ls();
+  window.storage = {
+    async get(k) {
+      const v = L ? L.getItem(PRE + k) : mem.has(PRE + k) ? mem.get(PRE + k) : null;
+      return {
+        value: v
+      }; /* 없으면 value 가 null — 부르는 쪽이 r?.value 로 본다 */
+    },
+    async set(k, v) {
+      const t = String(v);
+      if (L) L.setItem(PRE + k, t);else mem.set(PRE + k, t);
+      return {};
+    },
+    async delete(k) {
+      if (L) L.removeItem(PRE + k);else mem.delete(PRE + k);
+      return {};
+    },
+    async list() {
+      const keys = [];
+      if (L) {
+        for (let i = 0; i < L.length; i++) {
+          const kk = L.key(i);
+          if (kk && kk.indexOf(PRE) === 0) keys.push({
+            name: kk.slice(PRE.length)
+          });
+        }
+      } else {
+        mem.forEach((_, kk) => keys.push({
+          name: kk.slice(PRE.length)
+        }));
+      }
+      return {
+        keys
+      };
+    },
+    __shim: true
+  };
+}
 const HUB = "score:hub:v1"; /* ★ My Score 가 쓰던 자료. 처음 켤 때 당구만 가져온다 */
 
 const ACCENT = "#E8B838";
@@ -8041,10 +8113,12 @@ function App() {
   const save = async n => {
     setData(n);
     dataRef.current = n;
+    /* ⚠ 전에는 setToast 로만 띄워 ★안 사라졌다. say() 는 2.4초 뒤에 지운다.
+          글도 바꿨다 — 「저장 실패」 네 글자로는 무엇을 해야 할지 알 수 없다 [대표님] */
     try {
       await window.storage.set(KEY, JSON.stringify(n));
     } catch (e) {
-      setToast("저장 실패");
+      say("이 기계에 저장하지 못했습니다 · 저장 공간을 확인해 주세요");
     }
   };
   const toastT = useRef(null);
