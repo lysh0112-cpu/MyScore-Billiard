@@ -3716,6 +3716,7 @@ function Billiard({ data, save, say, setup, openSheet, setBare, tv, goHome }) {
     /* ★ 기록에 남았으니 담아둔 «치던 경기» 를 지운다 — 홈에 또 뜨면 안 된다 */
     liveClear();
     wakeOff(); setPhase("board");
+    /* ★ 판을 묶는 일은 ★App 의 <Sheet> 한 곳에서 한다 (siblingsOf) */
     openSheet({ ...recs[0], justSaved: true, gamesSaved: recs.length });
     goHome();
   };
@@ -4457,7 +4458,25 @@ function matchOf(first, list) {
     key: first.seriesId || first.id,
     date: first.date, place: first.place || "", mode: first.mode || "3",
     team: !!first.team, bestOf, games: sum ? sum.games : 1, many, rounds: fixed, score,
-    startAt: first.startAt || 0, endAt: all[all.length - 1]?.endAt || first.endAt || 0,
+    /* 🔴 2026-11-05 — 전에는 startAt 을 ★first 하나에서만 봤다 [대표님].
+          결과표는 openSheet(recs[0]) · openSheet(m.last) 로 ★«마지막 판 하나»만 넘긴다.
+          그래서 「처음 시작 ~ 마지막 끝」이 아니라 ★마지막 판의 시작~끝이 나왔다.
+       ⇒ 이제 ★모든 판에서 제일 이른 시작과 제일 늦은 끝을 고른다.
+         판 차례가 거꾸로 들어와도 맞도록 min·max 로 고른다. */
+    ...(() => {
+      const ats = all.map((g) => Number(g.startAt) || 0).filter(Boolean);
+      const ets = all.map((g) => Number(g.endAt) || 0).filter(Boolean);
+      const st = ats.length ? Math.min(...ats) : 0;
+      const en = ets.length ? Math.max(...ets) : 0;
+      return { startAt: st, endAt: en, span: st && en && en > st ? en - st : 0 };
+    })(),
+    /* ★ 게임별 시간 — 그 판의 «시작 ~ 끝». seconds(시계가 돈 동안)도 함께 담아 둔다 */
+    times: all.map((g) => ({
+      no: Number(g.gameNo) || 1,
+      startAt: Number(g.startAt) || 0, endAt: Number(g.endAt) || 0,
+      seconds: Number(g.seconds) || 0,
+    })).sort((a, b) => a.no - b.no),
+    all,
     seconds: all.reduce((t, g) => t + (Number(g.seconds) || 0), 0),
     memo: all.map((g) => g.memo).filter(Boolean)[0] || "",
     ids: all.map((g) => g.id),
@@ -4470,13 +4489,21 @@ const wayOf = (m) => (m.bestOf === 1 ? "단판"
   : m.many ? `${m.score.length}명 · ${m.bestOf}게임`
   : `${m.bestOf}판 ${Math.ceil(m.bestOf / 2)}선승`);
 
+/* ★ 2026-11-05 — 한 경기에 묶인 판들을 찾는 ★한 가지 규칙 [9장 ①].
+      seriesList 도 이것을 쓰고, 결과표를 띄울 때도 이것을 쓴다.
+      두 군데서 따로 묶으면 반드시 어긋난다. */
+const seriesKey = (g) => (g ? (g.seriesId || g.id) : "");
+const siblingsOf = (games, g) => bilGames(games)
+  .filter((x) => seriesKey(x) === seriesKey(g))
+  .slice().sort((a, b) => (a.gameNo || 1) - (b.gameNo || 1));
+
 /* 저장된 여러 판을 한 경기로 묶는다.
    ★ 마지막 판에만 series(요약)가 들어 있다 — 8판 형식 그대로다 */
 function seriesList(games) {
   const bil = bilGames(games);
   const byId = {};
   bil.forEach((g) => {
-    const k = g.seriesId || g.id;
+    const k = seriesKey(g);
     (byId[k] = byId[k] || []).push(g);
   });
   return Object.keys(byId)
@@ -4717,6 +4744,18 @@ function Log({ data, save, say, openSheet }) {
       후   글 하나. 돈도 기록코딩문도 안 나간다
    ★ 한 줄이 길면 카톡 말풍선에서 접혀 더 읽기 나쁘다 (7판 4-2). 짧게 유지할 것 */
 
+/* ★ 2026-11-05 — 걸린 시간을 사람 말로 [대표님].
+      「2시간 15분」 · 「45분」 · 1분이 안 되면 「40초」.
+   ⛔ 「135분」 처럼 쓰지 않는다 — 두 시간이 넘으면 머릿속으로 나눠야 한다. */
+const dur = (ms) => {
+  const v = Number(ms) || 0;
+  if (v < 60000) return `${Math.max(1, Math.round(v / 1000))}초`;
+  const m = Math.round(v / 60000);
+  if (m < 60) return `${m}분`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return r ? `${h}시간 ${r}분` : `${h}시간`;
+};
+
 const hhmm = (t) => {
   const d = new Date(Number(t) || 0);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -4725,12 +4764,19 @@ const hhmm = (t) => {
 function buildText(g, tail) {
   /* ★ 기록 화면(MatchCard)과 똑같은 모양을 쓴다 — 같은 matchOf 를 본다.
         전에는 여기서 따로 계산해서, 단판일 때 핸디 줄과 최종 줄이 빠졌다 (사용자 지적) */
-  const m = matchOf(g, null);
+  const m = matchOf(g, g.__list || null);     /* ★ 판을 모두 받으면 전체 시간을 셀 수 있다 */
   const L = [];
   L.push(`🎱 ${g.date} (${dow(g.date)}) · ${B_LABEL[g.mode] || ""}`);
-  const mins = Math.round((Number(m.seconds) || 0) / 60);
-  /* ★ 1분이 안 되면 시간 줄을 아예 뺀다 — "00:15 ~ 00:15" 가 나온다 (사용자 지적) */
-  if (m.startAt && m.endAt && mins >= 1) L.push(`🕐 ${hhmm(m.startAt)} ~ ${hhmm(m.endAt)} · ${mins}분`);
+  /* ★ 2026-11-05 — 「전체」는 ★처음 시작부터 마지막 끝까지다 [대표님].
+        전에는 앞의 두 시각은 벽시계인데 뒤의 「N분」만 ★시계가 돈 동안의 합이라
+        한 줄 안에서 기준이 서로 달랐다 (40분짜리 세 판이 「95분」으로 나왔다).
+     ⛔ 1분이 안 되면 줄을 아예 뺀다 — "00:15 ~ 00:15" 가 나온다 (대표님 지적) */
+  if (m.span >= 60000) {
+    L.push(`🕐 ${hhmm(m.startAt)} ~ ${hhmm(m.endAt)} · 전체 ${dur(m.span)}`);
+    /* ★ 게임별 — 판이 ★둘 이상일 때만. 단판은 위 줄과 같은 값이라 군더더기다 */
+    const per = (m.times || []).filter((t) => t.startAt && t.endAt && t.endAt > t.startAt);
+    if (per.length > 1) L.push(`⏱ ${per.map((t) => `${t.no}게임 ${dur(t.endAt - t.startAt)}`).join(" · ")}`);
+  }
   if (g.place) L.push(`📍 ${g.place}`);
   L.push("━━━━━━━━━━━━━");
   L.push(`🏁 ${wayOf(m)}${m.bestOf > 1 ? ` · ${m.games}게임 진행` : ""}`);
@@ -5316,9 +5362,15 @@ export default function App() {
         <Sheet game={(() => {
           const fresh = data.games.find((g) => g.id === sheet.id);
           if (!fresh) return sheet;
+          /* 🔴 2026-11-05 — 여기서 ★최신 한 판만 다시 찾아 넘기고 있었다 [대표님].
+                그래서 결과표가 「처음 시작 ~ 마지막 끝」을 셀 수가 없어
+                ★마지막 판의 시작~끝만 나왔다 (「전체 33분」).
+             ⇒ 같은 경기에 묶인 판을 ★모두 함께 넘긴다.
+               ⛔ 붙이는 자리는 ★여기 한 곳이다 — 부르는 쪽마다 붙이면 어긋난다. */
+          const base = { ...fresh, __list: siblingsOf(data.games, fresh) };
           return sheet.justSaved
-            ? { ...fresh, justSaved: true, gamesSaved: sheet.gamesSaved }
-            : fresh;
+            ? { ...base, justSaved: true, gamesSaved: sheet.gamesSaved }
+            : base;
         })()}
           onClose={() => setSheet(null)} say={say} />
       )}
