@@ -4499,6 +4499,19 @@ const wayOf = (m) => (m.bestOf === 1 ? "단판"
   : m.many ? `${m.score.length}명 · ${m.bestOf}게임`
   : `${m.bestOf}판 ${Math.ceil(m.bestOf / 2)}선승`);
 
+/* 🔴 2026-11-05 — 「3명 · 3게임 ★· 3게임 진행」처럼 ★게임 숫자가 겹쳐 나왔다 [대표님].
+      3인 이상은 wayOf 가 이미 「3명 · 3게임」이라 적는데, 그 뒤에 또
+      「· 3게임 진행」을 붙이고 있었다. 둘이 같은 말이다.
+   ⇒ 친 판 수가 ★정한 판 수와 같으면 뒤를 ★안 붙인다.
+     다르면 「중 2게임 진행」이라 적어 ★몇 판 만에 그쳤는지 알게 한다.
+   ⛔ 2인 선승제(「3판 2선승」)는 판 수가 안 적혀 있으므로 그대로 붙인다. */
+const wayLine = (m) => {
+  const w = wayOf(m);
+  if (m.bestOf <= 1) return w;
+  if (m.games !== m.bestOf) return `${w} 중 ${m.games}게임 진행`;
+  return m.many ? w : `${w} · ${m.games}게임 진행`;
+};
+
 /* ★ 2026-11-05 — 한 경기에 묶인 판들을 찾는 ★한 가지 규칙 [9장 ①].
       seriesList 도 이것을 쓰고, 결과표를 띄울 때도 이것을 쓴다.
       두 군데서 따로 묶으면 반드시 어긋난다. */
@@ -4833,7 +4846,7 @@ function buildText(g, tail) {
   }
   if (g.place) L.push(`📍 ${g.place}`);
   L.push("━━━━━━━━━━━━━");
-  L.push(`🏁 ${wayOf(m)}${m.bestOf > 1 ? ` · ${m.games}게임 진행` : ""}`);
+  L.push(`🏁 ${wayLine(m)}`);
   L.push("");
 
   /* 핸디 */
