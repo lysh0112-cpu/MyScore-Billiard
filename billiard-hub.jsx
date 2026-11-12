@@ -5500,6 +5500,9 @@ function ClubRank({ data, save, say, club, onBack, onRoster, onMember }) {
   const [q, setQ] = useState("");
   const [team, setTeam] = useState(false);
   const [open, setOpen] = useState(false);          /* 가끔 나온 분 펼치기 */
+  /* 🔴 2026-11-13 — 이름 고치기 [대표님 「동우회 이름을 변경할 수 있나?」].
+        만들기 화면에 「나중에 고칠 수 있습니다」라고 적어 놓고 ★길을 안 만들었다 */
+  const [ren, setRen] = useState("");
 
   const bound = useMemo(() => rangeBound(range, from, to), [range, from, to]);
   const rows = useMemo(() => rankList(data.games, {
@@ -5604,9 +5607,52 @@ function ClubRank({ data, save, say, club, onBack, onRoster, onMember }) {
     <div style={{ padding: "0 14px 14px" }}>
       <Back onClick={onBack}>동우회</Back>
       <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
-        <div style={{ fontSize: 19, fontWeight: 700, flex: 1, minWidth: 0 }}>{club.name}</div>
+        {/* ★ 이름을 누르면 고칠 수 있다 — 명단에서 회원 이름을 고치는 것과 ★같은 방식 */}
+        <button onClick={() => setRen(club.name)} style={{
+          fontSize: 19, fontWeight: 700, flex: 1, minWidth: 0, textAlign: "left",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>{club.name} <span style={{ fontSize: 12, color: "#44627B", fontWeight: 500 }}>✎</span></button>
         <button onClick={onRoster} style={{ fontSize: 12.5, color: ACCENT, fontWeight: 600, padding: "6px 2px" }}>명단 ›</button>
       </div>
+
+      {ren !== "" && (
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 13, padding: 14, marginTop: 10 }}>
+          <Lbl>동우회 이름</Lbl>
+          <input value={ren} onChange={(e) => setRen(e.target.value)} maxLength={20} autoFocus />
+          <div style={{ fontSize: 11.5, color: "#6F8598", marginTop: 7, lineHeight: 1.6 }}>
+            이름만 바뀝니다. <b style={{ color: "var(--ivory)" }}>친 기록과 명단은 그대로입니다.</b>
+          </div>
+          <CBtn onClick={() => {
+            const v = ren.trim();
+            if (!v) return say("이름을 적어주세요");
+            if (clubsOf(data).some((c) => c.id !== club.id && c.name === v)) return say("같은 이름의 동우회가 이미 있습니다");
+            save({ ...data, clubs: clubsOf(data).map((c) => (c.id === club.id ? { ...c, name: v } : c)) });
+            setRen(""); say("이름을 고쳤습니다");
+          }}>이름 고치기</CBtn>
+          <CBtn ghost onClick={() => setRen("")}>그냥 닫기</CBtn>
+          {/* ⛔ 지우는 단추는 ★제일 아래, 노란 단추와 ★떨어뜨려 둔다 — 잘못 누르면 안 된다 */}
+          <button onClick={() => {
+            const n = clubGames(data.games, club.id).length;
+            if (!confirm(
+              `「${club.name}」을 지울까요?\n\n` +
+              `★친 기록 ${n}판은 ★안 지워집니다 — 「동우회 없음」으로 돌아갑니다.\n` +
+              `다시 만들어 [지난 기록 넣기] 를 누르면 그대로 돌아옵니다.\n` +
+              `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`)) return;
+            save({
+              ...data,
+              clubs: clubsOf(data).filter((c) => c.id !== club.id),
+              clubId: data.clubId === club.id ? "" : data.clubId,
+              setup: data.setup && data.setup.clubId === club.id ? { ...data.setup, clubId: "", clubName: "" } : data.setup,
+              games: data.games.map((g) => (g.clubId === club.id ? { ...g, clubId: "" } : g)),
+            });
+            say("동우회를 지웠습니다 · 친 기록은 그대로입니다");
+            onBack();
+          }} style={{
+            width: "100%", marginTop: 16, padding: 12, borderRadius: 10, fontSize: 12.5,
+            color: "#C87B74", border: "1px solid rgba(200,123,116,.35)",
+          }}>동우회 지우기</button>
+        </div>
+      )}
 
       <div style={{ height: 11 }} />
       <Pills cols="repeat(2,1fr)" value={mode} set={setMode} items={[["3", "3쿠션"], ["4", "4구"]]} />
