@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-61 명단 — [✎ 고치기] 단추를 3.6배로 · 노란 테두리 -->
+<!-- build: 1판-62 새 폰에서 기록이 저절로 내려오게 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -8481,7 +8481,7 @@ function Account({
       marginTop: 8,
       lineHeight: 1.6
     }
-  }, "폰을 바꾸면 여기서 로그인만 하시면 기록이 그대로 내려옵니다.")), /*#__PURE__*/React.createElement("button", {
+  }, "폰을 바꾸면 로그인만 하시면 앱을 켤 때 저절로 내려옵니다.")), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: signOut,
     style: {
@@ -10551,6 +10551,23 @@ function App() {
     }
     if (!quiet) say(up || down ? `서버에 ${up}건 올리고 ${down}건 받았습니다` : "모두 보관돼 있습니다");
   };
+
+  /* 🔴 2026-11-13 — 「갤럭시 탭에는 기록이 잘 저장돼 있는데 ★핸드폰에서는 안 보인다」
+        [대표님]. 아래 효과에 이런 줄이 있었다 —
+          «아직 안 올라간 기록이 하나도 없으면 ⇒ 그냥 끝낸다»
+        새 폰은 기록이 ★0건이라 「안 올라간 것」도 0건이다. 그래서 ★아무것도 안 하고
+        끝냈다 — 내려받지도 않았다. ★올릴 것이 있을 때만 맞추게 짜고,
+        ★받을 것만 있는 경우를 빠뜨렸다.
+     ⇒ 로그인돼 있으면 ★앱을 켤 때 한 번은 무조건 맞춘다.
+     ⚠ 한 번만 — ref 로 잠근다. 안 그러면 기록이 바뀔 때마다 서버를 부른다 */
+  const firstSync = useRef(false);
+  useEffect(() => {
+    if (!data.me || !data.session?.token) return;
+    if (firstSync.current) return;
+    firstSync.current = true;
+    const t = setTimeout(() => syncNow(true), 600);
+    return () => clearTimeout(t);
+  }, [data.me, data.session?.token]); // eslint-disable-line
 
   /* 저장이 끝나면 잠깐 뒤에 저절로 올린다 (사용자가 누를 필요 없게) */
   useEffect(() => {
