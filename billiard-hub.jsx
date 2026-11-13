@@ -4573,8 +4573,6 @@ const hyphen = (v) => {
   if (d.length === 10) return d.slice(0, 3) + "-" + d.slice(3, 6) + "-" + d.slice(6);
   return d.slice(0, 3) + "-" + d.slice(3, 7) + "-" + d.slice(7);
 };
-/* 신고 에버를 적는 법 — 3쿠션은 0.700, 4구는 0.25 꼴 */
-const fmtDecl = (v) => (Number(v) > 0 ? Number(v).toFixed(3) : "");
 
 /* 그 동우회에서 친 판만. ⛔ 동우회를 안 고르고 친 판은 안 들어온다 */
 const clubGames = (games, clubId) =>
@@ -5414,11 +5412,16 @@ function Account({ data, save, say, sync, syncNow, onClose }) {
 
 const CBtn = ({ on, ghost, children, ...rest }) => (
   <button {...rest} style={{
-    display: "block", width: "100%", textAlign: "center", padding: 14, borderRadius: 12,
+    display: "block", width: "100%", flex: 1, minWidth: 0, textAlign: "center", padding: 14, borderRadius: 12,
     fontSize: 15, fontWeight: 700, marginTop: 9,
     background: ghost ? "rgba(0,0,0,.28)" : ACCENT, color: ghost ? "var(--chalk)" : "#141200",
     border: ghost ? "1px solid var(--line)" : "none",
   }}>{children}</button>
+);
+/* 🔴 2026-11-13 — 단추 둘을 ★옆으로 나란히 [대표님].
+      위아래로 쌓으면 「넣기」 밑에 「그냥 닫기」가 노란 단추만큼 커 보인다. */
+const Pair = ({ children }) => (
+  <div style={{ display: "flex", gap: 8 }}>{children}</div>
 );
 const Back = ({ onClick, children }) => (
   <button onClick={onClick} style={{ fontSize: 13, color: "var(--chalk)", padding: "15px 2px 4px" }}>‹ {children}</button>
@@ -5612,7 +5615,7 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
     orphan.forEach((g) => g.players.forEach((p) => {
       const n = (p.name || "").trim();
       if (!n || byName[n]) return;
-      const m = { id: "m_" + uid(), name: n, h3: 0, e3: 0, h4: 0, e4: 0, phone: "", role: "member", status: "invited", linked: false };
+      const m = { id: "m_" + uid(), name: n, h3: 0, h4: 0, phone: "", role: "member", status: "invited", linked: false };
       byName[n] = m; add.push(m);
     }));
     orphan.forEach((g) => g.players.forEach((p) => {
@@ -5941,7 +5944,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
     if (edit === m.id) { setEdit(""); return; }
     setEdit(m.id);
     setEf({
-      h3: m.h3 || "", e3: m.e3 || "", h4: m.h4 || "", e4: m.e4 || "", phone: m.phone || "",
+      h3: m.h3 || "", h4: m.h4 || "", phone: m.phone || "",
     });
   };
   /* 보이는 것은 글자, 저장되는 것은 숫자 */
@@ -5955,7 +5958,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
     setEf((o) => ({ ...o, phone: t }));
     patch(id, { phone: t });
   };
-  const blank = { name: "", h3: "", e3: "", h4: "", e4: "", phone: "" };
+  const blank = { name: "", h3: "", h4: "", phone: "" };
   const [f, setF] = useState(blank);
 
   const ms = memsOf(club);
@@ -5986,16 +5989,15 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
     }
     put([...ms, {
       id: "m_" + uid(), name: n,
-      h3: Number(f.h3) || 0, e3: Number(f.e3) || 0,
-      h4: Number(f.h4) || 0, e4: Number(f.e4) || 0,
+      h3: Number(f.h3) || 0, h4: Number(f.h4) || 0,
       phone: f.phone || "", role: "member", status: "invited", linked: false,
     }]);
-    setF(blank); setAdd(false); say(`「${n}」 님을 넣었습니다`);
+    setF(blank); setAdd(false); say(`「${n}」 님을 등록했습니다`);
   };
   const patch = (id, kv) => put(ms.map((x) => (x.id === id ? { ...x, ...kv } : x)));
   const del = (m) => {
     if (!confirm(`${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
-    put(ms.filter((x) => x.id !== m.id)); setEdit(""); say("뺐습니다");
+    put(ms.filter((x) => x.id !== m.id)); setEdit(""); say("명단에서 뺐습니다");
   };
 
   const nActive = ms.filter((m) => m.status === "active").length;
@@ -6005,13 +6007,11 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
 
   const Line = ({ m, md }) => {
     const h = md === "3" ? m.h3 : m.h4;
-    const e = md === "3" ? m.e3 : m.e4;
     const r = mode === md ? live[m.id] : null;
     return (
       <div style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--chalk)", marginTop: 4 }}>
         <span style={{ width: 28, color: "#6F8598", flexShrink: 0 }}>{md === "3" ? "3구" : "4구"}</span>
         <span style={{ flexShrink: 0 }}>수지 <span className="num" style={{ color: "#B9CCDA" }}>{Number(h) > 0 ? h : "–"}</span></span>
-        <span style={{ flexShrink: 0 }}>신고 <span className="num" style={{ color: "#B9CCDA" }}>{fmtDecl(e) || "–"}</span></span>
         <span style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
           실제 <span className="num" style={{ color: r ? ACCENT : "#55708A", fontSize: 13.5 }}>
             {r ? fmtAvg(r.avg, md) : "–"}
@@ -6099,11 +6099,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
                 }} style={{ fontSize: 14 }} />
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 <Fld lbl="3구 수지" v={ef.h3} ph="15" set={(v) => typeNum(m.id, "h3", v)} />
-                <Fld lbl="3구 신고 에버" v={ef.e3} ph="0.700" set={(v) => typeNum(m.id, "e3", v, 1)} />
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 <Fld lbl="4구 수지" v={ef.h4} ph="150" set={(v) => typeNum(m.id, "h4", v)} />
-                <Fld lbl="4구 신고 에버" v={ef.e4} ph="0.250" set={(v) => typeNum(m.id, "e4", v, 1)} />
               </div>
               <div style={{ marginTop: 8 }}>
                 <Fld lbl="연락처 (총무만 봅니다)" v={ef.phone} ph="010-0000-0000"
@@ -6132,26 +6128,27 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 13, padding: 14 }}>
           <Lbl>이름</Lbl>
           <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="김성곤" maxLength={12} autoFocus />
+          {/* 🔴 2026-11-13 — 「신고 에버」 두 칸을 ★뺐다 [대표님]
+                 「3구 핸디 + 4구 핸디 + 연락처만 넣는 걸로 하자」
+                 ⇒ 에버는 ★쳐서 나온 값(실제)만 쓴다. 본인이 알려준 값은 안 받는다 */}
           <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
             <Fld lbl="3구 수지" v={f.h3} ph="15" set={(v) => setF({ ...f, h3: v.replace(/[^0-9]/g, "") })} />
-            <Fld lbl="3구 신고 에버" v={f.e3} ph="0.700" set={(v) => setF({ ...f, e3: v.replace(/[^0-9.]/g, "") })} />
-          </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <Fld lbl="4구 수지" v={f.h4} ph="150" set={(v) => setF({ ...f, h4: v.replace(/[^0-9]/g, "") })} />
-            <Fld lbl="4구 신고 에버" v={f.e4} ph="0.250" set={(v) => setF({ ...f, e4: v.replace(/[^0-9.]/g, "") })} />
           </div>
           <div style={{ marginTop: 8 }}>
             <Fld lbl="연락처 (총무만 봅니다)" v={f.phone} ph="010-0000-0000"
               set={(v) => setF({ ...f, phone: hyphen(v) })} wide />
           </div>
-          <CBtn onClick={addOne}>넣기</CBtn>
-          <CBtn ghost onClick={() => { setAdd(false); setF(blank); }}>그냥 닫기</CBtn>
+          {/* ★ 단추는 ★옆으로 나란히 [대표님] · 저장이 오른쪽(엄지가 닿는 쪽) */}
+          <Pair>
+            <CBtn ghost onClick={() => { setAdd(false); setF(blank); }}>닫기</CBtn>
+            <CBtn onClick={addOne}>저장하기</CBtn>
+          </Pair>
         </div>
       ) : <CBtn ghost onClick={() => setAdd(true)}>＋ 회원 더하기</CBtn>}
 
       <div style={{ fontSize: 11, color: "#6F8598", lineHeight: 1.8, marginTop: 13 }}>
-        ★ <b>「신고」</b>는 본인이 알려준 값이고 <b>「실제」</b>는 쳐서 나온 값입니다.
-        기간을 바꾸면 <b>실제</b>만 바뀝니다.<br />
+        ★ <b>「실제」</b>는 함께 쳐서 나온 값입니다. 기간을 바꾸면 이 값이 바뀝니다.<br />
         ★ 카드를 누르면 <b>그 사람이 친 기록</b>이 나옵니다. <b>✎</b> 는 고치는 칸입니다.<br />
         ★ 이름을 고쳐도 <b>지난 기록은 안 깨집니다</b> — 사람마다 번호가 붙어 있습니다.<br />
         ⛔ 연락처는 <b>이 기계에만</b> 남습니다. 랭킹·공유 글에는 나오지 않습니다.<br />

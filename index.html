@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-59 동우회 이름 — 다 지우면 빠져나가던 것 · 돌아올 주소 칸 뺌 -->
+<!-- build: 1판-60 명단 — 수지 둘과 연락처만 · 저장하기·닫기 나란히 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7253,8 +7253,6 @@ const hyphen = v => {
   if (d.length === 10) return d.slice(0, 3) + "-" + d.slice(3, 6) + "-" + d.slice(6);
   return d.slice(0, 3) + "-" + d.slice(3, 7) + "-" + d.slice(7);
 };
-/* 신고 에버를 적는 법 — 3쿠션은 0.700, 4구는 0.25 꼴 */
-const fmtDecl = v => Number(v) > 0 ? Number(v).toFixed(3) : "";
 
 /* 그 동우회에서 친 판만. ⛔ 동우회를 안 고르고 친 판은 안 들어온다 */
 const clubGames = (games, clubId) => bilGames(games).filter(g => g.clubId && g.clubId === clubId);
@@ -8537,6 +8535,8 @@ const CBtn = ({
   style: {
     display: "block",
     width: "100%",
+    flex: 1,
+    minWidth: 0,
     textAlign: "center",
     padding: 14,
     borderRadius: 12,
@@ -8546,6 +8546,16 @@ const CBtn = ({
     background: ghost ? "rgba(0,0,0,.28)" : ACCENT,
     color: ghost ? "var(--chalk)" : "#141200",
     border: ghost ? "1px solid var(--line)" : "none"
+  }
+}, children);
+/* 🔴 2026-11-13 — 단추 둘을 ★옆으로 나란히 [대표님].
+      위아래로 쌓으면 「넣기」 밑에 「그냥 닫기」가 노란 단추만큼 커 보인다. */
+const Pair = ({
+  children
+}) => /*#__PURE__*/React.createElement("div", {
+  style: {
+    display: "flex",
+    gap: 8
   }
 }, children);
 const Back = ({
@@ -8934,9 +8944,7 @@ function ClubRank({
         id: "m_" + uid(),
         name: n,
         h3: 0,
-        e3: 0,
         h4: 0,
-        e4: 0,
         phone: "",
         role: "member",
         status: "invited",
@@ -9672,9 +9680,7 @@ function ClubRoster({
     setEdit(m.id);
     setEf({
       h3: m.h3 || "",
-      e3: m.e3 || "",
       h4: m.h4 || "",
-      e4: m.e4 || "",
       phone: m.phone || ""
     });
   };
@@ -9702,9 +9708,7 @@ function ClubRoster({
   const blank = {
     name: "",
     h3: "",
-    e3: "",
     h4: "",
-    e4: "",
     phone: ""
   };
   const [f, setF] = useState(blank);
@@ -9748,9 +9752,7 @@ function ClubRoster({
       id: "m_" + uid(),
       name: n,
       h3: Number(f.h3) || 0,
-      e3: Number(f.e3) || 0,
       h4: Number(f.h4) || 0,
-      e4: Number(f.e4) || 0,
       phone: f.phone || "",
       role: "member",
       status: "invited",
@@ -9758,7 +9760,7 @@ function ClubRoster({
     }]);
     setF(blank);
     setAdd(false);
-    say(`「${n}」 님을 넣었습니다`);
+    say(`「${n}」 님을 등록했습니다`);
   };
   const patch = (id, kv) => put(ms.map(x => x.id === id ? {
     ...x,
@@ -9768,7 +9770,7 @@ function ClubRoster({
     if (!confirm(`${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
     put(ms.filter(x => x.id !== m.id));
     setEdit("");
-    say("뺐습니다");
+    say("명단에서 뺐습니다");
   };
   const nActive = ms.filter(m => m.status === "active").length;
   const list = ms.filter(m => tab === "all" || (tab === "active" ? m.status === "active" : m.status !== "active")).filter(m => !q.trim() || m.name.includes(q.trim()));
@@ -9777,7 +9779,6 @@ function ClubRoster({
     md
   }) => {
     const h = md === "3" ? m.h3 : m.h4;
-    const e = md === "3" ? m.e3 : m.e4;
     const r = mode === md ? live[m.id] : null;
     return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -9803,15 +9804,6 @@ function ClubRoster({
         color: "#B9CCDA"
       }
     }, Number(h) > 0 ? h : "–")), /*#__PURE__*/React.createElement("span", {
-      style: {
-        flexShrink: 0
-      }
-    }, "신고 ", /*#__PURE__*/React.createElement("span", {
-      className: "num",
-      style: {
-        color: "#B9CCDA"
-      }
-    }, fmtDecl(e) || "–")), /*#__PURE__*/React.createElement("span", {
       style: {
         flex: 1,
         minWidth: 0,
@@ -10037,26 +10029,10 @@ function ClubRoster({
     ph: "15",
     set: v => typeNum(m.id, "h3", v)
   }), /*#__PURE__*/React.createElement(Fld, {
-    lbl: "3구 신고 에버",
-    v: ef.e3,
-    ph: "0.700",
-    set: v => typeNum(m.id, "e3", v, 1)
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      marginTop: 8
-    }
-  }, /*#__PURE__*/React.createElement(Fld, {
     lbl: "4구 수지",
     v: ef.h4,
     ph: "150",
     set: v => typeNum(m.id, "h4", v)
-  }), /*#__PURE__*/React.createElement(Fld, {
-    lbl: "4구 신고 에버",
-    v: ef.e4,
-    ph: "0.250",
-    set: v => typeNum(m.id, "e4", v, 1)
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8
@@ -10133,34 +10109,12 @@ function ClubRoster({
       h3: v.replace(/[^0-9]/g, "")
     })
   }), /*#__PURE__*/React.createElement(Fld, {
-    lbl: "3구 신고 에버",
-    v: f.e3,
-    ph: "0.700",
-    set: v => setF({
-      ...f,
-      e3: v.replace(/[^0-9.]/g, "")
-    })
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      marginTop: 8
-    }
-  }, /*#__PURE__*/React.createElement(Fld, {
     lbl: "4구 수지",
     v: f.h4,
     ph: "150",
     set: v => setF({
       ...f,
       h4: v.replace(/[^0-9]/g, "")
-    })
-  }), /*#__PURE__*/React.createElement(Fld, {
-    lbl: "4구 신고 에버",
-    v: f.e4,
-    ph: "0.250",
-    set: v => setF({
-      ...f,
-      e4: v.replace(/[^0-9.]/g, "")
     })
   })), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -10175,15 +10129,15 @@ function ClubRoster({
       phone: hyphen(v)
     }),
     wide: true
-  })), /*#__PURE__*/React.createElement(CBtn, {
-    onClick: addOne
-  }, "넣기"), /*#__PURE__*/React.createElement(CBtn, {
+  })), /*#__PURE__*/React.createElement(Pair, null, /*#__PURE__*/React.createElement(CBtn, {
     ghost: true,
     onClick: () => {
       setAdd(false);
       setF(blank);
     }
-  }, "그냥 닫기")) : /*#__PURE__*/React.createElement(CBtn, {
+  }, "닫기"), /*#__PURE__*/React.createElement(CBtn, {
+    onClick: addOne
+  }, "저장하기"))) : /*#__PURE__*/React.createElement(CBtn, {
     ghost: true,
     onClick: () => setAdd(true)
   }, "＋ 회원 더하기"), /*#__PURE__*/React.createElement("div", {
@@ -10193,7 +10147,7 @@ function ClubRoster({
       lineHeight: 1.8,
       marginTop: 13
     }
-  }, "★ ", /*#__PURE__*/React.createElement("b", null, "「신고」"), "는 본인이 알려준 값이고 ", /*#__PURE__*/React.createElement("b", null, "「실제」"), "는 쳐서 나온 값입니다. 기간을 바꾸면 ", /*#__PURE__*/React.createElement("b", null, "실제"), "만 바뀝니다.", /*#__PURE__*/React.createElement("br", null), "★ 카드를 누르면 ", /*#__PURE__*/React.createElement("b", null, "그 사람이 친 기록"), "이 나옵니다. ", /*#__PURE__*/React.createElement("b", null, "✎"), " 는 고치는 칸입니다.", /*#__PURE__*/React.createElement("br", null), "★ 이름을 고쳐도 ", /*#__PURE__*/React.createElement("b", null, "지난 기록은 안 깨집니다"), " — 사람마다 번호가 붙어 있습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ 연락처는 ", /*#__PURE__*/React.createElement("b", null, "이 기계에만"), " 남습니다. 랭킹·공유 글에는 나오지 않습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ 명단에서 빼도 ", /*#__PURE__*/React.createElement("b", null, "친 기록은 그대로"), "입니다."));
+  }, "★ ", /*#__PURE__*/React.createElement("b", null, "「실제」"), "는 함께 쳐서 나온 값입니다. 기간을 바꾸면 이 값이 바뀝니다.", /*#__PURE__*/React.createElement("br", null), "★ 카드를 누르면 ", /*#__PURE__*/React.createElement("b", null, "그 사람이 친 기록"), "이 나옵니다. ", /*#__PURE__*/React.createElement("b", null, "✎"), " 는 고치는 칸입니다.", /*#__PURE__*/React.createElement("br", null), "★ 이름을 고쳐도 ", /*#__PURE__*/React.createElement("b", null, "지난 기록은 안 깨집니다"), " — 사람마다 번호가 붙어 있습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ 연락처는 ", /*#__PURE__*/React.createElement("b", null, "이 기계에만"), " 남습니다. 랭킹·공유 글에는 나오지 않습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ 명단에서 빼도 ", /*#__PURE__*/React.createElement("b", null, "친 기록은 그대로"), "입니다."));
 }
 
 /* ── 동우회 탭 ── */
