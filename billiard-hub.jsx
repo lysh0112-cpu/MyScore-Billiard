@@ -4609,6 +4609,10 @@ function rankOne(games, key, opt) {
     rows.push({
       id: g.id, date: g.date, gameNo: Number(g.gameNo) || 1,
       my: Number(me.score) || 0, inn: Number(me.inn) || 1, high: Number(me.high) || 0,
+      /* 🔴 2026-11-13 — ★그 판에서 ★실제로 친 수지 [대표님
+            「수기등록된 핸디 말고 실제 핸디는 안 나온다」].
+         ⛔ 지금까지 이 값을 ★한 번도 안 읽었다. 화면에는 명단에 적어둔 값만 나왔다 */
+      handi: Number(me.handicap) || 0,
       avg: (Number(me.score) || 0) / (Number(me.inn) || 1),
       res: me.won === true ? "승" : me.won === false ? "패" : "무",
       foes: g.players.filter((p) => keyOfPlayer(p) !== key)
@@ -4627,8 +4631,14 @@ function rankOne(games, key, opt) {
     w: a.w + (r.res === "승" ? 1 : 0), d: a.d + (r.res === "무" ? 1 : 0), l: a.l + (r.res === "패" ? 1 : 0),
     hi: Math.max(a.hi, r.high),
   }), { n: 0, pt: 0, inn: 0, w: 0, d: 0, l: 0, hi: 0 });
+  /* ★ 친 수지 — 가장 최근 판의 값. 그 사이에 올랐거나 내렸으면 폭도 함께 준다
+        (rows 는 ★최근이 앞이다) */
+  const hs = rows.map((r) => r.handi).filter((h) => h > 0);
+  const hd = hs.length
+    ? { last: hs[0], min: Math.min(...hs), max: Math.max(...hs), n: hs.length }
+    : null;
   return {
-    rows,
+    rows, hd,
     foes: Object.values(bf).map((t) => ({ ...t, avg: t.inn ? t.pt / t.inn : 0 })).sort((a, b) => b.n - a.n),
     tot: { ...tot, avg: tot.inn ? tot.pt / tot.inn : 0 },
   };
@@ -5784,7 +5794,7 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
 }
 
 /* ── ③ 한 사람 ── */
-function ClubMember({ data, club, mkey, P, onBack }) {
+function ClubMember({ data, club, mkey, P, openSheet, onBack }) {
   const { mode, setMode, range, setRange, from, setFrom, to, setTo, bound } = P;
   const [foe, setFoe] = useState("");
   const [moreF, setMoreF] = useState(false);
@@ -5806,17 +5816,58 @@ function ClubMember({ data, club, mkey, P, onBack }) {
   return (
     <div style={{ padding: "0 14px 14px" }}>
       <Back onClick={onBack}>{club.name}</Back>
-      <div style={{ fontSize: 19, fontWeight: 700 }}>
-        {title}
-        {me && handiOf(me, mode) > 0 && (
-          <span style={{ fontSize: 13, color: "#6F8598", fontWeight: 500 }}> 수지 {handiOf(me, mode)}</span>
-        )}
+      <div style={{ fontSize: 19, fontWeight: 700 }}>{title}</div>
+      {/* 🔴 2026-11-13 — 「수기등록된 핸디 말고 ★실제 핸디는 안 나온다」 [대표님].
+             ⇒ 두 가지를 ★나란히 둔다. 이름을 또렷이 갈라 쓴다 —
+               「적어둔」은 총무가 명단에 친 값, 「친」은 ★경기에서 실제로 받은 수지.
+             ⛔ 「실제」라는 말을 여기 쓰지 않는다. 명단 카드에서 「실제」는
+               ★에버를 가리킨다 — 같은 말이 두 가지를 가리키면 안 된다 */}
+      <div style={{ display: "flex", gap: 14, marginTop: 5, fontSize: 12.5, color: "#6F8598" }}>
+        <span>적어둔 수지{" "}
+          <span className="num" style={{ color: handiOf(me, mode) > 0 ? "#B9CCDA" : "#55708A", fontSize: 14 }}>
+            {handiOf(me, mode) > 0 ? handiOf(me, mode) : "–"}
+          </span>
+        </span>
+        <span>친 수지{" "}
+          <span className="num" style={{ color: o.hd ? ACCENT : "#55708A", fontSize: 14, fontWeight: 700 }}>
+            {o.hd ? o.hd.last : "–"}
+          </span>
+          {o.hd && o.hd.min !== o.hd.max && (
+            <span className="num" style={{ color: "#55708A", fontSize: 11.5 }}> {o.hd.min}~{o.hd.max}</span>
+          )}
+        </span>
       </div>
       <div style={{ height: 11 }} />
       <Pills cols="repeat(2,1fr)" value={mode} set={setMode} items={[["3", "3쿠션"], ["4", "4구"]]} />
       <div style={{ height: 7 }} />
       <RangePills range={range} setRange={setRange} from={from} setFrom={setFrom}
         to={to} setTo={setTo} bound={bound} tail="" />
+
+      {/* 🔴 2026-11-13 — 「같은 동우회원 중 ★한 사람만 고르게 하고,
+             그 사람과의 성적만 보여주는 것이지」 [대표님]
+           ⇒ 상대를 ★먼저 고른다. 아래가 모두 그 사람 기준으로 바뀐다.
+           ⚠ 친 적이 있는 분만 나온다 — 안 친 분을 골라봐야 0판이다 */}
+      {o.foes.length > 0 && (
+        <>
+          <div style={{ fontSize: 11.5, color: "#6F8598", margin: "14px 2px 6px" }}>상대 고르기</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {[{ key: "", name: "전체", n: o.tot.n }, ...o.foes].map((f) => (
+              <button key={f.key || "all"} onClick={() => setFoe(f.key)} style={{
+                padding: "9px 12px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+                background: foe === f.key ? ACCENT : "rgba(0,0,0,.28)",
+                color: foe === f.key ? "#141200" : "var(--chalk)",
+                border: foe === f.key ? "none" : "1px solid var(--line)",
+              }}>
+                {f.name || "이름 없음"}
+                <span className="num" style={{
+                  fontSize: 11, marginLeft: 5, fontWeight: 500,
+                  color: foe === f.key ? "rgba(20,18,0,.6)" : "#6F8598",
+                }}>{f.n}판</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <div style={{
         background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12,
@@ -5838,12 +5889,19 @@ function ClubMember({ data, club, mkey, P, onBack }) {
       {o.foes.length > 0 && (
         <>
           <div style={{ fontSize: 11.5, color: "#6F8598", margin: "15px 2px 6px" }}>
-            상대별 — 많이 친 순 · <b style={{ color: ACCENT }}>누르면 아래가 그 사람만 추려집니다</b>
+            상대별 — 많이 친 순 · <b style={{ color: ACCENT }}>줄을 눌러도 골라집니다</b>
           </div>
           <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 13px" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
-                <tr><th style={{ textAlign: "left" }}>상대</th><th>판</th><th>승-무-패</th><th>내 에버</th></tr>
+                {/* ★ 2026-11-13 — 머리글이 「승- 무-패」 「내 에 버」로 쪼개져 있었다.
+                      ⇒ 줄바꿈을 막고 글자를 줄인다 (폰 390px 에서 잰 값) */}
+                <tr style={{ fontSize: 11, color: "#6F8598", fontWeight: 500 }}>
+                  <th style={{ textAlign: "left", whiteSpace: "nowrap", padding: "0 0 6px", fontWeight: 500 }}>상대</th>
+                  <th style={{ whiteSpace: "nowrap", padding: "0 6px 6px", fontWeight: 500 }}>판</th>
+                  <th style={{ whiteSpace: "nowrap", padding: "0 6px 6px", fontWeight: 500 }}>승-무-패</th>
+                  <th style={{ whiteSpace: "nowrap", padding: "0 0 6px", textAlign: "right", fontWeight: 500 }}>내 에버</th>
+                </tr>
                 {shownF.map((f) => (
                   <tr key={f.key} onClick={() => setFoe(foe === f.key ? "" : f.key)} style={{ cursor: "pointer" }}>
                     <td style={{ textAlign: "left", fontWeight: 600, width: "100%", color: foe === f.key ? ACCENT : "inherit" }}>
@@ -5856,9 +5914,9 @@ function ClubMember({ data, club, mkey, P, onBack }) {
                         </span>
                       </span>
                     </td>
-                    <td className="num">{f.n}</td>
-                    <td className="num" style={{ color: "var(--chalk)" }}>{f.w}-{f.d}-{f.l}</td>
-                    <td className="num" style={{ color: ACCENT, fontSize: 15 }}>{fmtAvg(f.avg, mode)}</td>
+                    <td className="num" style={{ whiteSpace: "nowrap", padding: "3px 6px" }}>{f.n}</td>
+                    <td className="num" style={{ color: "var(--chalk)", whiteSpace: "nowrap", padding: "3px 6px" }}>{f.w}-{f.d}-{f.l}</td>
+                    <td className="num" style={{ color: ACCENT, fontSize: 15, whiteSpace: "nowrap", textAlign: "right", padding: "3px 0" }}>{fmtAvg(f.avg, mode)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -5875,20 +5933,31 @@ function ClubMember({ data, club, mkey, P, onBack }) {
 
       <div style={{ fontSize: 11.5, color: "#6F8598", margin: "15px 2px 2px" }}>
         일자별 · {sel ? `${sel.name} 님과 ` : ""}<span className="num">{rows.length}</span>판
+        {" · "}<b style={{ color: ACCENT }}>누르면 그 판 기록표가 열립니다</b>
         {foe && <button onClick={() => setFoe("")} style={{ color: ACCENT, fontSize: 11.5, marginLeft: 8 }}>전체 보기</button>}
       </div>
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "4px 13px 12px" }}>
         {shownR.length === 0 && (
           <div style={{ padding: "26px 0", textAlign: "center", fontSize: 13, color: "var(--chalk)" }}>친 기록이 없습니다</div>
         )}
+        {/* 🔴 2026-11-13 — 「그 날짜를 선택하면 ★앞쪽 기록보기로 이동」 [대표님].
+               ⇒ 줄을 ★단추로 바꾼다. 누르면 그 판의 결과표가 그대로 열린다.
+               ⚠ 옛 기록은 지워졌을 수 있다 — 못 찾으면 알리고 만다 */}
         {shownR.map((r, i) => (
-          <div key={r.id + i} style={{
-            display: "flex", gap: 8, alignItems: "baseline", padding: "8px 0", fontSize: 13,
+          <button key={r.id + i} onClick={() => {
+            const g = data.games.find((x) => x.id === r.id);
+            if (g) openSheet(g);
+          }} style={{
+            display: "flex", gap: 8, alignItems: "baseline", padding: "10px 0", fontSize: 13,
+            width: "100%", textAlign: "left",
             borderTop: i === 0 ? "none" : "1px solid rgba(244,238,223,.07)",
           }}>
             <span className="num" style={{ color: "#6F8598", fontSize: 11.5, width: 40, flexShrink: 0 }}>{md(r.date)}</span>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {r.foes.map((f) => f.name).join(" · ")}
+            </span>
+            <span className="num" style={{ color: "#55708A", fontSize: 11, width: 30, textAlign: "right", flexShrink: 0 }}>
+              {r.handi > 0 ? "수" + r.handi : ""}
             </span>
             <span className="num" style={{ color: "#B9CCDA", flexShrink: 0 }}>
               {r.my} : {r.foes.map((f) => f.score).join(" : ")}
@@ -5896,7 +5965,8 @@ function ClubMember({ data, club, mkey, P, onBack }) {
             <span style={{ width: 19, textAlign: "center", flexShrink: 0, fontWeight: 700, color: col(r.res) }}>{r.res}</span>
             <span className="num" style={{ color: ACCENT, width: 46, textAlign: "right", flexShrink: 0 }}>{fmtAvg(r.avg, mode)}</span>
             <span className="num" style={{ color: "#55708A", fontSize: 11, width: 38, textAlign: "right", flexShrink: 0 }}>{r.inn}이닝</span>
-          </div>
+            <span style={{ color: "#44627B", fontSize: 13, flexShrink: 0, paddingLeft: 2 }}>›</span>
+          </button>
         ))}
         {rows.length > 10 && (
           <button onClick={() => setMoreR((v) => !v)} style={{
@@ -6171,7 +6241,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
 }
 
 /* ── 동우회 탭 ── */
-function Clubs({ data, save, say }) {
+function Clubs({ data, save, say, openSheet }) {
   const [view, setView] = useState("list");         /* list · rank · member · roster */
   const [cid, setCid] = useState("");
   const [mkey, setMkey] = useState("");
@@ -6194,7 +6264,7 @@ function Clubs({ data, save, say }) {
       onMember={(k) => { setMkey(k); setBack("rank"); setView("member"); }} />
   );
   if (view === "member") return (
-    <ClubMember data={data} club={club} mkey={mkey} P={P} onBack={() => setView(back)} />
+    <ClubMember data={data} club={club} mkey={mkey} P={P} openSheet={openSheet} onBack={() => setView(back)} />
   );
   if (view === "roster") return (
     <ClubRoster data={data} save={save} say={say} club={club} P={P}
@@ -6476,7 +6546,7 @@ export default function App() {
           goHome={() => { setSetup(null); setBare(false); setBoardKey((n) => n + 1); }} />
       )}
       {tab === "log" && <Log data={data} save={save} say={say} openSheet={setSheet} />}
-      {tab === "club" && <Clubs data={data} save={save} say={say} />}
+      {tab === "club" && <Clubs data={data} save={save} say={say} openSheet={setSheet} />}
       {tab === "ask" && <Ask say={say} />}
 
       {!bareNow && (

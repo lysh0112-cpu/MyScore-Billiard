@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-62 새 폰에서 기록이 저절로 내려오게 -->
+<!-- build: 1판-63 개인 화면 — 친 수지 · 상대 고르기 · 날짜 누르면 기록표 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7313,6 +7313,10 @@ function rankOne(games, key, opt) {
       my: Number(me.score) || 0,
       inn: Number(me.inn) || 1,
       high: Number(me.high) || 0,
+      /* 🔴 2026-11-13 — ★그 판에서 ★실제로 친 수지 [대표님
+            「수기등록된 핸디 말고 실제 핸디는 안 나온다」].
+         ⛔ 지금까지 이 값을 ★한 번도 안 읽었다. 화면에는 명단에 적어둔 값만 나왔다 */
+      handi: Number(me.handicap) || 0,
       avg: (Number(me.score) || 0) / (Number(me.inn) || 1),
       res: me.won === true ? "승" : me.won === false ? "패" : "무",
       foes: g.players.filter(p => keyOfPlayer(p) !== key).map(f => ({
@@ -7358,8 +7362,18 @@ function rankOne(games, key, opt) {
     l: 0,
     hi: 0
   });
+  /* ★ 친 수지 — 가장 최근 판의 값. 그 사이에 올랐거나 내렸으면 폭도 함께 준다
+        (rows 는 ★최근이 앞이다) */
+  const hs = rows.map(r => r.handi).filter(h => h > 0);
+  const hd = hs.length ? {
+    last: hs[0],
+    min: Math.min(...hs),
+    max: Math.max(...hs),
+    n: hs.length
+  } : null;
   return {
     rows,
+    hd,
     foes: Object.values(bf).map(t => ({
       ...t,
       avg: t.inn ? t.pt / t.inn : 0
@@ -9297,6 +9311,7 @@ function ClubMember({
   club,
   mkey,
   P,
+  openSheet,
   onBack
 }) {
   const {
@@ -9345,13 +9360,34 @@ function ClubMember({
       fontSize: 19,
       fontWeight: 700
     }
-  }, title, me && handiOf(me, mode) > 0 && /*#__PURE__*/React.createElement("span", {
+  }, title), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 13,
-      color: "#6F8598",
-      fontWeight: 500
+      display: "flex",
+      gap: 14,
+      marginTop: 5,
+      fontSize: 12.5,
+      color: "#6F8598"
     }
-  }, " 수지 ", handiOf(me, mode))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "적어둔 수지", " ", /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      color: handiOf(me, mode) > 0 ? "#B9CCDA" : "#55708A",
+      fontSize: 14
+    }
+  }, handiOf(me, mode) > 0 ? handiOf(me, mode) : "–")), /*#__PURE__*/React.createElement("span", null, "친 수지", " ", /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      color: o.hd ? ACCENT : "#55708A",
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, o.hd ? o.hd.last : "–"), o.hd && o.hd.min !== o.hd.max && /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      color: "#55708A",
+      fontSize: 11.5
+    }
+  }, " ", o.hd.min, "~", o.hd.max))), /*#__PURE__*/React.createElement("div", {
     style: {
       height: 11
     }
@@ -9373,7 +9409,43 @@ function ClubMember({
     setTo: setTo,
     bound: bound,
     tail: ""
-  }), /*#__PURE__*/React.createElement("div", {
+  }), o.foes.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      margin: "14px 2px 6px"
+    }
+  }, "상대 고르기"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6
+    }
+  }, [{
+    key: "",
+    name: "전체",
+    n: o.tot.n
+  }, ...o.foes].map(f => /*#__PURE__*/React.createElement("button", {
+    key: f.key || "all",
+    onClick: () => setFoe(f.key),
+    style: {
+      padding: "9px 12px",
+      borderRadius: 999,
+      fontSize: 13,
+      fontWeight: 600,
+      background: foe === f.key ? ACCENT : "rgba(0,0,0,.28)",
+      color: foe === f.key ? "#141200" : "var(--chalk)",
+      border: foe === f.key ? "none" : "1px solid var(--line)"
+    }
+  }, f.name || "이름 없음", /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      fontSize: 11,
+      marginLeft: 5,
+      fontWeight: 500,
+      color: foe === f.key ? "rgba(20,18,0,.6)" : "#6F8598"
+    }
+  }, f.n, "판"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "var(--card)",
       border: "1px solid var(--line)",
@@ -9428,7 +9500,7 @@ function ClubMember({
     style: {
       color: ACCENT
     }
-  }, "누르면 아래가 그 사람만 추려집니다")), /*#__PURE__*/React.createElement("div", {
+  }, "줄을 눌러도 골라집니다")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "var(--card)",
       border: "1px solid var(--line)",
@@ -9440,11 +9512,39 @@ function ClubMember({
       width: "100%",
       borderCollapse: "collapse"
     }
-  }, /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", {
     style: {
-      textAlign: "left"
+      fontSize: 11,
+      color: "#6F8598",
+      fontWeight: 500
     }
-  }, "상대"), /*#__PURE__*/React.createElement("th", null, "판"), /*#__PURE__*/React.createElement("th", null, "승-무-패"), /*#__PURE__*/React.createElement("th", null, "내 에버")), shownF.map(f => /*#__PURE__*/React.createElement("tr", {
+  }, /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: "left",
+      whiteSpace: "nowrap",
+      padding: "0 0 6px",
+      fontWeight: 500
+    }
+  }, "상대"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      whiteSpace: "nowrap",
+      padding: "0 6px 6px",
+      fontWeight: 500
+    }
+  }, "판"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      whiteSpace: "nowrap",
+      padding: "0 6px 6px",
+      fontWeight: 500
+    }
+  }, "승-무-패"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      whiteSpace: "nowrap",
+      padding: "0 0 6px",
+      textAlign: "right",
+      fontWeight: 500
+    }
+  }, "내 에버")), shownF.map(f => /*#__PURE__*/React.createElement("tr", {
     key: f.key,
     onClick: () => setFoe(foe === f.key ? "" : f.key),
     style: {
@@ -9479,17 +9579,26 @@ function ClubMember({
       flexShrink: 0
     }
   }, foe === f.key ? "✓" : "›"))), /*#__PURE__*/React.createElement("td", {
-    className: "num"
+    className: "num",
+    style: {
+      whiteSpace: "nowrap",
+      padding: "3px 6px"
+    }
   }, f.n), /*#__PURE__*/React.createElement("td", {
     className: "num",
     style: {
-      color: "var(--chalk)"
+      color: "var(--chalk)",
+      whiteSpace: "nowrap",
+      padding: "3px 6px"
     }
   }, f.w, "-", f.d, "-", f.l), /*#__PURE__*/React.createElement("td", {
     className: "num",
     style: {
       color: ACCENT,
-      fontSize: 15
+      fontSize: 15,
+      whiteSpace: "nowrap",
+      textAlign: "right",
+      padding: "3px 0"
     }
   }, fmtAvg(f.avg, mode)))))), o.foes.length > 6 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setMoreF(v => !v),
@@ -9510,7 +9619,11 @@ function ClubMember({
     }
   }, "일자별 · ", sel ? `${sel.name} 님과 ` : "", /*#__PURE__*/React.createElement("span", {
     className: "num"
-  }, rows.length), "판", foe && /*#__PURE__*/React.createElement("button", {
+  }, rows.length), "판", " · ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: ACCENT
+    }
+  }, "누르면 그 판 기록표가 열립니다"), foe && /*#__PURE__*/React.createElement("button", {
     onClick: () => setFoe(""),
     style: {
       color: ACCENT,
@@ -9531,14 +9644,20 @@ function ClubMember({
       fontSize: 13,
       color: "var(--chalk)"
     }
-  }, "친 기록이 없습니다"), shownR.map((r, i) => /*#__PURE__*/React.createElement("div", {
+  }, "친 기록이 없습니다"), shownR.map((r, i) => /*#__PURE__*/React.createElement("button", {
     key: r.id + i,
+    onClick: () => {
+      const g = data.games.find(x => x.id === r.id);
+      if (g) openSheet(g);
+    },
     style: {
       display: "flex",
       gap: 8,
       alignItems: "baseline",
-      padding: "8px 0",
+      padding: "10px 0",
       fontSize: 13,
+      width: "100%",
+      textAlign: "left",
       borderTop: i === 0 ? "none" : "1px solid rgba(244,238,223,.07)"
     }
   }, /*#__PURE__*/React.createElement("span", {
@@ -9558,6 +9677,15 @@ function ClubMember({
       whiteSpace: "nowrap"
     }
   }, r.foes.map(f => f.name).join(" · ")), /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      color: "#55708A",
+      fontSize: 11,
+      width: 30,
+      textAlign: "right",
+      flexShrink: 0
+    }
+  }, r.handi > 0 ? "수" + r.handi : ""), /*#__PURE__*/React.createElement("span", {
     className: "num",
     style: {
       color: "#B9CCDA",
@@ -9588,7 +9716,14 @@ function ClubMember({
       textAlign: "right",
       flexShrink: 0
     }
-  }, r.inn, "이닝"))), rows.length > 10 && /*#__PURE__*/React.createElement("button", {
+  }, r.inn, "이닝"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#44627B",
+      fontSize: 13,
+      flexShrink: 0,
+      paddingLeft: 2
+    }
+  }, "›"))), rows.length > 10 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setMoreR(v => !v),
     style: {
       width: "100%",
@@ -10161,7 +10296,8 @@ function ClubRoster({
 function Clubs({
   data,
   save,
-  say
+  say,
+  openSheet
 }) {
   const [view, setView] = useState("list"); /* list · rank · member · roster */
   const [cid, setCid] = useState("");
@@ -10210,6 +10346,7 @@ function Clubs({
     club: club,
     mkey: mkey,
     P: P,
+    openSheet: openSheet,
     onBack: () => setView(back)
   });
   if (view === "roster") return /*#__PURE__*/React.createElement(ClubRoster, {
@@ -10646,7 +10783,8 @@ function App() {
   }), tab === "club" && /*#__PURE__*/React.createElement(Clubs, {
     data: data,
     save: save,
-    say: say
+    say: say,
+    openSheet: setSheet
   }), tab === "ask" && /*#__PURE__*/React.createElement(Ask, {
     say: say
   }), !bareNow && /*#__PURE__*/React.createElement("nav", {
