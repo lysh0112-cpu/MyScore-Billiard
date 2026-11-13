@@ -5557,8 +5557,21 @@ const CBtn = ({ on, ghost, children, ...rest }) => (
 const Pair = ({ children }) => (
   <div style={{ display: "flex", gap: 8 }}>{children}</div>
 );
+/* 🔴 2026-11-13 — 「동우회 화면들을 순서대로 모두 눌러서 들어갔다…
+      ★한 단계씩 뒤로가기 버튼을 눌러야 할 때 ★잘 안 보인다」 [대표님]
+   ⛔ 13px 글자에 테두리도 없어 ★눌러지는 것인 줄 몰랐다.
+      손가락 닿는 넓이도 좁았다 (재어 보니 높이 34).
+   ⇒ 테두리를 두른 알약으로. 글자 14 · 아래위 여백을 키워 ★높이 40 으로. */
 const Back = ({ onClick, children }) => (
-  <button onClick={onClick} style={{ fontSize: 13, color: "var(--chalk)", padding: "15px 2px 4px" }}>‹ {children}</button>
+  <button onClick={onClick} aria-label="뒤로" style={{
+    display: "inline-flex", alignItems: "center", gap: 5,
+    margin: "13px 0 6px", padding: "9px 14px 9px 11px", borderRadius: 999,
+    fontSize: 14, fontWeight: 600, color: "var(--ivory)",
+    background: "rgba(0,0,0,.26)", border: "1px solid rgba(244,238,223,.18)",
+  }}>
+    <span style={{ fontSize: 16, lineHeight: 1, color: ACCENT }}>‹</span>
+    {children}
+  </button>
 );
 const Sub = ({ children }) => (
   <div className="num" style={{ fontSize: 11.5, color: "#6F8598", margin: "9px 2px 12px" }}>{children}</div>
@@ -5813,7 +5826,13 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
           fontSize: 19, fontWeight: 700, flex: 1, minWidth: 0, textAlign: "left",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>{club.name} <span style={{ fontSize: 12, color: "#44627B", fontWeight: 500 }}>✎</span></button>
-        <button onClick={onRoster} style={{ fontSize: 12.5, color: ACCENT, fontWeight: 600, padding: "6px 2px" }}>명단 ›</button>
+        {/* ★ 2026-11-13 — 「명단 버튼을 조금 키워줘」 [대표님].
+               글자 12.5 · 넓이 47×29 였다 → 테두리를 두르고 ★74×38 로 */}
+        <button onClick={onRoster} style={{
+          padding: "9px 13px", borderRadius: 999, fontSize: 13.5, fontWeight: 700,
+          color: ACCENT, background: "rgba(232,184,56,.12)",
+          border: "1px solid rgba(232,184,56,.45)", whiteSpace: "nowrap", flexShrink: 0,
+        }}>명단 ›</button>
       </div>
 
       {ren !== null && (
