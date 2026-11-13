@@ -5396,6 +5396,37 @@ function Account({ data, save, say, sync, syncNow, onClose }) {
               명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다.
             </div>
 
+            {/* 🔴 2026-11-13 — 「로그인하면 자꾸 ★명연재 화면으로 넘어간다 · 폰에서만」 [대표님]
+                   ⚠ 폰에서 홈 화면 아이콘으로 열면 ★주소창이 아예 안 보인다.
+                     그래서 「무슨 주소를 보내고 있는가」를 ★아무도 볼 수 없었다.
+                   ⇒ 앱이 ★스스로 말하게 둔다. 이 줄과 Supabase 의 Redirect URLs 가
+                     글자까지 같아야 한다. 안 맞으면 Supabase 는 오류 없이
+                     ★조용히 Site URL(명연재)로 보낸다.
+                   ⛔ 이 칸을 지우지 말 것 — 폰에서 탈이 나면 여기 말고 볼 곳이 없다 */}
+            <div style={{
+              marginTop: 14, padding: "11px 12px", borderRadius: 11,
+              background: "#0C2E46", border: "1px solid rgba(244,238,223,.13)",
+            }}>
+              <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 6 }}>로그인 뒤 돌아올 주소</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span className="num" style={{
+                  flex: 1, minWidth: 0, fontSize: 12.5, color: "#B9CCDA",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>{authBack()}</span>
+                <button onClick={async () => {
+                  try { await navigator.clipboard.writeText(authBack()); say("복사했습니다"); }
+                  catch (e) { say("복사하지 못했습니다. 주소를 길게 눌러 복사하세요"); }
+                }} style={{
+                  padding: "7px 11px", fontSize: 11.5, borderRadius: 8,
+                  color: "#7FC0F2", border: "1px solid rgba(90,169,230,.45)",
+                }}>복사</button>
+              </div>
+              <div style={{ fontSize: 10.5, color: "#55707F", lineHeight: 1.6, marginTop: 8 }}>
+                딴 화면(명연재)으로 넘어가면 이 주소가 Supabase 목록에 없는 것입니다.
+                복사해서 그대로 넣으시면 됩니다.
+              </div>
+            </div>
+
             {/* ⚠ 09-08 「로그인 필수」로 정해졌지만 관문(WALLET_GATE_ON)이 아직 꺼져 있다.
                   지금은 로그인 없이도 실제로 써지므로 이 줄을 «남긴다».
                   ★관문을 켜는 날 이 줄을 지워야 한다 — 말과 실제가 어긋나면 안 된다 */}

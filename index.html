@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-57 로그인 — 돌아올 주소를 한 가지로 (명연재로 떨어진 것) -->
+<!-- build: 1판-58 계정 창에 「돌아올 주소」 — 폰에서 주소창을 못 보므로 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -8515,6 +8515,60 @@ function Account({
       marginTop: 8
     }
   }, "명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14,
+      padding: "11px 12px",
+      borderRadius: 11,
+      background: "#0C2E46",
+      border: "1px solid rgba(244,238,223,.13)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#6F8598",
+      marginBottom: 6
+    }
+  }, "로그인 뒤 돌아올 주소"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 12.5,
+      color: "#B9CCDA",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, authBack()), /*#__PURE__*/React.createElement("button", {
+    onClick: async () => {
+      try {
+        await navigator.clipboard.writeText(authBack());
+        say("복사했습니다");
+      } catch (e) {
+        say("복사하지 못했습니다. 주소를 길게 눌러 복사하세요");
+      }
+    },
+    style: {
+      padding: "7px 11px",
+      fontSize: 11.5,
+      borderRadius: 8,
+      color: "#7FC0F2",
+      border: "1px solid rgba(90,169,230,.45)"
+    }
+  }, "복사")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#55707F",
+      lineHeight: 1.6,
+      marginTop: 8
+    }
+  }, "딴 화면(명연재)으로 넘어가면 이 주소가 Supabase 목록에 없는 것입니다. 복사해서 그대로 넣으시면 됩니다.")), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "#6F8598",
