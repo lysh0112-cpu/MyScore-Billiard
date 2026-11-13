@@ -5847,9 +5847,9 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
             if (!v) return say("이름을 적어주세요");
             if (clubsOf(data).some((c) => c.id !== club.id && c.name === v)) return say("같은 이름의 동우회가 이미 있습니다");
             save({ ...data, clubs: clubsOf(data).map((c) => (c.id === club.id ? { ...c, name: v } : c)) });
-            setRen(null); say("이름을 고쳤습니다");
-          }}>이름 고치기</CBtn>
-          <CBtn ghost onClick={() => setRen(null)}>그냥 닫기</CBtn>
+            setRen(null); say("이름을 바꿨습니다");
+          }}>수정완료</CBtn>
+          <CBtn ghost onClick={() => setRen(null)}>닫기</CBtn>
           {/* ⛔ 지우는 단추는 ★제일 아래, 노란 단추와 ★떨어뜨려 둔다 — 잘못 누르면 안 된다 */}
           <button onClick={() => {
             if (!askRemoveClub(data, club)) return;
@@ -6753,17 +6753,19 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
             {/* 🔴 2026-11-13 — 「수정 단추가 너무 작아서 찾기가 힘들다 · 조금 더 키우고
                    선명한 노란색으로」 [대표님] ⇒ ㉯ 안으로 정하심.
                  ★ 재어 본 값 — 손가락 닿는 넓이 27×25 → ★72×33 (3.6배).
-                 ★ 글자(「고치기」)를 함께 적는다. ✎ 만으로는 ★그것이 무엇인지 모른다.
+                 ★ 글자를 함께 적는다. ✎ 만으로는 ★그것이 무엇인지 모른다.
+                 ★ 2026-11-14 — 「고치기」→「수정」 · 열려 있을 때는 ★「수정완료」 [대표님].
+                   열어 놓고 어떻게 닫는지 몰라 헤매신다 — 같은 단추가 ★닫는 단추다.
                  ⛔ 꽉 찬 노랑으로 만들지 말 것 — 이 앱에서 꽉 찬 노랑은 「지금 누를 것」
                     ([다음 ⇒]·[저장하기]) 자리다. 카드마다 노란 덩어리가 박히면
                     정작 눌러야 할 것이 묻힌다. 열려 있을 때만 꽉 채운다 */}
-            <button onClick={() => openEdit(m)} aria-label="고치기" style={{
+            <button onClick={() => openEdit(m)} aria-label="수정" style={{
               padding: "8px 11px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
               lineHeight: 1.2, whiteSpace: "nowrap", flexShrink: 0,
               background: edit === m.id ? ACCENT : "rgba(232,184,56,.14)",
               border: edit === m.id ? "1px solid " + ACCENT : "1px solid rgba(232,184,56,.5)",
               color: edit === m.id ? "#141200" : ACCENT,
-            }}>✎ 고치기</button>
+            }}>{edit === m.id ? "✓ 수정완료" : "✎ 수정"}</button>
             <button onClick={() => onMember(m.id)} aria-label="기록 보기"
               style={{ padding: "5px 4px", fontSize: 15, color: "#44627B" }}>›</button>
           </div>
@@ -6794,23 +6796,32 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
 
           {edit === m.id && (
             <div style={{ marginTop: 11, paddingTop: 11, borderTop: "1px solid rgba(244,238,223,.1)" }}>
-              <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 4 }}>이름</div>
-              <input defaultValue={m.name} maxLength={12}
-                onBlur={(e) => {
-                  const v = e.target.value.trim();
-                  if (!v || v === m.name) return;
-                  if (ms.some((x) => x.id !== m.id && x.name === v)) return say(`이미 「${v}」 님이 있습니다`);
-                  patch(m.id, { name: v }); say("이름을 고쳤습니다 · 지난 기록은 그대로입니다");
-                }} style={{ fontSize: 14 }} />
+              {/* ★ 2026-11-14 — 「화면을 ★효율적으로 쓰기 위해서
+                     ①이름+핸드폰번호 ②3구 핸디+4구 핸디 ③초청중+정식회원
+                     ④명단에서 빼기 ⇒ 명단 삭제」 [대표님]
+                   ⇒ 넉 줄이 ★세 줄로 줄었다. 연락처가 더 넓어야 해서 2:3 으로 나눈다
+                     (「010-0000-0000」 열세 자 · 390px 에서 재서 맞췄다) */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 2, minWidth: 0 }}>
+                  <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 4 }}>이름</div>
+                  <input defaultValue={m.name} maxLength={12}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (!v || v === m.name) return;
+                      if (ms.some((x) => x.id !== m.id && x.name === v)) return say(`이미 「${v}」 님이 있습니다`);
+                      patch(m.id, { name: v }); say("이름을 바꿨습니다 · 지난 기록은 그대로입니다");
+                    }} className="num" style={{ fontSize: 13.5, padding: "9px 10px", width: "100%" }} />
+                </div>
+                <div style={{ flex: 3, minWidth: 0 }}>
+                  <Fld lbl="연락처 (총무만)" v={ef.phone} ph="010-0000-0000"
+                    set={(v) => typePhone(m.id, v)} />
+                </div>
+              </div>
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <Fld lbl="3구 수지" v={ef.h3} ph="15" set={(v) => typeNum(m.id, "h3", v)} />
-                <Fld lbl="4구 수지" v={ef.h4} ph="150" set={(v) => typeNum(m.id, "h4", v)} />
+                <Fld lbl="3구 핸디" v={ef.h3} ph="15" set={(v) => typeNum(m.id, "h3", v)} />
+                <Fld lbl="4구 핸디" v={ef.h4} ph="150" set={(v) => typeNum(m.id, "h4", v)} />
               </div>
-              <div style={{ marginTop: 8 }}>
-                <Fld lbl="연락처 (총무만 봅니다)" v={ef.phone} ph="010-0000-0000"
-                  set={(v) => typePhone(m.id, v)} wide />
-              </div>
-              <div style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 9 }}>
                 <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 5 }}>상태</div>
                 <Pills cols="repeat(2,1fr)" value={m.status === "active" ? "active" : "invited"}
                   set={(v) => patch(m.id, { status: v })}
@@ -6823,7 +6834,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
               <button onClick={() => del(m)} style={{
                 width: "100%", marginTop: 13, padding: 11, borderRadius: 10, fontSize: 12.5,
                 color: "#C87B74", border: "1px solid rgba(200,123,116,.35)",
-              }}>명단에서 빼기</button>
+              }}>명단 삭제</button>
             </div>
           )}
         </div>
@@ -6836,13 +6847,15 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
           {/* 🔴 2026-11-13 — 「신고 에버」 두 칸을 ★뺐다 [대표님]
                  「3구 핸디 + 4구 핸디 + 연락처만 넣는 걸로 하자」
                  ⇒ 에버는 ★쳐서 나온 값(실제)만 쓴다. 본인이 알려준 값은 안 받는다 */}
-          <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
-            <Fld lbl="3구 수지" v={f.h3} ph="15" set={(v) => setF({ ...f, h3: v.replace(/[^0-9]/g, "") })} />
-            <Fld lbl="4구 수지" v={f.h4} ph="150" set={(v) => setF({ ...f, h4: v.replace(/[^0-9]/g, "") })} />
-          </div>
+          {/* ★ 2026-11-14 — 고치는 칸과 ★같은 차례로 둔다 [대표님].
+                 두 화면이 다르면 손이 헷갈린다 */}
           <div style={{ marginTop: 8 }}>
-            <Fld lbl="연락처 (총무만 봅니다)" v={f.phone} ph="010-0000-0000"
+            <Fld lbl="연락처 (총무만)" v={f.phone} ph="010-0000-0000"
               set={(v) => setF({ ...f, phone: hyphen(v) })} wide />
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <Fld lbl="3구 핸디" v={f.h3} ph="15" set={(v) => setF({ ...f, h3: v.replace(/[^0-9]/g, "") })} />
+            <Fld lbl="4구 핸디" v={f.h4} ph="150" set={(v) => setF({ ...f, h4: v.replace(/[^0-9]/g, "") })} />
           </div>
           {/* ★ 단추는 ★옆으로 나란히 [대표님] · 저장이 오른쪽(엄지가 닿는 쪽) */}
           <Pair>
@@ -6863,10 +6876,10 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
 
       <div style={{ fontSize: 11, color: "#6F8598", lineHeight: 1.8, marginTop: 13 }}>
         ★ <b>「실제」</b>는 함께 쳐서 나온 값입니다. 기간을 바꾸면 이 값이 바뀝니다.<br />
-        ★ 카드를 누르면 <b>그 사람이 친 기록</b>이 나옵니다. <b>✎</b> 는 고치는 칸입니다.<br />
+        ★ 카드를 누르면 <b>그 사람이 친 기록</b>이 나옵니다. <b>✎ 수정</b>은 고치는 칸입니다.<br />
         ★ 이름을 고쳐도 <b>지난 기록은 안 깨집니다</b> — 사람마다 번호가 붙어 있습니다.<br />
         ⛔ 연락처는 <b>이 기계에만</b> 남습니다. 랭킹·공유 글에는 나오지 않습니다.<br />
-        ⛔ 명단에서 빼도 <b>친 기록은 그대로</b>입니다.
+        ⛔ <b>명단 삭제</b>를 해도 <b>친 기록은 그대로</b>입니다.
       </div>
     </div>
   );

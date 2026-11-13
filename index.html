@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-70 뒤로 단추와 명단 단추를 키움 -->
+<!-- build: 1판-71 수정·수정완료 · 명단 칸을 세 줄로 · 명단 삭제 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9332,12 +9332,12 @@ function ClubRank({
         } : c)
       });
       setRen(null);
-      say("이름을 고쳤습니다");
+      say("이름을 바꿨습니다");
     }
-  }, "이름 고치기"), /*#__PURE__*/React.createElement(CBtn, {
+  }, "수정완료"), /*#__PURE__*/React.createElement(CBtn, {
     ghost: true,
     onClick: () => setRen(null)
-  }, "그냥 닫기"), /*#__PURE__*/React.createElement("button", {
+  }, "닫기"), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       if (!askRemoveClub(data, club)) return;
       save(removeClub(data, club));
@@ -11027,7 +11027,7 @@ function ClubRoster({
     }
   }, m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중")), /*#__PURE__*/React.createElement("button", {
     onClick: () => openEdit(m),
-    "aria-label": "고치기",
+    "aria-label": "수정",
     style: {
       padding: "8px 11px",
       borderRadius: 10,
@@ -11040,7 +11040,7 @@ function ClubRoster({
       border: edit === m.id ? "1px solid " + ACCENT : "1px solid rgba(232,184,56,.5)",
       color: edit === m.id ? "#141200" : ACCENT
     }
-  }, "✎ 고치기"), /*#__PURE__*/React.createElement("button", {
+  }, edit === m.id ? "✓ 수정완료" : "✎ 수정"), /*#__PURE__*/React.createElement("button", {
     onClick: () => onMember(m.id),
     "aria-label": "기록 보기",
     style: {
@@ -11102,6 +11102,16 @@ function ClubRoster({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 2,
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       fontSize: 10.5,
       color: "#6F8598",
       marginBottom: 4
@@ -11116,40 +11126,43 @@ function ClubRoster({
       patch(m.id, {
         name: v
       });
-      say("이름을 고쳤습니다 · 지난 기록은 그대로입니다");
+      say("이름을 바꿨습니다 · 지난 기록은 그대로입니다");
     },
+    className: "num",
     style: {
-      fontSize: 14
+      fontSize: 13.5,
+      padding: "9px 10px",
+      width: "100%"
     }
-  }), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 3,
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement(Fld, {
+    lbl: "연락처 (총무만)",
+    v: ef.phone,
+    ph: "010-0000-0000",
+    set: v => typePhone(m.id, v)
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
       marginTop: 8
     }
   }, /*#__PURE__*/React.createElement(Fld, {
-    lbl: "3구 수지",
+    lbl: "3구 핸디",
     v: ef.h3,
     ph: "15",
     set: v => typeNum(m.id, "h3", v)
   }), /*#__PURE__*/React.createElement(Fld, {
-    lbl: "4구 수지",
+    lbl: "4구 핸디",
     v: ef.h4,
     ph: "150",
     set: v => typeNum(m.id, "h4", v)
   })), /*#__PURE__*/React.createElement("div", {
     style: {
-      marginTop: 8
-    }
-  }, /*#__PURE__*/React.createElement(Fld, {
-    lbl: "연락처 (총무만 봅니다)",
-    v: ef.phone,
-    ph: "010-0000-0000",
-    set: v => typePhone(m.id, v),
-    wide: true
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 10
+      marginTop: 9
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -11182,7 +11195,7 @@ function ClubRoster({
       color: "#C87B74",
       border: "1px solid rgba(200,123,116,.35)"
     }
-  }, "명단에서 빼기")))), add ? /*#__PURE__*/React.createElement("div", {
+  }, "명단 삭제")))), add ? /*#__PURE__*/React.createElement("div", {
     style: {
       background: "var(--card)",
       border: "1px solid var(--line)",
@@ -11200,32 +11213,10 @@ function ClubRoster({
     autoFocus: true
   }), /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "flex",
-      gap: 8,
-      marginTop: 9
-    }
-  }, /*#__PURE__*/React.createElement(Fld, {
-    lbl: "3구 수지",
-    v: f.h3,
-    ph: "15",
-    set: v => setF({
-      ...f,
-      h3: v.replace(/[^0-9]/g, "")
-    })
-  }), /*#__PURE__*/React.createElement(Fld, {
-    lbl: "4구 수지",
-    v: f.h4,
-    ph: "150",
-    set: v => setF({
-      ...f,
-      h4: v.replace(/[^0-9]/g, "")
-    })
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
       marginTop: 8
     }
   }, /*#__PURE__*/React.createElement(Fld, {
-    lbl: "연락처 (총무만 봅니다)",
+    lbl: "연락처 (총무만)",
     v: f.phone,
     ph: "010-0000-0000",
     set: v => setF({
@@ -11233,6 +11224,28 @@ function ClubRoster({
       phone: hyphen(v)
     }),
     wide: true
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement(Fld, {
+    lbl: "3구 핸디",
+    v: f.h3,
+    ph: "15",
+    set: v => setF({
+      ...f,
+      h3: v.replace(/[^0-9]/g, "")
+    })
+  }), /*#__PURE__*/React.createElement(Fld, {
+    lbl: "4구 핸디",
+    v: f.h4,
+    ph: "150",
+    set: v => setF({
+      ...f,
+      h4: v.replace(/[^0-9]/g, "")
+    })
   })), /*#__PURE__*/React.createElement(Pair, null, /*#__PURE__*/React.createElement(CBtn, {
     ghost: true,
     onClick: () => {
@@ -11262,7 +11275,7 @@ function ClubRoster({
       lineHeight: 1.8,
       marginTop: 13
     }
-  }, "★ ", /*#__PURE__*/React.createElement("b", null, "「실제」"), "는 함께 쳐서 나온 값입니다. 기간을 바꾸면 이 값이 바뀝니다.", /*#__PURE__*/React.createElement("br", null), "★ 카드를 누르면 ", /*#__PURE__*/React.createElement("b", null, "그 사람이 친 기록"), "이 나옵니다. ", /*#__PURE__*/React.createElement("b", null, "✎"), " 는 고치는 칸입니다.", /*#__PURE__*/React.createElement("br", null), "★ 이름을 고쳐도 ", /*#__PURE__*/React.createElement("b", null, "지난 기록은 안 깨집니다"), " — 사람마다 번호가 붙어 있습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ 연락처는 ", /*#__PURE__*/React.createElement("b", null, "이 기계에만"), " 남습니다. 랭킹·공유 글에는 나오지 않습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ 명단에서 빼도 ", /*#__PURE__*/React.createElement("b", null, "친 기록은 그대로"), "입니다."));
+  }, "★ ", /*#__PURE__*/React.createElement("b", null, "「실제」"), "는 함께 쳐서 나온 값입니다. 기간을 바꾸면 이 값이 바뀝니다.", /*#__PURE__*/React.createElement("br", null), "★ 카드를 누르면 ", /*#__PURE__*/React.createElement("b", null, "그 사람이 친 기록"), "이 나옵니다. ", /*#__PURE__*/React.createElement("b", null, "✎ 수정"), "은 고치는 칸입니다.", /*#__PURE__*/React.createElement("br", null), "★ 이름을 고쳐도 ", /*#__PURE__*/React.createElement("b", null, "지난 기록은 안 깨집니다"), " — 사람마다 번호가 붙어 있습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ 연락처는 ", /*#__PURE__*/React.createElement("b", null, "이 기계에만"), " 남습니다. 랭킹·공유 글에는 나오지 않습니다.", /*#__PURE__*/React.createElement("br", null), "⛔ ", /*#__PURE__*/React.createElement("b", null, "명단 삭제"), "를 해도 ", /*#__PURE__*/React.createElement("b", null, "친 기록은 그대로"), "입니다."));
 }
 
 /* ── 동우회 탭 ── */
