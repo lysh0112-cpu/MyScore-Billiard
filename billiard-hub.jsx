@@ -4575,8 +4575,31 @@ const hyphen = (v) => {
 };
 
 /* 그 동우회에서 친 판만. ⛔ 동우회를 안 고르고 친 판은 안 들어온다 */
-const clubGames = (games, clubId) =>
-  bilGames(games).filter((g) => g.clubId && g.clubId === clubId);
+/* 🔴 2026-11-13 — 「동우회를 ★중복해서 가입할 수도 있잖아. 이 부분을 감안해서
+      ★중복해서 경기결과를 넣을 수 있도록 하면 어때?」 [대표님]
+
+   전에는 판마다 동우회가 ★하나뿐이었다(clubId). 그래서 다른 동우회에 넣으면
+   앞의 동우회에서 ★빠졌다. 한 분이 두 동우회에 들면 같은 판이 양쪽에
+   있어야 맞다 — 그날 거기서 친 것은 사실이니까.
+   ⇒ 판마다 ★동우회 목록(clubIds)을 둔다.
+   ⚠ 어제까지 친 기록에는 clubIds 가 없다 — ★clubId 하나만 있다.
+     읽는 쪽이 ★둘 다 본다. 옛 기록을 고쳐 쓰지 않는다. */
+const clubsOfGame = (g) => {
+  const a = Array.isArray(g.clubIds) ? g.clubIds.filter(Boolean) : [];
+  if (g.clubId && a.indexOf(g.clubId) < 0) a.unshift(g.clubId);
+  return a;
+};
+const inClub = (g, clubId) => !!clubId && clubsOfGame(g).indexOf(clubId) >= 0;
+const noClub = (g) => clubsOfGame(g).length === 0;
+const clubGames = (games, clubId) => bilGames(games).filter((g) => inClub(g, clubId));
+/* 그 판을 한 동우회에 넣거나 뺀다 — 다른 동우회는 ★안 건드린다 */
+const setGameClub = (g, clubId, on) => {
+  const cur = clubsOfGame(g);
+  const next = on
+    ? (cur.indexOf(clubId) >= 0 ? cur : [...cur, clubId])
+    : cur.filter((x) => x !== clubId);
+  return { ...g, clubId: next[0] || "", clubIds: next };
+};
 
 /* 기간·종목으로 거른다. 복식은 점수가 «편» 것이라 기본으로 뺀다 */
 const rankPick = (games, { clubId, mode, from, to, withTeam }) =>
@@ -4588,17 +4611,41 @@ const rankPick = (games, { clubId, mode, from, to, withTeam }) =>
 const keyOfPlayer = (p) => p.mid || ("n:" + (p.name || ""));
 function rankList(games, opt) {
   const by = {};
-  rankPick(games, opt).forEach((g) => g.players.forEach((p) => {
-    const k = keyOfPlayer(p);
-    const m = by[k] || (by[k] = { key: k, mid: p.mid || "", name: p.name || "", n: 0, w: 0, d: 0, l: 0, pt: 0, inn: 0, hi: 0, last: "" });
-    m.n++; m.pt += Number(p.score) || 0; m.inn += Number(p.inn) || 1;
-    m.hi = Math.max(m.hi, Number(p.high) || 0);
-    if (g.date > m.last) m.last = g.date;
-    if (p.won === true) m.w++; else if (p.won === false) m.l++; else m.d++;
-    m.name = p.name || m.name;                       /* 이름이 바뀌었으면 ★최근 것으로 */
-  }));
+  rankPick(games, opt).forEach((g) => {
+    /* 🔴 2026-11-13 — 「당초 우리가 ★그림을 그린 내용과는 다른데…
+          함께 친 분 | 판 | ★1등-2등-3등 | 에버 — 이렇게 보여준다면서」 [대표님]
+       ⛔ 랭킹 표가 3인 경기인데 ★승-무-패로 적고 있었다. 3인은 ★1등만 「승」이라
+         「4-1-2」가 무슨 뜻인지 알 수가 없다. 개인 화면만 고치고 여기를 안 고쳤다.
+       ⇒ 3인 이상이면 ★등수를 센다. 등수는 ★rankRows(ptsOf) 한 곳에서만 매긴다. */
+    const many = seatsOf(g) > 2 && !g.team;
+    const rk = many ? rankRows(g) : null;
+    g.players.forEach((p) => {
+      const k = keyOfPlayer(p);
+      const m = by[k] || (by[k] = {
+        key: k, mid: p.mid || "", name: p.name || "", n: 0, w: 0, d: 0, l: 0,
+        pt: 0, inn: 0, hi: 0, last: "", many: false, place: {},
+      });
+      m.n++; m.pt += Number(p.score) || 0; m.inn += Number(p.inn) || 1;
+      m.hi = Math.max(m.hi, Number(p.high) || 0);
+      if (g.date > m.last) m.last = g.date;
+      if (many) {
+        m.many = true;
+        const u = rk.find((x) => (x.mid ? x.mid : "n:" + x.name) === k)
+          || rk.find((x) => x.name === p.name);
+        const pl = (u && u.place) || 0;
+        if (pl) m.place[pl] = (m.place[pl] || 0) + 1;
+      } else if (p.won === true) m.w++;
+      else if (p.won === false) m.l++;
+      else m.d++;
+      m.name = p.name || m.name;                     /* 이름이 바뀌었으면 ★최근 것으로 */
+    });
+  });
   return Object.values(by).map((m) => ({ ...m, avg: m.inn ? m.pt / m.inn : 0 }));
 }
+/* 「1등-2등-3등」 또는 「승-무-패」 — 한 곳에서만 글자를 만든다 */
+const wdlTxt = (m) => (m.many
+  ? [1, 2, 3].map((k) => m.place[k] || 0).join("-")
+  : `${m.w}-${m.d}-${m.l}`);
 
 /* ② 한 사람 — 일자별 줄과 상대별 묶음 */
 /* 🔴 2026-11-13 — 「3명이서 게임할 때를 생각해보자. 상세 게임 현황은
@@ -5669,11 +5716,19 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
   const few = sorted.filter((m) => min > 0 && m.n < min && hit(m));
   const hOf = (m) => handiOf(memById(club, m.mid), mode);
 
+  /* 🔴 2026-11-13 — 「화면이 이상해」 [대표님]. 머리글이 ★세로로 쪼개져
+        「수 지」 「승- 무-패」 「하 이 런」 처럼 한 글자씩 떨어졌다.
+     까닭 — <th> 에 줄바꿈을 막아 두지 않아서 좁은 폰에서 칸이 쪼그라들었다.
+     ⇒ nowrap + 글자를 줄이고, 칸 폭을 ★미리 잡아 둔다 (상대별 표와 같은 손질) */
+  const TH = { whiteSpace: "nowrap", padding: "0 5px 6px", fontWeight: 500, fontSize: 10.5, color: "#6F8598" };
   const Head = () => (
     <tr>
-      <th style={{ textAlign: "left" }}>이름</th>
-      {grp === "all" && <th>수지</th>}
-      <th>판</th><th>승-무-패</th><th>에버</th><th>하이런</th>
+      <th style={{ ...TH, textAlign: "left", padding: "0 0 6px" }}>이름</th>
+      {grp === "all" && <th style={{ ...TH, width: 30 }}>수지</th>}
+      <th style={{ ...TH, width: 24 }}>판</th>
+      <th style={{ ...TH, width: 58 }}>{rows.some((m) => m.many) ? "1등-2등-3등" : "승-무-패"}</th>
+      <th style={{ ...TH, width: 46, textAlign: "right" }}>에버</th>
+      <th style={{ ...TH, width: 32, textAlign: "right", padding: "0 0 6px" }}>하이런</th>
     </tr>
   );
   const Row = ({ m, i }) => (
@@ -5689,11 +5744,11 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
           <span style={{ color: "#44627B", fontSize: 13, paddingRight: 6, flexShrink: 0 }}>›</span>
         </span>
       </td>
-      {grp === "all" && <td className="num" style={{ color: "#8FA8BC", fontSize: 12 }}>{hOf(m) || "–"}</td>}
-      <td className="num">{m.n}</td>
-      <td className="num" style={{ color: "var(--chalk)" }}>{m.w}-{m.d}-{m.l}</td>
-      <td className="num" style={{ color: ACCENT, fontSize: 15.5 }}>{fmtAvg(m.avg, mode)}</td>
-      <td className="num">{m.hi}</td>
+      {grp === "all" && <td className="num" style={{ color: "#8FA8BC", fontSize: 12, whiteSpace: "nowrap", textAlign: "center", padding: "3px 5px" }}>{hOf(m) || "–"}</td>}
+      <td className="num" style={{ whiteSpace: "nowrap", textAlign: "center", padding: "3px 5px" }}>{m.n}</td>
+      <td className="num" style={{ color: "var(--chalk)", whiteSpace: "nowrap", textAlign: "center", padding: "3px 5px" }}>{wdlTxt(m)}</td>
+      <td className="num" style={{ color: ACCENT, fontSize: 15.5, whiteSpace: "nowrap", textAlign: "right", padding: "3px 5px" }}>{fmtAvg(m.avg, mode)}</td>
+      <td className="num" style={{ whiteSpace: "nowrap", textAlign: "right", padding: "3px 0" }}>{m.hi}</td>
     </tr>
   );
   const Table = ({ list }) => (
@@ -5708,7 +5763,7 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
   if (grp === "handi") many.forEach((m) => { const h = hOf(m) || 0; (byH[h] = byH[h] || []).push(m); });
 
   /* 동우회 없이 친 판 — 아직 어느 동우회에도 안 든 것만 */
-  const orphan = useMemo(() => bilGames(data.games).filter((g) => !g.clubId), [data.games]);
+  const orphan = useMemo(() => bilGames(data.games).filter(noClub), [data.games]);
   const [pick, setPick] = useState(false);          /* 기록 보기에서 골라 넣는 창 */
   /* ⚠ 훅은 ★그리는 자리(JSX)에 두지 않는다 — 차례가 흐트러질 수 있다 */
   const briefs = useMemo(() => seriesBrief(data.games, clubsOf(data)), [data.games]);
@@ -5845,9 +5900,9 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
         list={briefs}
         onClose={() => setPick(false)}
         onTake={(picked, addMem) => {
-          save(takeSeries(data, club, picked, addMem));
+          save(takeSeries(data, club, picked, addMem, briefs));
           const n = picked.reduce((a, t) => a + t.n, 0);
-          say(`${picked.length}경기 ${n}판을 넣었습니다`);
+          say(`${club.name} · ${picked.length}경기 ${n}판`);
           setPick(false);
         }} />
 
@@ -5869,7 +5924,9 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
             </div>
           ))}
         </>
-      ) : <Table list={many} />}
+      /* ⚠ 2026-11-13 — 비어 있으면 ★머리글만 덩그러니 남는다 [대표님 「화면이 이상해」].
+            최소 판 수(10판)보다 적게 친 분들만 있으면 이 표가 ★0명이 된다 */
+      ) : many.length > 0 ? <Table list={many} /> : null}
 
       {few.length > 0 && (
         open ? <>
@@ -6210,12 +6267,12 @@ const removeClub = (data, club) => ({
   clubId: data.clubId === club.id ? "" : data.clubId,
   setup: data.setup && data.setup.clubId === club.id
     ? { ...data.setup, clubId: "", clubName: "" } : data.setup,
-  games: data.games.map((g) => (g.clubId === club.id ? { ...g, clubId: "" } : g)),
+  games: data.games.map((g) => (inClub(g, club.id) ? setGameClub(g, club.id, false) : g)),
 });
 const askRemoveClub = (data, club) => confirm(
   `「${club.name}」을 지울까요?\n\n` +
   `★친 기록 ${clubGames(data.games, club.id).length}판은 ★안 지워집니다 — ` +
-  `「동우회 없음」으로 돌아갑니다.\n` +
+  `이 동우회에서만 빠집니다. 다른 동우회에도 든 판은 그쪽에 그대로 남습니다.\n` +
   `다시 만들어 [기록 보기에서 골라 넣기] 를 누르면 그대로 돌아옵니다.\n` +
   `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`);
 
@@ -6235,7 +6292,7 @@ const seriesBrief = (games, clubs) => {
     const k = seriesKey(g);
     const t = by[k] || (by[k] = {
       key: k, date: g.date, place: g.place || "", mode: g.mode || "3",
-      team: !!g.team, n: 0, ids: [], end: 0, clubId: g.clubId || "",
+      team: !!g.team, n: 0, ids: [], end: 0, cids: clubsOfGame(g),
       names: (g.team && Array.isArray(g.teams) && g.teams.length
         ? g.teams.map((x) => x.name)
         : (g.players || []).map((p) => p.name)),
@@ -6245,12 +6302,15 @@ const seriesBrief = (games, clubs) => {
   });
   const nameOf = (id) => (clubs.find((c) => c.id === id) || {}).name || "";
   return Object.values(by)
-    .map((t) => ({ ...t, clubName: t.clubId ? (nameOf(t.clubId) || "다른 동우회") : "" }))
+    .map((t) => ({ ...t, clubNames: t.cids.map((id) => nameOf(id) || "다른 동우회") }))
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.end - a.end));
 };
 /* 고른 경기들을 이 동우회로. 명단에 있는 이름에는 mid 를 박는다 */
-const takeSeries = (data, club, picked, alsoAdd) => {
+/* ★ 2026-11-13 — 「이대로 두기」 — ★체크한 대로 맞춘다.
+      켜진 것은 넣고, 꺼진 것은 ★이 동우회에서만 뺀다. 다른 동우회는 안 건드린다. */
+const takeSeries = (data, club, picked, alsoAdd, all) => {
   const ids = new Set(picked.flatMap((t) => t.ids));
+  const offIds = new Set((all || []).filter((t) => !ids.has(t.ids[0])).flatMap((t) => t.ids));
   let mems = memsOf(club);
   if (alsoAdd) {
     /* ★ 그때 쓰던 수지를 ★함께 가져온다 — 옛 [지난 기록 넣기] 가 그랬다.
@@ -6281,13 +6341,20 @@ const takeSeries = (data, club, picked, alsoAdd) => {
   return {
     ...data,
     clubs: clubsOf(data).map((c) => (c.id === club.id ? { ...c, members: mems } : c)),
-    games: data.games.map((g) => (ids.has(g.id) ? {
-      ...g, clubId: club.id,
-      players: (g.players || []).map((p) => {
-        const m = byName[(p.name || "").trim()];
-        return m ? { ...p, mid: m.id } : p;
-      }),
-    } : g)),
+    games: data.games.map((g) => {
+      if (ids.has(g.id)) {
+        const g2 = setGameClub(g, club.id, true);
+        return {
+          ...g2,
+          players: (g2.players || []).map((p) => {
+            const m = byName[(p.name || "").trim()];
+            return m ? { ...p, mid: m.id } : p;
+          }),
+        };
+      }
+      if (offIds.has(g.id) && inClub(g, club.id)) return setGameClub(g, club.id, false);
+      return g;
+    }),
   };
 };
 
@@ -6298,12 +6365,15 @@ function PickGamesSheet({ open, club, list, onTake, onClose }) {
   useEffect(() => {
     if (!open) return;
     const init = {};
-    list.forEach((t) => { if (!t.clubId) init[t.key] = true; });   /* ★ 동우회 없는 것만 미리 켠다 */
+    /* ★ 2026-11-13 — 체크는 ★「이 동우회에 들어 있는가」다.
+          켜면 넣고, 끄면 뺀다. 다른 동우회는 ★안 건드린다 [대표님 중복 가입]. */
+    list.forEach((t) => { if (t.cids.indexOf(club.id) >= 0) init[t.key] = true; });
     setSel(init); setAddMem(true);
   }, [open, list.length]);                                          // eslint-disable-line
   if (!open) return null;
   const on = list.filter((t) => sel[t.key]);
-  const moving = on.filter((t) => t.clubId && t.clubId !== club.id).length;
+  const added = on.filter((t) => t.cids.indexOf(club.id) < 0).length;
+  const dropped = list.filter((t) => !sel[t.key] && t.cids.indexOf(club.id) >= 0).length;
   const allOn = on.length === list.length;
   return (
     <div onClick={onClose} style={{
@@ -6317,8 +6387,8 @@ function PickGamesSheet({ open, club, list, onTake, onClose }) {
       }}>
         <div style={{ fontSize: 15.5, fontWeight: 700 }}>기록 보기에서 골라 넣기</div>
         <div style={{ fontSize: 11.5, color: "#6F8598", marginTop: 5, lineHeight: 1.6 }}>
-          고른 경기가 <b style={{ color: "var(--ivory)" }}>「{club.name}」</b> 기록이 됩니다.
-          한 자리에서 친 판은 <b style={{ color: "var(--ivory)" }}>한 줄</b>로 묶여 있습니다.
+          <b style={{ color: "var(--ivory)" }}>체크한 경기</b>가 「{club.name}」 기록이 됩니다.
+          체크를 풀면 이 동우회에서만 빠집니다. 한 자리에서 친 판은 한 줄로 묶여 있습니다.
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           <button onClick={() => {
@@ -6342,13 +6412,13 @@ function PickGamesSheet({ open, club, list, onTake, onClose }) {
             </div>
           )}
           {list.map((t) => {
-            const other = t.clubId && t.clubId !== club.id;
-            const here = t.clubId === club.id;
+            const here = t.cids.indexOf(club.id) >= 0;
+            const others = t.clubNames.filter((_, k) => t.cids[k] !== club.id);
             return (
               <button key={t.key} onClick={() => setSel((o) => ({ ...o, [t.key]: !o[t.key] }))} style={{
                 display: "flex", width: "100%", gap: 10, alignItems: "flex-start", textAlign: "left",
                 padding: "11px 2px", borderTop: "1px solid rgba(244,238,223,.07)",
-                opacity: here ? 0.5 : 1,
+
               }}>
                 <span style={{
                   flexShrink: 0, width: 21, height: 21, borderRadius: 6, marginTop: 1,
@@ -6363,8 +6433,9 @@ function PickGamesSheet({ open, club, list, onTake, onClose }) {
                     {" · "}{t.mode === "4" ? "4구" : "3쿠션"}
                     {" · "}{t.team ? "복식" : `${t.names.length}명`}
                     {" · "}<span className="num">{t.n}</span>게임
-                    {here && <span style={{ color: ACCENT }}> · 이미 여기</span>}
-                    {other && <span style={{ color: "#E0A36B" }}> · 「{t.clubName}」에 있음</span>}
+                    {others.length > 0 && (
+                      <span style={{ color: "#7FA8C4" }}> · {others.map((n) => `「${n}」`).join(" ")}에도 있음</span>
+                    )}
                   </span>
                   <span style={{
                     display: "block", fontSize: 13.5, color: "var(--ivory)", marginTop: 3,
@@ -6376,15 +6447,15 @@ function PickGamesSheet({ open, club, list, onTake, onClose }) {
           })}
         </div>
 
-        {moving > 0 && (
-          <div style={{ fontSize: 11.5, color: "#E0A36B", lineHeight: 1.6, marginTop: 8 }}>
-            ⚠ 다른 동우회에 있던 <span className="num">{moving}</span>경기를 고르셨습니다 —
-            넣으면 그쪽에서는 <b>빠집니다</b>. 한 경기는 한 동우회에만 속합니다.
-          </div>
-        )}
+        <div style={{ fontSize: 11.5, color: "#6F8598", lineHeight: 1.6, marginTop: 8 }}>
+          {added > 0 && <>＋ <span className="num" style={{ color: ACCENT }}>{added}</span>경기 넣기{dropped > 0 ? " · " : ""}</>}
+          {dropped > 0 && <>－ <span className="num" style={{ color: "#C87B74" }}>{dropped}</span>경기 빼기</>}
+          {added === 0 && dropped === 0 && "바뀌는 것이 없습니다"}
+          <br />★ 다른 동우회에서는 <b style={{ color: "var(--ivory)" }}>안 빠집니다</b> — 한 경기가 여러 동우회에 들 수 있습니다.
+        </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <CBtn ghost onClick={onClose}>닫기</CBtn>
-          <CBtn onClick={() => on.length && onTake(on, addMem)}>고른 {on.length}경기 넣기</CBtn>
+          <CBtn onClick={() => onTake(on, addMem)}>이대로 두기</CBtn>
         </div>
       </div>
     </div>
@@ -6404,7 +6475,7 @@ function PickGamesSheet({ open, club, list, onTake, onClose }) {
 const orphansOf = (games, name) => {
   const n = String(name || "").trim();
   if (!n) return [];
-  return bilGames(games).filter((g) => !g.clubId && g.players.some((p) => (p.name || "").trim() === n));
+  return bilGames(games).filter((g) => noClub(g) && g.players.some((p) => (p.name || "").trim() === n));
 };
 /* 🔴 2026-11-13 — 「2인만 칠 수도 있고, 3인도, 복식도 칠 수 있어.
       ★그 상대방이 들어간 판들을 ★선택하게 하면 될 듯한데」 [대표님]
