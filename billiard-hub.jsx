@@ -5794,10 +5794,11 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
 }
 
 /* ── ③ 한 사람 ── */
-function ClubMember({ data, club, mkey, P, openSheet, onBack }) {
+function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
   const { mode, setMode, range, setRange, from, setFrom, to, setTo, bound } = P;
   const [foe, setFoe] = useState("");
   const [moreF, setMoreF] = useState(false);
+  const [orpOn, setOrp] = useState(false);          /* 지난 기록 고르는 창 */
   const [moreR, setMoreR] = useState(false);
 
   const o = useMemo(() => rankOne(data.games, mkey, {
@@ -5931,6 +5932,15 @@ function ClubMember({ data, club, mkey, P, openSheet, onBack }) {
         </>
       )}
 
+      <OrphanSheet open={orpOn && !!me} name={me ? me.name : ""} clubName={club.name}
+        list={me ? orphansOf(data.games, me.name) : []}
+        onClose={() => setOrp(false)}
+        onTake={(pick) => {
+          save(takeOrphansFor(data, club, pick));
+          say(`${me.name} 님의 지난 기록 ${pick.length}판을 넣었습니다`);
+          setOrp(false);
+        }} />
+
       <div style={{ fontSize: 11.5, color: "#6F8598", margin: "15px 2px 2px" }}>
         일자별 · {sel ? `${sel.name} 님과 ` : ""}<span className="num">{rows.length}</span>판
         {" · "}<b style={{ color: ACCENT }}>누르면 그 판 기록표가 열립니다</b>
@@ -5938,7 +5948,23 @@ function ClubMember({ data, club, mkey, P, openSheet, onBack }) {
       </div>
       <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "4px 13px 12px" }}>
         {shownR.length === 0 && (
-          <div style={{ padding: "26px 0", textAlign: "center", fontSize: 13, color: "var(--chalk)" }}>친 기록이 없습니다</div>
+          <div style={{ padding: "26px 0 8px", textAlign: "center", fontSize: 13, color: "var(--chalk)" }}>
+            친 기록이 없습니다
+            {/* ★ 2026-11-13 — 비어 보이는 바로 그 자리에서 길을 알려준다 */}
+            {(() => {
+              const orp = me ? orphansOf(data.games, me.name) : [];
+              if (!orp.length) return null;
+              return (
+                <button onClick={() => setOrp(true)} style={{
+                  display: "block", width: "100%", marginTop: 14, padding: "12px 11px", borderRadius: 10,
+                  background: "rgba(232,184,56,.1)", border: "1px solid rgba(232,184,56,.4)",
+                  color: ACCENT, fontSize: 12.5, fontWeight: 600, lineHeight: 1.5,
+                }}>
+                  ＋ 동우회 밖에 이 분이 친 기록 <span className="num">{orp.length}</span>판 — 골라서 넣기
+                </button>
+              );
+            })()}
+          </div>
         )}
         {/* 🔴 2026-11-13 — 「그 날짜를 선택하면 ★앞쪽 기록보기로 이동」 [대표님].
                ⇒ 줄을 ★단추로 바꾼다. 누르면 그 판의 결과표가 그대로 열린다.
@@ -5993,6 +6019,124 @@ const Fld = ({ lbl, v, set, ph, wide }) => (
   </div>
 );
 
+/* 🔴 2026-11-13 — 「11/6 김경석하고 친 기록이 있는데, 디딤돌에서 김경석을
+      누르면 안 나온다」 [대표님].
+
+   까닭 — 그 판들은 ★동우회를 고르지 않고 친 것이라 clubId 가 비어 있다.
+   ⛔ 랭킹 화면의 [지난 기록 넣기] 는 동우회 없이 친 판을 ★전부 끌어온다.
+      동우회가 둘 이상이면 ★남의 판까지 딸려 들어간다.
+   ⇒ 「이 사람과 친 판만」 골라 넣는 길을 둔다. 사람을 누른 자리에서 바로.
+
+   ⚠ 이름으로 찾는다 — 그 판에는 회원 번호(mid)가 아직 없기 때문이다.
+     넣을 때 ★그 자리에서 mid 를 박아 둔다. 그래야 이름을 바꿔도 안 깨진다. */
+const orphansOf = (games, name) => {
+  const n = String(name || "").trim();
+  if (!n) return [];
+  return bilGames(games).filter((g) => !g.clubId && g.players.some((p) => (p.name || "").trim() === n));
+};
+/* 🔴 2026-11-13 — 「2인만 칠 수도 있고, 3인도, 복식도 칠 수 있어.
+      ★그 상대방이 들어간 판들을 ★선택하게 하면 될 듯한데」 [대표님]
+   ⇒ 통째로 넣지 않는다. ★판을 하나씩 보여주고 고르게 한다.
+   ⚠ 복식은 점수가 «편» 것이다 — 사람마다 적으면 틀린 값이 된다.
+     그래서 편이면 ★편 이름과 편 점수로 적는다. */
+const orpLine = (g) => {
+  if (g.team && Array.isArray(g.teams) && g.teams.length) {
+    return g.teams.map((t) => `${t.name || "편"} ${t.score}`).join("  :  ");
+  }
+  return (g.players || []).map((p) => `${p.name} ${p.score}`).join("  :  ");
+};
+const orpKind = (g) => {
+  const n = (g.players || []).length;
+  return (g.mode === "4" ? "4구" : "3쿠션") + " · " + (g.team ? "복식" : n > 2 ? `${n}명` : "단식");
+};
+
+/* ★ 넣을 판을 고르는 창 — ⛔ 화면 «안쪽»에 두지 않는다 (11-13 글자 칸에서 겪었다) */
+function OrphanSheet({ open, name, clubName, list, onTake, onClose }) {
+  const [sel, setSel] = useState({});
+  useEffect(() => {
+    if (!open) return;
+    const all = {};
+    list.forEach((g) => { all[g.id] = true; });      /* ★ 처음에는 모두 골라 둔다 */
+    setSel(all);
+  }, [open, list.length]);                           // eslint-disable-line
+  if (!open) return null;
+  const on = list.filter((g) => sel[g.id]);
+  const allOn = on.length === list.length;
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 520, background: "#0C2E46",
+        borderRadius: "16px 16px 0 0", padding: "16px 14px",
+        maxHeight: "82vh", display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ fontSize: 15.5, fontWeight: 700 }}>
+          {name} 님이 친 지난 기록
+        </div>
+        <div style={{ fontSize: 11.5, color: "#6F8598", marginTop: 5, lineHeight: 1.6 }}>
+          동우회 없이 친 <span className="num">{list.length}</span>판입니다.
+          넣을 판만 골라 주세요 — <b style={{ color: "var(--ivory)" }}>「{clubName}」</b> 기록이 됩니다.
+        </div>
+        <button onClick={() => {
+          const n = {}; if (!allOn) list.forEach((g) => { n[g.id] = true; }); setSel(n);
+        }} style={{
+          alignSelf: "flex-start", marginTop: 10, padding: "7px 11px", borderRadius: 8,
+          fontSize: 11.5, color: ACCENT, border: "1px solid rgba(232,184,56,.4)",
+        }}>{allOn ? "모두 풀기" : "모두 고르기"}</button>
+
+        <div style={{ overflowY: "auto", marginTop: 10, flex: 1, minHeight: 60 }}>
+          {list.map((g) => (
+            <button key={g.id} onClick={() => setSel((o) => ({ ...o, [g.id]: !o[g.id] }))} style={{
+              display: "flex", width: "100%", gap: 10, alignItems: "flex-start", textAlign: "left",
+              padding: "11px 2px", borderTop: "1px solid rgba(244,238,223,.07)",
+            }}>
+              <span style={{
+                flexShrink: 0, width: 21, height: 21, borderRadius: 6, marginTop: 1,
+                border: sel[g.id] ? "none" : "1px solid rgba(244,238,223,.3)",
+                background: sel[g.id] ? ACCENT : "transparent",
+                color: "#141200", fontSize: 14, fontWeight: 700, lineHeight: "21px", textAlign: "center",
+              }}>{sel[g.id] ? "✓" : ""}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span className="num" style={{ fontSize: 12, color: "#8FA8BC" }}>{g.date}</span>
+                <span style={{ fontSize: 11, color: "#6F8598" }}> · {orpKind(g)}</span>
+                <span className="num" style={{
+                  display: "block", fontSize: 13.5, color: "var(--ivory)", marginTop: 3,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>{orpLine(g)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <CBtn ghost onClick={onClose}>닫기</CBtn>
+          <CBtn onClick={() => on.length && onTake(on)}>
+            고른 {on.length}판 넣기
+          </CBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const takeOrphansFor = (data, club, list) => {
+  const ids = new Set(list.map((g) => g.id));
+  const byName = {};
+  memsOf(club).forEach((m) => { byName[m.name] = m; });
+  return {
+    ...data,
+    games: data.games.map((g) => (ids.has(g.id) ? {
+      ...g, clubId: club.id,
+      players: g.players.map((p) => {
+        const m = byName[(p.name || "").trim()];
+        return m ? { ...p, mid: m.id } : p;
+      }),
+    } : g)),
+  };
+};
+
 /* ── ④ 명단 ──
    ★ 2026-11-13 — 표에서 ★카드로 바꿨다 [대표님].
         칸이 늘어(3구·4구 수지와 신고 에버, 연락처) 한 줄에 안 들어간다.
@@ -6010,6 +6154,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
         ★빈칸이 된다. 「0.」은 숫자가 ★아니어서 역시 사라진다.
      ⇒ 칸에 보이는 것은 ★치신 글자 그대로, 저장만 숫자로 한다. */
   const [ef, setEf] = useState({});
+  const [orpFor, setOrp] = useState(null);         /* 지난 기록을 고르는 중인 회원 */
   const openEdit = (m) => {
     if (edit === m.id) { setEdit(""); return; }
     setEdit(m.id);
@@ -6169,6 +6314,22 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
             <span>모두 <span className="num" style={{ color: "#B9CCDA" }}>{allN[m.id] || 0}</span>판</span>
           </div>
 
+          {/* 🔴 2026-11-13 — 동우회를 안 고르고 친 판이 ★이 사람 이름으로 남아 있으면
+                 여기서 바로 넣게 한다 [대표님 「김경석을 누르면 나와야 되는데 안 나온다」] */}
+          {(() => {
+            const orp = orphansOf(data.games, m.name);
+            if (!orp.length) return null;
+            return (
+              <button onClick={() => setOrp(m)} style={{
+                width: "100%", marginTop: 9, padding: "10px 11px", borderRadius: 10,
+                background: "rgba(232,184,56,.1)", border: "1px solid rgba(232,184,56,.4)",
+                color: ACCENT, fontSize: 12, fontWeight: 600, textAlign: "left", lineHeight: 1.5,
+              }}>
+                ＋ 동우회 밖에 이 분이 친 기록 <span className="num">{orp.length}</span>판 — 골라서 넣기
+              </button>
+            );
+          })()}
+
           {edit === m.id && (
             <div style={{ marginTop: 11, paddingTop: 11, borderTop: "1px solid rgba(244,238,223,.1)" }}>
               <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 4 }}>이름</div>
@@ -6229,6 +6390,15 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
         </div>
       ) : <CBtn ghost onClick={() => setAdd(true)}>＋ 회원 더하기</CBtn>}
 
+      <OrphanSheet open={!!orpFor} name={orpFor ? orpFor.name : ""} clubName={club.name}
+        list={orpFor ? orphansOf(data.games, orpFor.name) : []}
+        onClose={() => setOrp(null)}
+        onTake={(pick) => {
+          save(takeOrphansFor(data, club, pick));
+          say(`${orpFor.name} 님의 지난 기록 ${pick.length}판을 넣었습니다`);
+          setOrp(null);
+        }} />
+
       <div style={{ fontSize: 11, color: "#6F8598", lineHeight: 1.8, marginTop: 13 }}>
         ★ <b>「실제」</b>는 함께 쳐서 나온 값입니다. 기간을 바꾸면 이 값이 바뀝니다.<br />
         ★ 카드를 누르면 <b>그 사람이 친 기록</b>이 나옵니다. <b>✎</b> 는 고치는 칸입니다.<br />
@@ -6264,7 +6434,7 @@ function Clubs({ data, save, say, openSheet }) {
       onMember={(k) => { setMkey(k); setBack("rank"); setView("member"); }} />
   );
   if (view === "member") return (
-    <ClubMember data={data} club={club} mkey={mkey} P={P} openSheet={openSheet} onBack={() => setView(back)} />
+    <ClubMember data={data} save={save} say={say} club={club} mkey={mkey} P={P} openSheet={openSheet} onBack={() => setView(back)} />
   );
   if (view === "roster") return (
     <ClubRoster data={data} save={save} say={say} club={club} P={P}
