@@ -1753,6 +1753,72 @@ const Balls = ({ on, onPick, size = 25 }) => (
   </div>
 );
 
+/* 🔴 2026-11-13 — 이 조각도 Home ★«안쪽»에 있었다 [대표님 「숫자 하나씩만 입력되고
+      화면을 빠져나온다」와 ★같은 뿌리]. 안에 두면 그릴 때마다 새 조각이 되어
+      「이름으로 찾기」 칸에서도 한 글자마다 손가락이 튕겨 나간다.
+   ⇒ 글자 칸을 품은 조각은 ★반드시 바깥에 둔다. */
+function PickSheet({ pick, setPick, club, ps, mode, onPick, onGuest }) {
+  const [q, setQ] = useState("");
+  useEffect(() => { if (pick < 0) setQ(""); }, [pick]);
+  if (pick < 0 || !club) return null;
+  const used = ps.map((x, j) => (j === pick ? "" : x.mid)).filter(Boolean);
+  const list = memsOf(club).filter((m) => !q.trim() || m.name.includes(q.trim()));
+  return (
+    <div onClick={() => setPick(-1)} style={{
+      position: "fixed", inset: 0, zIndex: 120, background: "rgba(0,0,0,.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 520, background: "#0C2E46",
+        borderRadius: "16px 16px 0 0", padding: "16px 14px",
+        maxHeight: "76vh", overflowY: "auto",
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 11 }}>
+          {club.name} · 명단에서 고르기
+        </div>
+        {memsOf(club).length > 6 && (
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름으로 찾기"
+            style={{ fontSize: 14, marginBottom: 9 }} />
+        )}
+        {list.length === 0 && (
+          <div style={{ padding: "24px 0", textAlign: "center", fontSize: 13, color: "var(--chalk)", lineHeight: 1.8 }}>
+            명단에 아무도 없습니다.<br />
+            <span style={{ fontSize: 12, color: "#6F8598" }}>[동우회] 탭 → 명단에서 넣어주세요</span>
+          </div>
+        )}
+        {list.map((m) => {
+          const dup = used.includes(m.id);
+          return (
+            <button key={m.id} disabled={dup} onClick={() => onPick(pick, m)} style={{
+              display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center",
+              padding: "13px 4px", fontSize: 14.5, opacity: dup ? .35 : 1,
+              borderTop: "1px solid rgba(244,238,223,.07)",
+            }}>
+              <span style={{ fontWeight: 600 }}>
+                {m.name}
+                {handiOf(m, mode) > 0 && (
+                  <span style={{ fontSize: 12, color: "#6F8598", fontWeight: 500 }}> · 수지 {handiOf(m, mode)}</span>
+                )}
+              </span>
+              <span style={{ fontSize: 11.5, color: dup ? "#55708A" : "#8FA8BC" }}>
+                {dup ? "이미 들어감" : "누르면 들어감"}
+              </span>
+            </button>
+          );
+        })}
+        <button onClick={onGuest} style={{
+          display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center",
+          padding: "13px 4px", fontSize: 14.5, color: "#8FA8BC",
+          borderTop: "1px solid rgba(244,238,223,.07)",
+        }}>
+          <span>＋ 손님으로 적기</span><span style={{ fontSize: 11.5 }}>이번만</span>
+        </button>
+        <CBtn ghost onClick={() => setPick(-1)}>그냥 닫기</CBtn>
+      </div>
+    </div>
+  );
+}
+
 /* ── 단식 — 사람마다 한 줄 ── */
 function PlayerRow({ p, i, ball, mode, names, onName, onHandi, onBall, onDel, canDel, onUp, roster, onPick }) {
   const [tip, setTip] = useState(false);
@@ -2012,71 +2078,10 @@ function Home({ data, save, say, go, onLogin, tv, setTv }) {
 
   const card = { background: "#0F2A42", borderRadius: 14, padding: 16 };
 
-  /* ★ 명단에서 고르기 — 이름을 ★치지 않고 누른다 [대표님 p4] */
-  const PickSheet = () => {
-    const [q, setQ] = useState("");
-    if (pick < 0 || !club) return null;
-    const used = ps.map((x, j) => (j === pick ? "" : x.mid)).filter(Boolean);
-    const list = memsOf(club).filter((m) => !q.trim() || m.name.includes(q.trim()));
-    return (
-      <div onClick={() => setPick(-1)} style={{
-        position: "fixed", inset: 0, zIndex: 120, background: "rgba(0,0,0,.6)",
-        display: "flex", alignItems: "flex-end", justifyContent: "center",
-      }}>
-        <div onClick={(e) => e.stopPropagation()} style={{
-          width: "100%", maxWidth: 520, background: "#0C2E46",
-          borderRadius: "16px 16px 0 0", padding: "16px 14px",
-          maxHeight: "76vh", overflowY: "auto",
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 11 }}>
-            {club.name} · 명단에서 고르기
-          </div>
-          {memsOf(club).length > 6 && (
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름으로 찾기"
-              style={{ fontSize: 14, marginBottom: 9 }} />
-          )}
-          {list.length === 0 && (
-            <div style={{ padding: "24px 0", textAlign: "center", fontSize: 13, color: "var(--chalk)", lineHeight: 1.8 }}>
-              명단에 아무도 없습니다.<br />
-              <span style={{ fontSize: 12, color: "#6F8598" }}>[동우회] 탭 → 명단에서 넣어주세요</span>
-            </div>
-          )}
-          {list.map((m) => {
-            const dup = used.includes(m.id);
-            return (
-              <button key={m.id} disabled={dup} onClick={() => putMember(pick, m)} style={{
-                display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center",
-                padding: "13px 4px", fontSize: 14.5, opacity: dup ? .35 : 1,
-                borderTop: "1px solid rgba(244,238,223,.07)",
-              }}>
-                <span style={{ fontWeight: 600 }}>
-                  {m.name}
-                  {handiOf(m, mode) > 0 && (
-                    <span style={{ fontSize: 12, color: "#6F8598", fontWeight: 500 }}> · 수지 {handiOf(m, mode)}</span>
-                  )}
-                </span>
-                <span style={{ fontSize: 11.5, color: dup ? "#55708A" : "#8FA8BC" }}>
-                  {dup ? "이미 들어감" : "누르면 들어감"}
-                </span>
-              </button>
-            );
-          })}
-          <button onClick={() => { setP(pick, { mid: "" }); setPick(-1); }} style={{
-            display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center",
-            padding: "13px 4px", fontSize: 14.5, color: "#8FA8BC",
-            borderTop: "1px solid rgba(244,238,223,.07)",
-          }}>
-            <span>＋ 손님으로 적기</span><span style={{ fontSize: 11.5 }}>이번만</span>
-          </button>
-          <CBtn ghost onClick={() => setPick(-1)}>그냥 닫기</CBtn>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div>
-      <PickSheet />
+      <PickSheet pick={pick} setPick={setPick} club={club} ps={ps} mode={mode}
+        onPick={putMember} onGuest={() => { setP(pick, { mid: "" }); setPick(-1); }} />
       {/* ★ 로고 위에 자기 자리를 준다. 겹치지 않는다 */}
       <div style={{
         background: "#0B1826", display: "flex", justifyContent: "flex-end",
@@ -5884,6 +5889,20 @@ function ClubMember({ data, club, mkey, P, onBack }) {
   );
 }
 
+/* 🔴 2026-11-13 — 이 조각을 ★화면 «안쪽»에 두었다가 큰 탈이 났다 [대표님].
+      「연락처 입력할 때 숫자 하나씩만 입력하고 자꾸 화면을 빠져나온다」
+   ⛔ 화면 안에서 만들면 ★그릴 때마다 «새 조각»이 된다.
+      React 는 그것을 ★다른 것으로 보고 칸을 통째로 갈아 끼운다.
+      ⇒ 한 글자 칠 때마다 칸이 새로 생겨 ★손가락이 튕겨 나온다.
+   ⇒ 글자 칸을 만드는 조각은 ★반드시 바깥에 둔다. */
+const Fld = ({ lbl, v, set, ph, wide }) => (
+  <div style={{ flex: wide ? 2 : 1, minWidth: 0 }}>
+    <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 4 }}>{lbl}</div>
+    <input value={v == null ? "" : v} onChange={(e) => set(e.target.value)} placeholder={ph}
+      className="num" style={{ fontSize: 13.5, padding: "9px 10px", width: "100%" }} />
+  </div>
+);
+
 /* ── ④ 명단 ──
    ★ 2026-11-13 — 표에서 ★카드로 바꿨다 [대표님].
         칸이 늘어(3구·4구 수지와 신고 에버, 연락처) 한 줄에 안 들어간다.
@@ -5896,6 +5915,29 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
   const [tab, setTab] = useState("all");            /* all · active · invited */
   const [add, setAdd] = useState(false);
   const [edit, setEdit] = useState("");             /* 고치는 중인 회원 번호 */
+  /* 🔴 2026-11-13 — 고치는 칸에 ★숫자가 한 자도 안 남던 것 [대표님].
+        「0.7」을 치려면 먼저 「0」 → 숫자로 바꾸면 0 → 「0 또는 빈칸」 규칙에 걸려
+        ★빈칸이 된다. 「0.」은 숫자가 ★아니어서 역시 사라진다.
+     ⇒ 칸에 보이는 것은 ★치신 글자 그대로, 저장만 숫자로 한다. */
+  const [ef, setEf] = useState({});
+  const openEdit = (m) => {
+    if (edit === m.id) { setEdit(""); return; }
+    setEdit(m.id);
+    setEf({
+      h3: m.h3 || "", e3: m.e3 || "", h4: m.h4 || "", e4: m.e4 || "", phone: m.phone || "",
+    });
+  };
+  /* 보이는 것은 글자, 저장되는 것은 숫자 */
+  const typeNum = (id, k, v, dot) => {
+    const t = String(v).replace(dot ? /[^0-9.]/g : /[^0-9]/g, "");
+    setEf((o) => ({ ...o, [k]: t }));
+    patch(id, { [k]: Number(t) || 0 });
+  };
+  const typePhone = (id, v) => {
+    const t = hyphen(v);
+    setEf((o) => ({ ...o, phone: t }));
+    patch(id, { phone: t });
+  };
   const blank = { name: "", h3: "", e3: "", h4: "", e4: "", phone: "" };
   const [f, setF] = useState(blank);
 
@@ -5944,14 +5986,6 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
     .filter((m) => tab === "all" || (tab === "active" ? m.status === "active" : m.status !== "active"))
     .filter((m) => !q.trim() || m.name.includes(q.trim()));
 
-  const Fld = ({ lbl, v, set, ph, wide }) => (
-    <div style={{ flex: wide ? 2 : 1, minWidth: 0 }}>
-      <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 4 }}>{lbl}</div>
-      <input value={v} onChange={(e) => set(e.target.value)} placeholder={ph}
-        className="num" style={{ fontSize: 13.5, padding: "9px 10px", width: "100%" }} />
-    </div>
-  );
-  /* 한 종목 줄 — 수지 · 신고 · 실제 */
   const Line = ({ m, md }) => {
     const h = md === "3" ? m.h3 : m.h4;
     const e = md === "3" ? m.e3 : m.e4;
@@ -6022,7 +6056,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
                 color: m.status === "active" ? "var(--green)" : "#8FA8BC",
               }}>{m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중"}</span>
             </button>
-            <button onClick={() => setEdit(edit === m.id ? "" : m.id)} aria-label="고치기"
+            <button onClick={() => openEdit(m)} aria-label="고치기"
               style={{ padding: "5px 8px", fontSize: 13, color: edit === m.id ? ACCENT : "#6F8598" }}>✎</button>
             <button onClick={() => onMember(m.id)} aria-label="기록 보기"
               style={{ padding: "5px 4px", fontSize: 15, color: "#44627B" }}>›</button>
@@ -6047,16 +6081,16 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
                   patch(m.id, { name: v }); say("이름을 고쳤습니다 · 지난 기록은 그대로입니다");
                 }} style={{ fontSize: 14 }} />
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <Fld lbl="3구 수지" v={m.h3 || ""} ph="15" set={(v) => patch(m.id, { h3: Number(v.replace(/[^0-9]/g, "")) || 0 })} />
-                <Fld lbl="3구 신고 에버" v={m.e3 || ""} ph="0.700" set={(v) => patch(m.id, { e3: Number(v.replace(/[^0-9.]/g, "")) || 0 })} />
+                <Fld lbl="3구 수지" v={ef.h3} ph="15" set={(v) => typeNum(m.id, "h3", v)} />
+                <Fld lbl="3구 신고 에버" v={ef.e3} ph="0.700" set={(v) => typeNum(m.id, "e3", v, 1)} />
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <Fld lbl="4구 수지" v={m.h4 || ""} ph="150" set={(v) => patch(m.id, { h4: Number(v.replace(/[^0-9]/g, "")) || 0 })} />
-                <Fld lbl="4구 신고 에버" v={m.e4 || ""} ph="0.250" set={(v) => patch(m.id, { e4: Number(v.replace(/[^0-9.]/g, "")) || 0 })} />
+                <Fld lbl="4구 수지" v={ef.h4} ph="150" set={(v) => typeNum(m.id, "h4", v)} />
+                <Fld lbl="4구 신고 에버" v={ef.e4} ph="0.250" set={(v) => typeNum(m.id, "e4", v, 1)} />
               </div>
               <div style={{ marginTop: 8 }}>
-                <Fld lbl="연락처 (총무만 봅니다)" v={m.phone || ""} ph="010-0000-0000"
-                  set={(v) => patch(m.id, { phone: hyphen(v) })} wide />
+                <Fld lbl="연락처 (총무만 봅니다)" v={ef.phone} ph="010-0000-0000"
+                  set={(v) => typePhone(m.id, v)} wide />
               </div>
               <div style={{ marginTop: 10 }}>
                 <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 5 }}>상태</div>

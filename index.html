@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-55 명단 카드 — 수지·신고 에버·연락처 · 기간 한 벌 -->
+<!-- build: 1판-56 글자 칸 고침 — 연락처·수지·에버가 한 글자씩 튕기던 것 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -2733,6 +2733,129 @@ const Balls = ({
   }
 })));
 
+/* 🔴 2026-11-13 — 이 조각도 Home ★«안쪽»에 있었다 [대표님 「숫자 하나씩만 입력되고
+      화면을 빠져나온다」와 ★같은 뿌리]. 안에 두면 그릴 때마다 새 조각이 되어
+      「이름으로 찾기」 칸에서도 한 글자마다 손가락이 튕겨 나간다.
+   ⇒ 글자 칸을 품은 조각은 ★반드시 바깥에 둔다. */
+function PickSheet({
+  pick,
+  setPick,
+  club,
+  ps,
+  mode,
+  onPick,
+  onGuest
+}) {
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    if (pick < 0) setQ("");
+  }, [pick]);
+  if (pick < 0 || !club) return null;
+  const used = ps.map((x, j) => j === pick ? "" : x.mid).filter(Boolean);
+  const list = memsOf(club).filter(m => !q.trim() || m.name.includes(q.trim()));
+  return /*#__PURE__*/React.createElement("div", {
+    onClick: () => setPick(-1),
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 120,
+      background: "rgba(0,0,0,.6)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      background: "#0C2E46",
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 14px",
+      maxHeight: "76vh",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      marginBottom: 11
+    }
+  }, club.name, " · 명단에서 고르기"), memsOf(club).length > 6 && /*#__PURE__*/React.createElement("input", {
+    value: q,
+    onChange: e => setQ(e.target.value),
+    placeholder: "이름으로 찾기",
+    style: {
+      fontSize: 14,
+      marginBottom: 9
+    }
+  }), list.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "24px 0",
+      textAlign: "center",
+      fontSize: 13,
+      color: "var(--chalk)",
+      lineHeight: 1.8
+    }
+  }, "명단에 아무도 없습니다.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#6F8598"
+    }
+  }, "[동우회] 탭 → 명단에서 넣어주세요")), list.map(m => {
+    const dup = used.includes(m.id);
+    return /*#__PURE__*/React.createElement("button", {
+      key: m.id,
+      disabled: dup,
+      onClick: () => onPick(pick, m),
+      style: {
+        display: "flex",
+        width: "100%",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "13px 4px",
+        fontSize: 14.5,
+        opacity: dup ? .35 : 1,
+        borderTop: "1px solid rgba(244,238,223,.07)"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600
+      }
+    }, m.name, handiOf(m, mode) > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: "#6F8598",
+        fontWeight: 500
+      }
+    }, " · 수지 ", handiOf(m, mode))), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11.5,
+        color: dup ? "#55708A" : "#8FA8BC"
+      }
+    }, dup ? "이미 들어감" : "누르면 들어감"));
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: onGuest,
+    style: {
+      display: "flex",
+      width: "100%",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: "13px 4px",
+      fontSize: 14.5,
+      color: "#8FA8BC",
+      borderTop: "1px solid rgba(244,238,223,.07)"
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "＋ 손님으로 적기"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11.5
+    }
+  }, "이번만")), /*#__PURE__*/React.createElement(CBtn, {
+    ghost: true,
+    onClick: () => setPick(-1)
+  }, "그냥 닫기")));
+}
+
 /* ── 단식 — 사람마다 한 줄 ── */
 function PlayerRow({
   p,
@@ -3170,121 +3293,20 @@ function Home({
     borderRadius: 14,
     padding: 16
   };
-
-  /* ★ 명단에서 고르기 — 이름을 ★치지 않고 누른다 [대표님 p4] */
-  const PickSheet = () => {
-    const [q, setQ] = useState("");
-    if (pick < 0 || !club) return null;
-    const used = ps.map((x, j) => j === pick ? "" : x.mid).filter(Boolean);
-    const list = memsOf(club).filter(m => !q.trim() || m.name.includes(q.trim()));
-    return /*#__PURE__*/React.createElement("div", {
-      onClick: () => setPick(-1),
-      style: {
-        position: "fixed",
-        inset: 0,
-        zIndex: 120,
-        background: "rgba(0,0,0,.6)",
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      onClick: e => e.stopPropagation(),
-      style: {
-        width: "100%",
-        maxWidth: 520,
-        background: "#0C2E46",
-        borderRadius: "16px 16px 0 0",
-        padding: "16px 14px",
-        maxHeight: "76vh",
-        overflowY: "auto"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 15,
-        fontWeight: 700,
-        marginBottom: 11
-      }
-    }, club.name, " · 명단에서 고르기"), memsOf(club).length > 6 && /*#__PURE__*/React.createElement("input", {
-      value: q,
-      onChange: e => setQ(e.target.value),
-      placeholder: "이름으로 찾기",
-      style: {
-        fontSize: 14,
-        marginBottom: 9
-      }
-    }), list.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "24px 0",
-        textAlign: "center",
-        fontSize: 13,
-        color: "var(--chalk)",
-        lineHeight: 1.8
-      }
-    }, "명단에 아무도 없습니다.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 12,
-        color: "#6F8598"
-      }
-    }, "[동우회] 탭 → 명단에서 넣어주세요")), list.map(m => {
-      const dup = used.includes(m.id);
-      return /*#__PURE__*/React.createElement("button", {
-        key: m.id,
-        disabled: dup,
-        onClick: () => putMember(pick, m),
-        style: {
-          display: "flex",
-          width: "100%",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "13px 4px",
-          fontSize: 14.5,
-          opacity: dup ? .35 : 1,
-          borderTop: "1px solid rgba(244,238,223,.07)"
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontWeight: 600
-        }
-      }, m.name, handiOf(m, mode) > 0 && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 12,
-          color: "#6F8598",
-          fontWeight: 500
-        }
-      }, " · 수지 ", handiOf(m, mode))), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11.5,
-          color: dup ? "#55708A" : "#8FA8BC"
-        }
-      }, dup ? "이미 들어감" : "누르면 들어감"));
-    }), /*#__PURE__*/React.createElement("button", {
-      onClick: () => {
-        setP(pick, {
-          mid: ""
-        });
-        setPick(-1);
-      },
-      style: {
-        display: "flex",
-        width: "100%",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "13px 4px",
-        fontSize: 14.5,
-        color: "#8FA8BC",
-        borderTop: "1px solid rgba(244,238,223,.07)"
-      }
-    }, /*#__PURE__*/React.createElement("span", null, "＋ 손님으로 적기"), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11.5
-      }
-    }, "이번만")), /*#__PURE__*/React.createElement(CBtn, {
-      ghost: true,
-      onClick: () => setPick(-1)
-    }, "그냥 닫기")));
-  };
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(PickSheet, null), /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(PickSheet, {
+    pick: pick,
+    setPick: setPick,
+    club: club,
+    ps: ps,
+    mode: mode,
+    onPick: putMember,
+    onGuest: () => {
+      setP(pick, {
+        mid: ""
+      });
+      setPick(-1);
+    }
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#0B1826",
       display: "flex",
@@ -9555,6 +9577,41 @@ function ClubMember({
   }, moreR ? "▴ 접기" : `＋ ${rows.length - 10}판 더 보기`)));
 }
 
+/* 🔴 2026-11-13 — 이 조각을 ★화면 «안쪽»에 두었다가 큰 탈이 났다 [대표님].
+      「연락처 입력할 때 숫자 하나씩만 입력하고 자꾸 화면을 빠져나온다」
+   ⛔ 화면 안에서 만들면 ★그릴 때마다 «새 조각»이 된다.
+      React 는 그것을 ★다른 것으로 보고 칸을 통째로 갈아 끼운다.
+      ⇒ 한 글자 칠 때마다 칸이 새로 생겨 ★손가락이 튕겨 나온다.
+   ⇒ 글자 칸을 만드는 조각은 ★반드시 바깥에 둔다. */
+const Fld = ({
+  lbl,
+  v,
+  set,
+  ph,
+  wide
+}) => /*#__PURE__*/React.createElement("div", {
+  style: {
+    flex: wide ? 2 : 1,
+    minWidth: 0
+  }
+}, /*#__PURE__*/React.createElement("div", {
+  style: {
+    fontSize: 10.5,
+    color: "#6F8598",
+    marginBottom: 4
+  }
+}, lbl), /*#__PURE__*/React.createElement("input", {
+  value: v == null ? "" : v,
+  onChange: e => set(e.target.value),
+  placeholder: ph,
+  className: "num",
+  style: {
+    fontSize: 13.5,
+    padding: "9px 10px",
+    width: "100%"
+  }
+}));
+
 /* ── ④ 명단 ──
    ★ 2026-11-13 — 표에서 ★카드로 바꿨다 [대표님].
         칸이 늘어(3구·4구 수지와 신고 에버, 연락처) 한 줄에 안 들어간다.
@@ -9585,6 +9642,46 @@ function ClubRoster({
   const [tab, setTab] = useState("all"); /* all · active · invited */
   const [add, setAdd] = useState(false);
   const [edit, setEdit] = useState(""); /* 고치는 중인 회원 번호 */
+  /* 🔴 2026-11-13 — 고치는 칸에 ★숫자가 한 자도 안 남던 것 [대표님].
+        「0.7」을 치려면 먼저 「0」 → 숫자로 바꾸면 0 → 「0 또는 빈칸」 규칙에 걸려
+        ★빈칸이 된다. 「0.」은 숫자가 ★아니어서 역시 사라진다.
+     ⇒ 칸에 보이는 것은 ★치신 글자 그대로, 저장만 숫자로 한다. */
+  const [ef, setEf] = useState({});
+  const openEdit = m => {
+    if (edit === m.id) {
+      setEdit("");
+      return;
+    }
+    setEdit(m.id);
+    setEf({
+      h3: m.h3 || "",
+      e3: m.e3 || "",
+      h4: m.h4 || "",
+      e4: m.e4 || "",
+      phone: m.phone || ""
+    });
+  };
+  /* 보이는 것은 글자, 저장되는 것은 숫자 */
+  const typeNum = (id, k, v, dot) => {
+    const t = String(v).replace(dot ? /[^0-9.]/g : /[^0-9]/g, "");
+    setEf(o => ({
+      ...o,
+      [k]: t
+    }));
+    patch(id, {
+      [k]: Number(t) || 0
+    });
+  };
+  const typePhone = (id, v) => {
+    const t = hyphen(v);
+    setEf(o => ({
+      ...o,
+      phone: t
+    }));
+    patch(id, {
+      phone: t
+    });
+  };
   const blank = {
     name: "",
     h3: "",
@@ -9658,35 +9755,6 @@ function ClubRoster({
   };
   const nActive = ms.filter(m => m.status === "active").length;
   const list = ms.filter(m => tab === "all" || (tab === "active" ? m.status === "active" : m.status !== "active")).filter(m => !q.trim() || m.name.includes(q.trim()));
-  const Fld = ({
-    lbl,
-    v,
-    set,
-    ph,
-    wide
-  }) => /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: wide ? 2 : 1,
-      minWidth: 0
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10.5,
-      color: "#6F8598",
-      marginBottom: 4
-    }
-  }, lbl), /*#__PURE__*/React.createElement("input", {
-    value: v,
-    onChange: e => set(e.target.value),
-    placeholder: ph,
-    className: "num",
-    style: {
-      fontSize: 13.5,
-      padding: "9px 10px",
-      width: "100%"
-    }
-  }));
-  /* 한 종목 줄 — 수지 · 신고 · 실제 */
   const Line = ({
     m,
     md
@@ -9873,7 +9941,7 @@ function ClubRoster({
       color: m.status === "active" ? "var(--green)" : "#8FA8BC"
     }
   }, m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setEdit(edit === m.id ? "" : m.id),
+    onClick: () => openEdit(m),
     "aria-label": "고치기",
     style: {
       padding: "5px 8px",
@@ -9948,18 +10016,14 @@ function ClubRoster({
     }
   }, /*#__PURE__*/React.createElement(Fld, {
     lbl: "3구 수지",
-    v: m.h3 || "",
+    v: ef.h3,
     ph: "15",
-    set: v => patch(m.id, {
-      h3: Number(v.replace(/[^0-9]/g, "")) || 0
-    })
+    set: v => typeNum(m.id, "h3", v)
   }), /*#__PURE__*/React.createElement(Fld, {
     lbl: "3구 신고 에버",
-    v: m.e3 || "",
+    v: ef.e3,
     ph: "0.700",
-    set: v => patch(m.id, {
-      e3: Number(v.replace(/[^0-9.]/g, "")) || 0
-    })
+    set: v => typeNum(m.id, "e3", v, 1)
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -9968,29 +10032,23 @@ function ClubRoster({
     }
   }, /*#__PURE__*/React.createElement(Fld, {
     lbl: "4구 수지",
-    v: m.h4 || "",
+    v: ef.h4,
     ph: "150",
-    set: v => patch(m.id, {
-      h4: Number(v.replace(/[^0-9]/g, "")) || 0
-    })
+    set: v => typeNum(m.id, "h4", v)
   }), /*#__PURE__*/React.createElement(Fld, {
     lbl: "4구 신고 에버",
-    v: m.e4 || "",
+    v: ef.e4,
     ph: "0.250",
-    set: v => patch(m.id, {
-      e4: Number(v.replace(/[^0-9.]/g, "")) || 0
-    })
+    set: v => typeNum(m.id, "e4", v, 1)
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8
     }
   }, /*#__PURE__*/React.createElement(Fld, {
     lbl: "연락처 (총무만 봅니다)",
-    v: m.phone || "",
+    v: ef.phone,
     ph: "010-0000-0000",
-    set: v => patch(m.id, {
-      phone: hyphen(v)
-    }),
+    set: v => typePhone(m.id, v),
     wide: true
   })), /*#__PURE__*/React.createElement("div", {
     style: {
