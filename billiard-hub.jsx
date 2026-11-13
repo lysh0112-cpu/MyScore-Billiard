@@ -4613,13 +4613,23 @@ function rankOne(games, key, opt) {
             「수기등록된 핸디 말고 실제 핸디는 안 나온다」].
          ⛔ 지금까지 이 값을 ★한 번도 안 읽었다. 화면에는 명단에 적어둔 값만 나왔다 */
       handi: Number(me.handicap) || 0,
+      /* 🔴 2026-11-13 — 「일자별 기록표 순서가 ★뒤틀려 있다」 [대표님].
+            같은 날 ★두 경기를 치면 판 번호(gameNo)로만 줄을 세워서
+            두 경기가 ★서로 끼어들었다 (5·4·3·2·2·1·1 꼴).
+         ⇒ ★끝난 시각으로 줄을 세운다. 시각이 없는 옛 기록은 경기끼리 묶어 둔다. */
+      end: Number(g.endAt) || 0, sk: seriesKey(g),
       avg: (Number(me.score) || 0) / (Number(me.inn) || 1),
       res: me.won === true ? "승" : me.won === false ? "패" : "무",
       foes: g.players.filter((p) => keyOfPlayer(p) !== key)
         .map((f) => ({ key: keyOfPlayer(f), name: f.name || "", score: Number(f.score) || 0 })),
     });
   });
-  rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.gameNo - a.gameNo));
+  rows.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    if (a.end !== b.end) return b.end - a.end;              /* ★ 늦게 끝난 판이 위 */
+    if (a.sk !== b.sk) return a.sk < b.sk ? 1 : -1;         /* 시각이 없으면 경기끼리 */
+    return (b.gameNo || 1) - (a.gameNo || 1);
+  });
   const bf = {};
   rows.forEach((r) => r.foes.forEach((f) => {
     const t = bf[f.key] || (bf[f.key] = { key: f.key, name: f.name, n: 0, w: 0, d: 0, l: 0, pt: 0, inn: 0 });
@@ -5985,9 +5995,15 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
           }} style={{
             display: "flex", gap: 8, alignItems: "baseline", padding: "10px 0", fontSize: 13,
             width: "100%", textAlign: "left",
-            borderTop: i === 0 ? "none" : "1px solid rgba(244,238,223,.07)",
+            /* ★ 경기가 바뀌는 자리는 ★선을 진하게 — 같은 날 두 경기를 쳤을 때 갈라 보인다 */
+            borderTop: i === 0 ? "none"
+              : shownR[i - 1].sk !== r.sk ? "1px solid rgba(244,238,223,.22)"
+              : "1px solid rgba(244,238,223,.07)",
           }}>
-            <span className="num" style={{ color: "#6F8598", fontSize: 11.5, width: 40, flexShrink: 0 }}>{md(r.date)}</span>
+            <span style={{ width: 44, flexShrink: 0, lineHeight: 1.25 }}>
+              <span className="num" style={{ color: "#6F8598", fontSize: 11.5 }}>{md(r.date)}</span>
+              <span className="num" style={{ display: "block", color: "#44627B", fontSize: 10 }}>{r.gameNo}번</span>
+            </span>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {r.foes.map((f) => f.name).join(" · ")}
             </span>
