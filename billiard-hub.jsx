@@ -5574,6 +5574,22 @@ function ClubList({ data, save, say, onOpen }) {
               이번 달 <span className="num">{thisMon}</span>판 ·
               모두 <span className="num">{gs.length}</span>판
             </div>
+
+            {/* ★ 2026-11-13 — 지우는 단추를 ★여기에도 둔다 [대표님].
+                  ⚠ 카드 전체가 단추다. 그 안에 단추를 또 넣으면 ★겹쳐 눌린다 —
+                    stopPropagation 으로 막는다.
+                  ⛔ 총무(만든 사람)만 지울 수 있다 */}
+            {c.owner && (
+              <span role="button" tabIndex={0} aria-label="동우회 지우기" onClick={(e) => {
+                e.stopPropagation();
+                if (!askRemoveClub(data, c)) return;
+                save(removeClub(data, c));
+                say("동우회를 지웠습니다 · 친 기록은 그대로입니다");
+              }} style={{
+                display: "inline-block", marginTop: 10, padding: "7px 11px", borderRadius: 9,
+                fontSize: 11.5, color: "#C87B74", border: "1px solid rgba(200,123,116,.3)",
+              }}>지우기</span>
+            )}
           </button>
         );
       })}
@@ -5693,6 +5709,9 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
 
   /* 동우회 없이 친 판 — 아직 어느 동우회에도 안 든 것만 */
   const orphan = useMemo(() => bilGames(data.games).filter((g) => !g.clubId), [data.games]);
+  const [pick, setPick] = useState(false);          /* 기록 보기에서 골라 넣는 창 */
+  /* ⚠ 훅은 ★그리는 자리(JSX)에 두지 않는다 — 차례가 흐트러질 수 있다 */
+  const briefs = useMemo(() => seriesBrief(data.games, clubsOf(data)), [data.games]);
   const takeOrphans = () => {
     const ms = memsOf(club);
     const byName = {};
@@ -5759,19 +5778,8 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
           <CBtn ghost onClick={() => setRen(null)}>그냥 닫기</CBtn>
           {/* ⛔ 지우는 단추는 ★제일 아래, 노란 단추와 ★떨어뜨려 둔다 — 잘못 누르면 안 된다 */}
           <button onClick={() => {
-            const n = clubGames(data.games, club.id).length;
-            if (!confirm(
-              `「${club.name}」을 지울까요?\n\n` +
-              `★친 기록 ${n}판은 ★안 지워집니다 — 「동우회 없음」으로 돌아갑니다.\n` +
-              `다시 만들어 [지난 기록 넣기] 를 누르면 그대로 돌아옵니다.\n` +
-              `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`)) return;
-            save({
-              ...data,
-              clubs: clubsOf(data).filter((c) => c.id !== club.id),
-              clubId: data.clubId === club.id ? "" : data.clubId,
-              setup: data.setup && data.setup.clubId === club.id ? { ...data.setup, clubId: "", clubName: "" } : data.setup,
-              games: data.games.map((g) => (g.clubId === club.id ? { ...g, clubId: "" } : g)),
-            });
+            if (!askRemoveClub(data, club)) return;
+            save(removeClub(data, club));
             say("동우회를 지웠습니다 · 친 기록은 그대로입니다");
             onBack();
           }} style={{
@@ -5816,14 +5824,32 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
              그대로 두면 새 동우회가 ★텅 비어 보여서 쓸 마음이 안 난다.
           ⛔ 이미 다른 동우회에 든 판은 ★안 건드린다.
           ★ 명단에 없는 이름은 ★함께 넣어 준다 — 그래야 다음부터 눌러 고를 수 있다. */}
-      {orphan.length > 0 && (
-        <button onClick={takeOrphans} style={{
-          width: "100%", background: "rgba(232,184,56,.1)", border: "1px solid rgba(232,184,56,.4)",
-          borderRadius: 11, padding: 13, fontSize: 13, color: ACCENT, fontWeight: 600, marginBottom: 12,
-        }}>
-          ＋ 동우회 없이 친 지난 기록 <span className="num">{orphan.length}</span>판을 여기에 넣기
-        </button>
-      )}
+      {/* 🔴 2026-11-13 — 「기록 보기의 자료들을 ★불러오지를 못하네. 기록 보기
+             자료들 중 ★선택할 기능을 넣어주면 어떨까」 [대표님]
+           ⛔ 전에는 ★「동우회 없이 친 판」이 있을 때만 단추가 나왔다. 이미 다른
+             동우회에 넣어 둔 뒤에는 0판이라 ★단추 자체가 사라졌다.
+           ⇒ ★언제나 보여주고, 기록 보기에 있는 ★모든 경기를 고르게 한다. */}
+      <button onClick={() => setPick(true)} style={{
+        width: "100%", background: "rgba(232,184,56,.1)", border: "1px solid rgba(232,184,56,.4)",
+        borderRadius: 11, padding: 13, fontSize: 13, color: ACCENT, fontWeight: 600, marginBottom: 12,
+      }}>
+        ＋ 기록 보기에서 골라 넣기
+        {orphan.length > 0 && (
+          <span style={{ fontSize: 11.5, color: "#C79A3A", fontWeight: 500 }}>
+            {" "}· 동우회 없는 기록 <span className="num">{orphan.length}</span>판
+          </span>
+        )}
+      </button>
+
+      <PickGamesSheet open={pick} club={club}
+        list={briefs}
+        onClose={() => setPick(false)}
+        onTake={(picked, addMem) => {
+          save(takeSeries(data, club, picked, addMem));
+          const n = picked.reduce((a, t) => a + t.n, 0);
+          say(`${picked.length}경기 ${n}판을 넣었습니다`);
+          setPick(false);
+        }} />
 
       {rows.length === 0 ? (
         <div style={{ padding: "40px 10px", textAlign: "center", fontSize: 13.5, color: "var(--chalk)", lineHeight: 1.9 }}>
@@ -6172,6 +6198,198 @@ const Fld = ({ lbl, v, set, ph, wide }) => (
       className="num" style={{ fontSize: 13.5, padding: "9px 10px", width: "100%" }} />
   </div>
 );
+
+/* 🔴 2026-11-13 — 「동우회 만드는 화면에서 ★기존 동우회를 삭제하는 버튼은 없나?」
+      [대표님]. 있긴 했는데 ★동우회 안쪽(✎ 고치기)에 숨어 있었다 — 만드는 화면에서
+      찾으시는 것이 당연하다.
+   ⇒ 지우는 ★일 자체는 여기 한 곳에만 둔다. 두 화면이 각자 지우면 반드시 어긋난다 (9장 ①).
+   ★ 친 기록은 ★안 지운다 — 「동우회 없음」으로 돌려놓을 뿐이다. 다시 넣을 수 있다. */
+const removeClub = (data, club) => ({
+  ...data,
+  clubs: clubsOf(data).filter((c) => c.id !== club.id),
+  clubId: data.clubId === club.id ? "" : data.clubId,
+  setup: data.setup && data.setup.clubId === club.id
+    ? { ...data.setup, clubId: "", clubName: "" } : data.setup,
+  games: data.games.map((g) => (g.clubId === club.id ? { ...g, clubId: "" } : g)),
+});
+const askRemoveClub = (data, club) => confirm(
+  `「${club.name}」을 지울까요?\n\n` +
+  `★친 기록 ${clubGames(data.games, club.id).length}판은 ★안 지워집니다 — ` +
+  `「동우회 없음」으로 돌아갑니다.\n` +
+  `다시 만들어 [기록 보기에서 골라 넣기] 를 누르면 그대로 돌아옵니다.\n` +
+  `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`);
+
+/* 🔴 2026-11-13 — 「동우회 기록에 넣을 ★「기록 보기」의 자료들을 불러오지를 못하네.
+      ★기록 보기 자료들 중 선택할 기능을 넣어주면 어떨까?」 [대표님]
+
+   까닭 — [지난 기록 넣기] 는 ★「동우회 없이 친 판」만 찾았다. 이미 다른 동우회에
+     넣어 둔 판은 0판이라 단추 자체가 ★안 나왔다.
+   ⇒ 기록 보기에 있는 ★모든 경기를 보여주고 고르게 한다.
+   ⚠ 한 판씩이 아니라 ★경기(한 자리에서 친 묶음)로 고른다 — 6게임을 여섯 번
+     누르게 할 수는 없다. 기록 보기도 그렇게 묶어 보여준다.
+   ⚠ 이미 다른 동우회에 든 경기는 ★꺼둔 채로 보여준다. 켜면 ★옮겨진다 —
+     그 말을 화면에 적는다. */
+const seriesBrief = (games, clubs) => {
+  const by = {};
+  bilGames(games).forEach((g) => {
+    const k = seriesKey(g);
+    const t = by[k] || (by[k] = {
+      key: k, date: g.date, place: g.place || "", mode: g.mode || "3",
+      team: !!g.team, n: 0, ids: [], end: 0, clubId: g.clubId || "",
+      names: (g.team && Array.isArray(g.teams) && g.teams.length
+        ? g.teams.map((x) => x.name)
+        : (g.players || []).map((p) => p.name)),
+    });
+    t.n++; t.ids.push(g.id);
+    t.end = Math.max(t.end, Number(g.endAt) || 0);
+  });
+  const nameOf = (id) => (clubs.find((c) => c.id === id) || {}).name || "";
+  return Object.values(by)
+    .map((t) => ({ ...t, clubName: t.clubId ? (nameOf(t.clubId) || "다른 동우회") : "" }))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.end - a.end));
+};
+/* 고른 경기들을 이 동우회로. 명단에 있는 이름에는 mid 를 박는다 */
+const takeSeries = (data, club, picked, alsoAdd) => {
+  const ids = new Set(picked.flatMap((t) => t.ids));
+  let mems = memsOf(club);
+  if (alsoAdd) {
+    /* ★ 그때 쓰던 수지를 ★함께 가져온다 — 옛 [지난 기록 넣기] 가 그랬다.
+          안 가져오면 명단이 수지 0 으로 채워져 ★수지별 묶기가 비어 버린다
+          (2026-11-13 검사가 잡았다). 종목마다 ★가장 최근 판의 값을 쓴다 */
+    const hand = {};
+    bilGames(data.games).filter((g) => ids.has(g.id))
+      .slice().sort((a, b) => (Number(a.endAt) || 0) - (Number(b.endAt) || 0))
+      .forEach((g) => (g.players || []).forEach((p) => {
+        const nm = String(p.name || "").trim();
+        const h = Number(p.handicap) || 0;
+        if (!nm || !h) return;
+        hand[nm] = hand[nm] || { h3: 0, h4: 0 };
+        if ((g.mode || "3") === "4") hand[nm].h4 = h; else hand[nm].h3 = h;
+      }));
+    const have = new Set(mems.map((m) => m.name));
+    const add = [];
+    picked.forEach((t) => t.names.forEach((n) => {
+      const nm = String(n || "").trim();
+      if (!nm || have.has(nm) || add.some((x) => x.name === nm)) return;
+      const h = hand[nm] || { h3: 0, h4: 0 };
+      add.push({ id: "m_" + uid(), name: nm, h3: h.h3, h4: h.h4, phone: "", role: "member", status: "invited", linked: false });
+    }));
+    mems = [...mems, ...add];
+  }
+  const byName = {};
+  mems.forEach((m) => { byName[m.name] = m; });
+  return {
+    ...data,
+    clubs: clubsOf(data).map((c) => (c.id === club.id ? { ...c, members: mems } : c)),
+    games: data.games.map((g) => (ids.has(g.id) ? {
+      ...g, clubId: club.id,
+      players: (g.players || []).map((p) => {
+        const m = byName[(p.name || "").trim()];
+        return m ? { ...p, mid: m.id } : p;
+      }),
+    } : g)),
+  };
+};
+
+/* ★ 기록 보기에서 골라 넣는 창 — ⛔ 모듈 자리에 둔다 */
+function PickGamesSheet({ open, club, list, onTake, onClose }) {
+  const [sel, setSel] = useState({});
+  const [addMem, setAddMem] = useState(true);
+  useEffect(() => {
+    if (!open) return;
+    const init = {};
+    list.forEach((t) => { if (!t.clubId) init[t.key] = true; });   /* ★ 동우회 없는 것만 미리 켠다 */
+    setSel(init); setAddMem(true);
+  }, [open, list.length]);                                          // eslint-disable-line
+  if (!open) return null;
+  const on = list.filter((t) => sel[t.key]);
+  const moving = on.filter((t) => t.clubId && t.clubId !== club.id).length;
+  const allOn = on.length === list.length;
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 130, background: "rgba(0,0,0,.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 520, background: "#0C2E46",
+        borderRadius: "16px 16px 0 0", padding: "16px 14px",
+        maxHeight: "86vh", display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ fontSize: 15.5, fontWeight: 700 }}>기록 보기에서 골라 넣기</div>
+        <div style={{ fontSize: 11.5, color: "#6F8598", marginTop: 5, lineHeight: 1.6 }}>
+          고른 경기가 <b style={{ color: "var(--ivory)" }}>「{club.name}」</b> 기록이 됩니다.
+          한 자리에서 친 판은 <b style={{ color: "var(--ivory)" }}>한 줄</b>로 묶여 있습니다.
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <button onClick={() => {
+            const n = {}; if (!allOn) list.forEach((t) => { n[t.key] = true; }); setSel(n);
+          }} style={{
+            padding: "7px 11px", borderRadius: 8, fontSize: 11.5,
+            color: ACCENT, border: "1px solid rgba(232,184,56,.4)",
+          }}>{allOn ? "모두 풀기" : "모두 고르기"}</button>
+          <button onClick={() => setAddMem((v) => !v)} style={{
+            padding: "7px 11px", borderRadius: 8, fontSize: 11.5,
+            background: addMem ? "rgba(232,184,56,.16)" : "transparent",
+            color: addMem ? ACCENT : "#8FA8BC",
+            border: "1px solid " + (addMem ? "rgba(232,184,56,.4)" : "var(--line)"),
+          }}>{addMem ? "✓ " : ""}명단에 없는 분도 회원으로 넣기</button>
+        </div>
+
+        <div style={{ overflowY: "auto", marginTop: 10, flex: 1, minHeight: 80 }}>
+          {list.length === 0 && (
+            <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: "var(--chalk)" }}>
+              기록 보기에 친 기록이 없습니다
+            </div>
+          )}
+          {list.map((t) => {
+            const other = t.clubId && t.clubId !== club.id;
+            const here = t.clubId === club.id;
+            return (
+              <button key={t.key} onClick={() => setSel((o) => ({ ...o, [t.key]: !o[t.key] }))} style={{
+                display: "flex", width: "100%", gap: 10, alignItems: "flex-start", textAlign: "left",
+                padding: "11px 2px", borderTop: "1px solid rgba(244,238,223,.07)",
+                opacity: here ? 0.5 : 1,
+              }}>
+                <span style={{
+                  flexShrink: 0, width: 21, height: 21, borderRadius: 6, marginTop: 1,
+                  border: sel[t.key] ? "none" : "1px solid rgba(244,238,223,.3)",
+                  background: sel[t.key] ? ACCENT : "transparent",
+                  color: "#141200", fontSize: 14, fontWeight: 700, lineHeight: "21px", textAlign: "center",
+                }}>{sel[t.key] ? "✓" : ""}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 11.5, color: "#8FA8BC" }}>
+                    <span className="num">{t.date}</span>
+                    {t.place ? ` · ${t.place}` : ""}
+                    {" · "}{t.mode === "4" ? "4구" : "3쿠션"}
+                    {" · "}{t.team ? "복식" : `${t.names.length}명`}
+                    {" · "}<span className="num">{t.n}</span>게임
+                    {here && <span style={{ color: ACCENT }}> · 이미 여기</span>}
+                    {other && <span style={{ color: "#E0A36B" }}> · 「{t.clubName}」에 있음</span>}
+                  </span>
+                  <span style={{
+                    display: "block", fontSize: 13.5, color: "var(--ivory)", marginTop: 3,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{t.names.join(" · ")}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {moving > 0 && (
+          <div style={{ fontSize: 11.5, color: "#E0A36B", lineHeight: 1.6, marginTop: 8 }}>
+            ⚠ 다른 동우회에 있던 <span className="num">{moving}</span>경기를 고르셨습니다 —
+            넣으면 그쪽에서는 <b>빠집니다</b>. 한 경기는 한 동우회에만 속합니다.
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <CBtn ghost onClick={onClose}>닫기</CBtn>
+          <CBtn onClick={() => on.length && onTake(on, addMem)}>고른 {on.length}경기 넣기</CBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* 🔴 2026-11-13 — 「11/6 김경석하고 친 기록이 있는데, 디딤돌에서 김경석을
       누르면 안 나온다」 [대표님].
