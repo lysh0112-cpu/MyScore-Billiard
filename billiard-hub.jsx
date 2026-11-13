@@ -427,8 +427,21 @@ const pickName = (pf, meta, email) => {
       그래서 주소로 «보내고», 돌아온 조각을 손으로 받는다.
    ⛔ 카카오 열쇠(REST 키·시크릿)는 여기 «없다». Supabase 가 갖고 있고
       앱은 provider 이름만 말한다. 열쇠를 코드에 넣으면 그대로 샌다 */
+/* 🔴 2026-11-13 — 「큐보드에서 로그인하면 자꾸 ★명연재 화면으로 넘어간다.
+      골프온은 안 그런데」 [대표님]
+
+   돌아올 주소는 Supabase 가 ★미리 적어둔 목록과 글자까지 맞아야 한다.
+   안 맞으면 Supabase 는 ★조용히 Site URL(명연재)로 보낸다 — 오류가 안 뜬다.
+
+   ⛔ 여기서 location.pathname 을 그대로 쓰면 ★두 가지 주소가 나간다.
+        주소창으로 열면        https://cue.myjae.kr/
+        홈 화면 바로가기로 열면 https://cue.myjae.kr/index.html   ← 이쪽이 안 맞았다
+      (manifest 의 start_url 이 ./index.html 이다 · 2026-11-13 실측)
+      골프온은 바로가기 주소가 / 로 끝나 한 가지뿐이어서 멀쩡했다.
+   ⇒ 파일 이름을 떼어 ★언제나 한 가지 주소만 보낸다. */
+const authBack = () => location.origin + location.pathname.replace(/[^/]*$/, "");
 const sbKakaoGo = () => {
-  const back = location.origin + location.pathname;
+  const back = authBack();
   location.href = `${SB_URL}/auth/v1/authorize?provider=kakao&redirect_to=${encodeURIComponent(back)}`;
 };
 

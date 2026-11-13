@@ -2,7 +2,7 @@
   "name": "큐보드 · CUEBOARD",
   "short_name": "큐보드",
   "description": "스마트 당구 기록 · 3쿠션 · 4구 · 다시 보기",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
