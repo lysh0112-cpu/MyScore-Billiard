@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-58 계정 창에 「돌아올 주소」 — 폰에서 주소창을 못 보므로 -->
+<!-- build: 1판-59 동우회 이름 — 다 지우면 빠져나가던 것 · 돌아올 주소 칸 뺌 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -8516,60 +8516,6 @@ function Account({
     }
   }, "명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다."), /*#__PURE__*/React.createElement("div", {
     style: {
-      marginTop: 14,
-      padding: "11px 12px",
-      borderRadius: 11,
-      background: "#0C2E46",
-      border: "1px solid rgba(244,238,223,.13)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10.5,
-      color: "#6F8598",
-      marginBottom: 6
-    }
-  }, "로그인 뒤 돌아올 주소"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      alignItems: "center"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "num",
-    style: {
-      flex: 1,
-      minWidth: 0,
-      fontSize: 12.5,
-      color: "#B9CCDA",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap"
-    }
-  }, authBack()), /*#__PURE__*/React.createElement("button", {
-    onClick: async () => {
-      try {
-        await navigator.clipboard.writeText(authBack());
-        say("복사했습니다");
-      } catch (e) {
-        say("복사하지 못했습니다. 주소를 길게 눌러 복사하세요");
-      }
-    },
-    style: {
-      padding: "7px 11px",
-      fontSize: 11.5,
-      borderRadius: 8,
-      color: "#7FC0F2",
-      border: "1px solid rgba(90,169,230,.45)"
-    }
-  }, "복사")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10.5,
-      color: "#55707F",
-      lineHeight: 1.6,
-      marginTop: 8
-    }
-  }, "딴 화면(명연재)으로 넘어가면 이 주소가 Supabase 목록에 없는 것입니다. 복사해서 그대로 넣으시면 됩니다.")), /*#__PURE__*/React.createElement("div", {
-    style: {
       fontSize: 11,
       color: "#6F8598",
       lineHeight: 1.7,
@@ -8847,7 +8793,11 @@ function ClubRank({
   const [open, setOpen] = useState(false); /* 가끔 나온 분 펼치기 */
   /* 🔴 2026-11-13 — 이름 고치기 [대표님 「동우회 이름을 변경할 수 있나?」].
         만들기 화면에 「나중에 고칠 수 있습니다」라고 적어 놓고 ★길을 안 만들었다 */
-  const [ren, setRen] = useState("");
+  /* 🔴 2026-11-13 — 「백스페이스를 모두 누르면 ★빠져나가버린다」 [대표님].
+        빈 칸("")을 ★「닫힘」 표시로도 썼다 ⇒ 글자를 다 지우면 앱이 「닫아라」로 알아들었다.
+     ⇒ 닫힘은 null, 빈 칸은 "" — ★두 가지를 갈라 둔다.
+     ⛔ 「값이 없음」과 「닫힘」을 ★한 값으로 쓰지 말 것. 다 지울 수 있는 칸이면 반드시 터진다 */
+  const [ren, setRen] = useState(null);
   const rows = useMemo(() => rankList(data.games, {
     clubId: club.id,
     mode,
@@ -9065,7 +9015,7 @@ function ClubRank({
       fontWeight: 600,
       padding: "6px 2px"
     }
-  }, "명단 ›")), ren !== "" && /*#__PURE__*/React.createElement("div", {
+  }, "명단 ›")), ren !== null && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "var(--card)",
       border: "1px solid var(--line)",
@@ -9074,7 +9024,7 @@ function ClubRank({
       marginTop: 10
     }
   }, /*#__PURE__*/React.createElement(Lbl, null, "동우회 이름"), /*#__PURE__*/React.createElement("input", {
-    value: ren,
+    value: ren || "",
     onChange: e => setRen(e.target.value),
     maxLength: 20,
     autoFocus: true
@@ -9091,7 +9041,7 @@ function ClubRank({
     }
   }, "친 기록과 명단은 그대로입니다.")), /*#__PURE__*/React.createElement(CBtn, {
     onClick: () => {
-      const v = ren.trim();
+      const v = String(ren || "").trim();
       if (!v) return say("이름을 적어주세요");
       if (clubsOf(data).some(c => c.id !== club.id && c.name === v)) return say("같은 이름의 동우회가 이미 있습니다");
       save({
@@ -9101,12 +9051,12 @@ function ClubRank({
           name: v
         } : c)
       });
-      setRen("");
+      setRen(null);
       say("이름을 고쳤습니다");
     }
   }, "이름 고치기"), /*#__PURE__*/React.createElement(CBtn, {
     ghost: true,
-    onClick: () => setRen("")
+    onClick: () => setRen(null)
   }, "그냥 닫기"), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       const n = clubGames(data.games, club.id).length;

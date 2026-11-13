@@ -5396,37 +5396,6 @@ function Account({ data, save, say, sync, syncNow, onClose }) {
               명연재 · 골프온과 같은 계정입니다. 한 번 로그인하면 세 곳에서 그대로 쓰입니다.
             </div>
 
-            {/* 🔴 2026-11-13 — 「로그인하면 자꾸 ★명연재 화면으로 넘어간다 · 폰에서만」 [대표님]
-                   ⚠ 폰에서 홈 화면 아이콘으로 열면 ★주소창이 아예 안 보인다.
-                     그래서 「무슨 주소를 보내고 있는가」를 ★아무도 볼 수 없었다.
-                   ⇒ 앱이 ★스스로 말하게 둔다. 이 줄과 Supabase 의 Redirect URLs 가
-                     글자까지 같아야 한다. 안 맞으면 Supabase 는 오류 없이
-                     ★조용히 Site URL(명연재)로 보낸다.
-                   ⛔ 이 칸을 지우지 말 것 — 폰에서 탈이 나면 여기 말고 볼 곳이 없다 */}
-            <div style={{
-              marginTop: 14, padding: "11px 12px", borderRadius: 11,
-              background: "#0C2E46", border: "1px solid rgba(244,238,223,.13)",
-            }}>
-              <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 6 }}>로그인 뒤 돌아올 주소</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span className="num" style={{
-                  flex: 1, minWidth: 0, fontSize: 12.5, color: "#B9CCDA",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>{authBack()}</span>
-                <button onClick={async () => {
-                  try { await navigator.clipboard.writeText(authBack()); say("복사했습니다"); }
-                  catch (e) { say("복사하지 못했습니다. 주소를 길게 눌러 복사하세요"); }
-                }} style={{
-                  padding: "7px 11px", fontSize: 11.5, borderRadius: 8,
-                  color: "#7FC0F2", border: "1px solid rgba(90,169,230,.45)",
-                }}>복사</button>
-              </div>
-              <div style={{ fontSize: 10.5, color: "#55707F", lineHeight: 1.6, marginTop: 8 }}>
-                딴 화면(명연재)으로 넘어가면 이 주소가 Supabase 목록에 없는 것입니다.
-                복사해서 그대로 넣으시면 됩니다.
-              </div>
-            </div>
-
             {/* ⚠ 09-08 「로그인 필수」로 정해졌지만 관문(WALLET_GATE_ON)이 아직 꺼져 있다.
                   지금은 로그인 없이도 실제로 써지므로 이 줄을 «남긴다».
                   ★관문을 켜는 날 이 줄을 지워야 한다 — 말과 실제가 어긋나면 안 된다 */}
@@ -5567,7 +5536,11 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
   const [open, setOpen] = useState(false);          /* 가끔 나온 분 펼치기 */
   /* 🔴 2026-11-13 — 이름 고치기 [대표님 「동우회 이름을 변경할 수 있나?」].
         만들기 화면에 「나중에 고칠 수 있습니다」라고 적어 놓고 ★길을 안 만들었다 */
-  const [ren, setRen] = useState("");
+  /* 🔴 2026-11-13 — 「백스페이스를 모두 누르면 ★빠져나가버린다」 [대표님].
+        빈 칸("")을 ★「닫힘」 표시로도 썼다 ⇒ 글자를 다 지우면 앱이 「닫아라」로 알아들었다.
+     ⇒ 닫힘은 null, 빈 칸은 "" — ★두 가지를 갈라 둔다.
+     ⛔ 「값이 없음」과 「닫힘」을 ★한 값으로 쓰지 말 것. 다 지울 수 있는 칸이면 반드시 터진다 */
+  const [ren, setRen] = useState(null);
 
   const rows = useMemo(() => rankList(data.games, {
     clubId: club.id, mode, from: bound[0], to: bound[1], withTeam: team,
@@ -5679,21 +5652,21 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
         <button onClick={onRoster} style={{ fontSize: 12.5, color: ACCENT, fontWeight: 600, padding: "6px 2px" }}>명단 ›</button>
       </div>
 
-      {ren !== "" && (
+      {ren !== null && (
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 13, padding: 14, marginTop: 10 }}>
           <Lbl>동우회 이름</Lbl>
-          <input value={ren} onChange={(e) => setRen(e.target.value)} maxLength={20} autoFocus />
+          <input value={ren || ""} onChange={(e) => setRen(e.target.value)} maxLength={20} autoFocus />
           <div style={{ fontSize: 11.5, color: "#6F8598", marginTop: 7, lineHeight: 1.6 }}>
             이름만 바뀝니다. <b style={{ color: "var(--ivory)" }}>친 기록과 명단은 그대로입니다.</b>
           </div>
           <CBtn onClick={() => {
-            const v = ren.trim();
+            const v = String(ren || "").trim();
             if (!v) return say("이름을 적어주세요");
             if (clubsOf(data).some((c) => c.id !== club.id && c.name === v)) return say("같은 이름의 동우회가 이미 있습니다");
             save({ ...data, clubs: clubsOf(data).map((c) => (c.id === club.id ? { ...c, name: v } : c)) });
-            setRen(""); say("이름을 고쳤습니다");
+            setRen(null); say("이름을 고쳤습니다");
           }}>이름 고치기</CBtn>
-          <CBtn ghost onClick={() => setRen("")}>그냥 닫기</CBtn>
+          <CBtn ghost onClick={() => setRen(null)}>그냥 닫기</CBtn>
           {/* ⛔ 지우는 단추는 ★제일 아래, 노란 단추와 ★떨어뜨려 둔다 — 잘못 누르면 안 된다 */}
           <button onClick={() => {
             const n = clubGames(data.games, club.id).length;
