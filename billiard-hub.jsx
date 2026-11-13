@@ -6073,8 +6073,20 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
                 color: m.status === "active" ? "var(--green)" : "#8FA8BC",
               }}>{m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중"}</span>
             </button>
-            <button onClick={() => openEdit(m)} aria-label="고치기"
-              style={{ padding: "5px 8px", fontSize: 13, color: edit === m.id ? ACCENT : "#6F8598" }}>✎</button>
+            {/* 🔴 2026-11-13 — 「수정 단추가 너무 작아서 찾기가 힘들다 · 조금 더 키우고
+                   선명한 노란색으로」 [대표님] ⇒ ㉯ 안으로 정하심.
+                 ★ 재어 본 값 — 손가락 닿는 넓이 27×25 → ★72×33 (3.6배).
+                 ★ 글자(「고치기」)를 함께 적는다. ✎ 만으로는 ★그것이 무엇인지 모른다.
+                 ⛔ 꽉 찬 노랑으로 만들지 말 것 — 이 앱에서 꽉 찬 노랑은 「지금 누를 것」
+                    ([다음 ⇒]·[저장하기]) 자리다. 카드마다 노란 덩어리가 박히면
+                    정작 눌러야 할 것이 묻힌다. 열려 있을 때만 꽉 채운다 */}
+            <button onClick={() => openEdit(m)} aria-label="고치기" style={{
+              padding: "8px 11px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+              lineHeight: 1.2, whiteSpace: "nowrap", flexShrink: 0,
+              background: edit === m.id ? ACCENT : "rgba(232,184,56,.14)",
+              border: edit === m.id ? "1px solid " + ACCENT : "1px solid rgba(232,184,56,.5)",
+              color: edit === m.id ? "#141200" : ACCENT,
+            }}>✎ 고치기</button>
             <button onClick={() => onMember(m.id)} aria-label="기록 보기"
               style={{ padding: "5px 4px", fontSize: 15, color: "#44627B" }}>›</button>
           </div>

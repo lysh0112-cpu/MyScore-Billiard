@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-60 명단 — 수지 둘과 연락처만 · 저장하기·닫기 나란히 -->
+<!-- build: 1판-61 명단 — [✎ 고치기] 단추를 3.6배로 · 노란 테두리 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9953,11 +9953,18 @@ function ClubRoster({
     onClick: () => openEdit(m),
     "aria-label": "고치기",
     style: {
-      padding: "5px 8px",
-      fontSize: 13,
-      color: edit === m.id ? ACCENT : "#6F8598"
+      padding: "8px 11px",
+      borderRadius: 10,
+      fontSize: 12.5,
+      fontWeight: 700,
+      lineHeight: 1.2,
+      whiteSpace: "nowrap",
+      flexShrink: 0,
+      background: edit === m.id ? ACCENT : "rgba(232,184,56,.14)",
+      border: edit === m.id ? "1px solid " + ACCENT : "1px solid rgba(232,184,56,.5)",
+      color: edit === m.id ? "#141200" : ACCENT
     }
-  }, "✎"), /*#__PURE__*/React.createElement("button", {
+  }, "✎ 고치기"), /*#__PURE__*/React.createElement("button", {
     onClick: () => onMember(m.id),
     "aria-label": "기록 보기",
     style: {
