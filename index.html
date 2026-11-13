@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-64 지난 기록 — 사람별로 · 판을 골라서 넣기 -->
+<!-- build: 1판-65 개인 화면 — 누구 기준인지 밝힘 (내 에버 → 이름) -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9365,9 +9365,19 @@ function ClubMember({
     }
   }, title), /*#__PURE__*/React.createElement("div", {
     style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      marginTop: 4
+    }
+  }, "아래 승·패·에버는 모두 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, title), " 님 기준입니다"), /*#__PURE__*/React.createElement("div", {
+    style: {
       display: "flex",
       gap: 14,
-      marginTop: 5,
+      marginTop: 6,
       fontSize: 12.5,
       color: "#6F8598"
     }
@@ -9461,7 +9471,7 @@ function ClubMember({
       fontSize: 12,
       color: "#6F8598"
     }
-  }, sel ? `${sel.name} 님과` : "에버"), /*#__PURE__*/React.createElement("div", {
+  }, sel ? `${title} 님 — ${sel.name} 님과` : `${title} 님 에버`), /*#__PURE__*/React.createElement("div", {
     className: "num",
     style: {
       fontSize: 26,
@@ -9475,7 +9485,7 @@ function ClubMember({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "num"
-  }, sel ? sel.n : o.tot.n), "판 ·", " ", /*#__PURE__*/React.createElement("span", {
+  }, sel ? sel.n : o.tot.n), "판 · ", title, " ", /*#__PURE__*/React.createElement("span", {
     className: "num",
     style: {
       color: "var(--green)"
@@ -9547,7 +9557,7 @@ function ClubMember({
       textAlign: "right",
       fontWeight: 500
     }
-  }, "내 에버")), shownF.map(f => /*#__PURE__*/React.createElement("tr", {
+  }, title, " 에버")), shownF.map(f => /*#__PURE__*/React.createElement("tr", {
     key: f.key,
     onClick: () => setFoe(foe === f.key ? "" : f.key),
     style: {

@@ -5823,7 +5823,14 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
                「적어둔」은 총무가 명단에 친 값, 「친」은 ★경기에서 실제로 받은 수지.
              ⛔ 「실제」라는 말을 여기 쓰지 않는다. 명단 카드에서 「실제」는
                ★에버를 가리킨다 — 같은 말이 두 가지를 가리키면 안 된다 */}
-      <div style={{ display: "flex", gap: 14, marginTop: 5, fontSize: 12.5, color: "#6F8598" }}>
+      {/* 🔴 2026-11-13 — 「기록보기의 승패와 여기 승패가 바뀌었네…아 이해했어,
+             김경석이가 류승현을 상대로 패했다는 이야기구나. ★처음 보면 헷갈리겠다」 [대표님]
+           ⇒ 이 화면의 승·패·에버는 ★모두 이 사람 기준이다. 그 말을 ★한 줄로 적는다.
+           ⛔ 「내 에버」라고 쓰지 말 것 — 보는 사람은 ★대표님이지 이 사람이 아니다. */}
+      <div style={{ fontSize: 11.5, color: "#6F8598", marginTop: 4 }}>
+        아래 승·패·에버는 모두 <b style={{ color: "var(--ivory)" }}>{title}</b> 님 기준입니다
+      </div>
+      <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 12.5, color: "#6F8598" }}>
         <span>적어둔 수지{" "}
           <span className="num" style={{ color: handiOf(me, mode) > 0 ? "#B9CCDA" : "#55708A", fontSize: 14 }}>
             {handiOf(me, mode) > 0 ? handiOf(me, mode) : "–"}
@@ -5874,12 +5881,14 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
         background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12,
         padding: 13, marginTop: 12,
       }}>
-        <div style={{ fontSize: 12, color: "#6F8598" }}>{sel ? `${sel.name} 님과` : "에버"}</div>
+        <div style={{ fontSize: 12, color: "#6F8598" }}>
+          {sel ? `${title} 님 — ${sel.name} 님과` : `${title} 님 에버`}
+        </div>
         <div className="num" style={{ fontSize: 26, color: ACCENT }}>
           {fmtAvg(sel ? sel.avg : o.tot.avg, mode)}
         </div>
         <div style={{ fontSize: 12.5, color: "var(--chalk)", marginTop: 5 }}>
-          <span className="num">{sel ? sel.n : o.tot.n}</span>판 ·{" "}
+          <span className="num">{sel ? sel.n : o.tot.n}</span>판 · {title}{" "}
           <span className="num" style={{ color: "var(--green)" }}>{sel ? sel.w : o.tot.w}</span>승{" "}
           <span className="num">{sel ? sel.d : o.tot.d}</span>무{" "}
           <span className="num" style={{ color: "#C87B74" }}>{sel ? sel.l : o.tot.l}</span>패
@@ -5901,7 +5910,7 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
                   <th style={{ textAlign: "left", whiteSpace: "nowrap", padding: "0 0 6px", fontWeight: 500 }}>상대</th>
                   <th style={{ whiteSpace: "nowrap", padding: "0 6px 6px", fontWeight: 500 }}>판</th>
                   <th style={{ whiteSpace: "nowrap", padding: "0 6px 6px", fontWeight: 500 }}>승-무-패</th>
-                  <th style={{ whiteSpace: "nowrap", padding: "0 0 6px", textAlign: "right", fontWeight: 500 }}>내 에버</th>
+                  <th style={{ whiteSpace: "nowrap", padding: "0 0 6px", textAlign: "right", fontWeight: 500 }}>{title} 에버</th>
                 </tr>
                 {shownF.map((f) => (
                   <tr key={f.key} onClick={() => setFoe(foe === f.key ? "" : f.key)} style={{ cursor: "pointer" }}>
