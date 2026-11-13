@@ -4539,6 +4539,25 @@ const memById = (c, mid) => memsOf(c).find((m) => m.id === mid) || null;
 const handiOf = (m, mode) => Number(m && (mode === "4" ? m.h4 : m.h3)) || 0;
 const newCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
+/* ★ 2026-11-13 — 전화번호에 ★하이픈을 저절로 넣는다 [대표님].
+      ⛔ 숫자가 아닌 것은 다 버린다. 02 로 시작하는 집 전화도 맞춘다.
+      ⛔ 이 번호는 ★총무 기계에만 남는다 — 랭킹·공유 글에는 한 번도 안 나온다. */
+const hyphen = (v) => {
+  const d = String(v || "").replace(/[^0-9]/g, "").slice(0, 11);
+  if (d.indexOf("02") === 0) {
+    if (d.length <= 2) return d;
+    if (d.length <= 5) return d.slice(0, 2) + "-" + d.slice(2);
+    if (d.length <= 9) return d.slice(0, 2) + "-" + d.slice(2, 5) + "-" + d.slice(5);
+    return d.slice(0, 2) + "-" + d.slice(2, 6) + "-" + d.slice(6, 10);
+  }
+  if (d.length <= 3) return d;
+  if (d.length <= 7) return d.slice(0, 3) + "-" + d.slice(3);
+  if (d.length === 10) return d.slice(0, 3) + "-" + d.slice(3, 6) + "-" + d.slice(6);
+  return d.slice(0, 3) + "-" + d.slice(3, 7) + "-" + d.slice(7);
+};
+/* 신고 에버를 적는 법 — 3쿠션은 0.700, 4구는 0.25 꼴 */
+const fmtDecl = (v) => (Number(v) > 0 ? Number(v).toFixed(3) : "");
+
 /* 그 동우회에서 친 판만. ⛔ 동우회를 안 고르고 친 판은 안 들어온다 */
 const clubGames = (games, clubId) =>
   bilGames(games).filter((g) => g.clubId && g.clubId === clubId);
@@ -5489,11 +5508,8 @@ function ClubList({ data, save, say, onOpen }) {
 }
 
 /* ── ② 랭킹 ── */
-function ClubRank({ data, save, say, club, onBack, onRoster, onMember }) {
-  const [mode, setMode] = useState("3");
-  const [range, setRange] = useState("3m");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState(today());
+function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
+  const { mode, setMode, range, setRange, from, setFrom, to, setTo, bound } = P;
   const [sort, setSort] = useState("avg");
   const [grp, setGrp] = useState("all");
   const [min, setMin] = useState(10);
@@ -5504,7 +5520,6 @@ function ClubRank({ data, save, say, club, onBack, onRoster, onMember }) {
         만들기 화면에 「나중에 고칠 수 있습니다」라고 적어 놓고 ★길을 안 만들었다 */
   const [ren, setRen] = useState("");
 
-  const bound = useMemo(() => rangeBound(range, from, to), [range, from, to]);
   const rows = useMemo(() => rankList(data.games, {
     clubId: club.id, mode, from: bound[0], to: bound[1], withTeam: team,
   }), [data.games, club.id, mode, bound, team]);
@@ -5575,7 +5590,7 @@ function ClubRank({ data, save, say, club, onBack, onRoster, onMember }) {
     orphan.forEach((g) => g.players.forEach((p) => {
       const n = (p.name || "").trim();
       if (!n || byName[n]) return;
-      const m = { id: "m_" + uid(), name: n, h3: 0, h4: 0, linked: false };
+      const m = { id: "m_" + uid(), name: n, h3: 0, e3: 0, h4: 0, e4: 0, phone: "", role: "member", status: "invited", linked: false };
       byName[n] = m; add.push(m);
     }));
     orphan.forEach((g) => g.players.forEach((p) => {
@@ -5744,16 +5759,12 @@ function ClubRank({ data, save, say, club, onBack, onRoster, onMember }) {
 }
 
 /* ── ③ 한 사람 ── */
-function ClubMember({ data, club, mkey, onBack, onMember }) {
-  const [mode, setMode] = useState("3");
-  const [range, setRange] = useState("3m");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState(today());
+function ClubMember({ data, club, mkey, P, onBack }) {
+  const { mode, setMode, range, setRange, from, setFrom, to, setTo, bound } = P;
   const [foe, setFoe] = useState("");
   const [moreF, setMoreF] = useState(false);
   const [moreR, setMoreR] = useState(false);
 
-  const bound = useMemo(() => rangeBound(range, from, to), [range, from, to]);
   const o = useMemo(() => rankOne(data.games, mkey, {
     clubId: club.id, mode, from: bound[0], to: bound[1], withTeam: false,
   }), [data.games, club.id, mkey, mode, bound]);
@@ -5873,33 +5884,34 @@ function ClubMember({ data, club, mkey, onBack, onMember }) {
   );
 }
 
-/* ── ④ 명단 ── */
-function ClubRoster({ data, save, say, club, onBack }) {
+/* ── ④ 명단 ──
+   ★ 2026-11-13 — 표에서 ★카드로 바꿨다 [대표님].
+        칸이 늘어(3구·4구 수지와 신고 에버, 연락처) 한 줄에 안 들어간다.
+     ★ 카드를 누르면 ★그 사람 기록. ✎ 를 누르면 고치는 칸.
+     ★ 「신고 에버」는 ★본인이 알려준 값이고, 「실제」는 ★쳐서 나온 값이다.
+        둘을 한 칸으로 합치면 반드시 어긋난다 — ★나란히 둔다. */
+function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
+  const { mode, setMode, range, setRange, from, setFrom, to, setTo, bound } = P;
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState("all");            /* all · active · invited */
   const [add, setAdd] = useState(false);
-  const [nm, setNm] = useState("");
-  const [h3, setH3] = useState("");
-  const [h4, setH4] = useState("");
-  const [edit, setEdit] = useState("");
+  const [edit, setEdit] = useState("");             /* 고치는 중인 회원 번호 */
+  const blank = { name: "", h3: "", e3: "", h4: "", e4: "", phone: "" };
+  const [f, setF] = useState(blank);
 
   const ms = memsOf(club);
   const put = (next) => save({
     ...data, clubs: clubsOf(data).map((c) => (c.id === club.id ? { ...c, members: next } : c)),
   });
-  const addOne = () => {
-    const n = nm.trim();
-    if (!n) return say("이름을 적어주세요");
-    if (ms.some((m) => m.name === n)) {
-      return say(`이미 「${n}」 님이 있습니다. 다른 분이면 ${n}2 처럼 적어주세요`);
-    }
-    put([...ms, { id: "m_" + uid(), name: n, h3: Number(h3) || 0, h4: Number(h4) || 0, linked: false }]);
-    setNm(""); setH3(""); setH4(""); setAdd(false); say(`「${n}」 님을 넣었습니다`);
-  };
-  const del = (m) => {
-    if (!confirm(`${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
-    put(ms.filter((x) => x.id !== m.id)); say("뺐습니다");
-  };
-  const cnt = useMemo(() => {
+  /* 그 기간·그 종목에서 ★실제로 친 값 */
+  const live = useMemo(() => {
+    const by = {};
+    rankList(data.games, { clubId: club.id, mode, from: bound[0], to: bound[1], withTeam: false })
+      .forEach((m) => { if (m.mid) by[m.mid] = m; });
+    return by;
+  }, [data.games, club.id, mode, bound]);
+  /* 판 수는 ★기간과 상관없이 모두 센다 — 「이 사람이 우리와 몇 판 쳤나」 */
+  const allN = useMemo(() => {
     const by = {};
     clubGames(data.games, club.id).forEach((g) => g.players.forEach((p) => {
       if (p.mid) by[p.mid] = (by[p.mid] || 0) + 1;
@@ -5907,17 +5919,82 @@ function ClubRoster({ data, save, say, club, onBack }) {
     return by;
   }, [data.games, club.id]);
 
-  const list = ms.filter((m) => !q.trim() || m.name.includes(q.trim()));
+  const addOne = () => {
+    const n = f.name.trim();
+    if (!n) return say("이름을 적어주세요");
+    if (ms.some((m) => m.name === n)) {
+      return say(`이미 「${n}」 님이 있습니다. 다른 분이면 ${n}2 처럼 적어주세요`);
+    }
+    put([...ms, {
+      id: "m_" + uid(), name: n,
+      h3: Number(f.h3) || 0, e3: Number(f.e3) || 0,
+      h4: Number(f.h4) || 0, e4: Number(f.e4) || 0,
+      phone: f.phone || "", role: "member", status: "invited", linked: false,
+    }]);
+    setF(blank); setAdd(false); say(`「${n}」 님을 넣었습니다`);
+  };
+  const patch = (id, kv) => put(ms.map((x) => (x.id === id ? { ...x, ...kv } : x)));
+  const del = (m) => {
+    if (!confirm(`${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
+    put(ms.filter((x) => x.id !== m.id)); setEdit(""); say("뺐습니다");
+  };
+
+  const nActive = ms.filter((m) => m.status === "active").length;
+  const list = ms
+    .filter((m) => tab === "all" || (tab === "active" ? m.status === "active" : m.status !== "active"))
+    .filter((m) => !q.trim() || m.name.includes(q.trim()));
+
+  const Fld = ({ lbl, v, set, ph, wide }) => (
+    <div style={{ flex: wide ? 2 : 1, minWidth: 0 }}>
+      <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 4 }}>{lbl}</div>
+      <input value={v} onChange={(e) => set(e.target.value)} placeholder={ph}
+        className="num" style={{ fontSize: 13.5, padding: "9px 10px", width: "100%" }} />
+    </div>
+  );
+  /* 한 종목 줄 — 수지 · 신고 · 실제 */
+  const Line = ({ m, md }) => {
+    const h = md === "3" ? m.h3 : m.h4;
+    const e = md === "3" ? m.e3 : m.e4;
+    const r = mode === md ? live[m.id] : null;
+    return (
+      <div style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--chalk)", marginTop: 4 }}>
+        <span style={{ width: 28, color: "#6F8598", flexShrink: 0 }}>{md === "3" ? "3구" : "4구"}</span>
+        <span style={{ flexShrink: 0 }}>수지 <span className="num" style={{ color: "#B9CCDA" }}>{Number(h) > 0 ? h : "–"}</span></span>
+        <span style={{ flexShrink: 0 }}>신고 <span className="num" style={{ color: "#B9CCDA" }}>{fmtDecl(e) || "–"}</span></span>
+        <span style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+          실제 <span className="num" style={{ color: r ? ACCENT : "#55708A", fontSize: 13.5 }}>
+            {r ? fmtAvg(r.avg, md) : "–"}
+          </span>
+          {r && <span className="num" style={{ color: "#55708A", fontSize: 11 }}> {r.n}판</span>}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div style={{ padding: "0 14px 14px" }}>
       <Back onClick={onBack}>{club.name}</Back>
-      <div style={{ fontSize: 19, fontWeight: 700 }}>명단</div>
-      <Sub>회원 {ms.length}명</Sub>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
+        <div style={{ fontSize: 19, fontWeight: 700, flex: 1 }}>명단</div>
+        <span style={{ fontSize: 11.5, color: "#6F8598" }}>
+          회원 <span className="num">{ms.length}</span>명 · 정식 <span className="num">{nActive}</span>
+        </span>
+      </div>
 
-      {ms.length > 6 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름으로 찾기" style={{ fontSize: 14, marginBottom: 9 }} />}
+      {/* ★ 랭킹에서 고른 종목·기간이 ★그대로 따라온다 (여기서 바꿔도 랭킹이 따라간다) */}
+      <div style={{ height: 11 }} />
+      <Pills cols="repeat(2,1fr)" value={mode} set={setMode} items={[["3", "3쿠션"], ["4", "4구"]]} />
+      <div style={{ height: 7 }} />
+      <RangePills range={range} setRange={setRange} from={from} setFrom={setFrom}
+        to={to} setTo={setTo} bound={bound} tail=" · 「실제」는 이 기간입니다" />
 
-      {ms.length === 0 ? (
+      <div style={{ height: 11 }} />
+      {ms.length > 5 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름으로 찾기" style={{ fontSize: 14, marginBottom: 8 }} />}
+      <Pills cols="repeat(3,1fr)" value={tab} set={setTab}
+        items={[["all", `전체 ${ms.length}`], ["active", `정식 ${nActive}`], ["invited", `초청 중 ${ms.length - nActive}`]]} />
+      <div style={{ height: 11 }} />
+
+      {ms.length === 0 && (
         <div style={{ padding: "30px 10px", textAlign: "center", fontSize: 13.5, color: "var(--chalk)", lineHeight: 1.9 }}>
           아직 회원이 없습니다.<br />
           <span style={{ fontSize: 12, color: "#6F8598" }}>
@@ -5925,70 +6002,109 @@ function ClubRoster({ data, save, say, club, onBack }) {
             이름을 <b style={{ color: "var(--ivory)" }}>치지 않고 고를 수 있습니다.</b>
           </span>
         </div>
-      ) : (
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 13px", marginBottom: 10 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <tbody>
-              <tr><th style={{ textAlign: "left" }}>이름</th><th>3쿠션</th><th>4구</th><th>판</th><th /></tr>
-              {list.map((m) => (
-                <tr key={m.id}>
-                  <td style={{ textAlign: "left", fontWeight: 600 }}>
-                    {edit === m.id ? (
-                      <input defaultValue={m.name} autoFocus maxLength={12}
-                        onBlur={(e) => {
-                          const v = e.target.value.trim();
-                          setEdit("");
-                          if (v && v !== m.name) {
-                            put(ms.map((x) => (x.id === m.id ? { ...x, name: v } : x)));
-                            say("이름을 고쳤습니다 · 지난 기록은 그대로입니다");
-                          }
-                        }}
-                        style={{ fontSize: 13.5, padding: "5px 7px" }} />
-                    ) : (
-                      <button onClick={() => setEdit(m.id)} style={{ fontWeight: 600, fontSize: 13.5 }}>{m.name}</button>
-                    )}
-                  </td>
-                  <td>
-                    <input defaultValue={m.h3 || ""} inputMode="numeric" placeholder="–"
-                      onBlur={(e) => put(ms.map((x) => (x.id === m.id ? { ...x, h3: Number(e.target.value) || 0 } : x)))}
-                      className="num" style={{ width: 46, fontSize: 13, padding: "5px 0", textAlign: "center" }} />
-                  </td>
-                  <td>
-                    <input defaultValue={m.h4 || ""} inputMode="numeric" placeholder="–"
-                      onBlur={(e) => put(ms.map((x) => (x.id === m.id ? { ...x, h4: Number(e.target.value) || 0 } : x)))}
-                      className="num" style={{ width: 52, fontSize: 13, padding: "5px 0", textAlign: "center" }} />
-                  </td>
-                  <td className="num">{cnt[m.id] || 0}</td>
-                  <td style={{ width: 28 }}>
-                    <button onClick={() => del(m)} style={{ color: "#6F8598", fontSize: 15, padding: "3px 4px" }}>×</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
+
+      {list.map((m) => (
+        <div key={m.id} style={{
+          background: "var(--card)", border: "1px solid var(--line)",
+          borderRadius: 13, padding: "12px 13px", marginBottom: 9,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <button onClick={() => onMember(m.id)} style={{
+              flex: 1, minWidth: 0, textAlign: "left", fontSize: 15.5, fontWeight: 700,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {m.name}
+              <span style={{
+                display: "inline-block", marginLeft: 7, padding: "2px 7px", borderRadius: 999,
+                fontSize: 10, fontWeight: 700, verticalAlign: 2,
+                background: m.status === "active" ? "rgba(79,178,134,.16)" : "rgba(244,238,223,.09)",
+                color: m.status === "active" ? "var(--green)" : "#8FA8BC",
+              }}>{m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중"}</span>
+            </button>
+            <button onClick={() => setEdit(edit === m.id ? "" : m.id)} aria-label="고치기"
+              style={{ padding: "5px 8px", fontSize: 13, color: edit === m.id ? ACCENT : "#6F8598" }}>✎</button>
+            <button onClick={() => onMember(m.id)} aria-label="기록 보기"
+              style={{ padding: "5px 4px", fontSize: 15, color: "#44627B" }}>›</button>
+          </div>
+
+          <Line m={m} md="3" />
+          <Line m={m} md="4" />
+
+          <div style={{ display: "flex", gap: 9, marginTop: 7, fontSize: 11.5, color: "#6F8598" }}>
+            <span className="num" style={{ flex: 1, minWidth: 0 }}>{m.phone || "연락처 없음"}</span>
+            <span>모두 <span className="num" style={{ color: "#B9CCDA" }}>{allN[m.id] || 0}</span>판</span>
+          </div>
+
+          {edit === m.id && (
+            <div style={{ marginTop: 11, paddingTop: 11, borderTop: "1px solid rgba(244,238,223,.1)" }}>
+              <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 4 }}>이름</div>
+              <input defaultValue={m.name} maxLength={12}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (!v || v === m.name) return;
+                  if (ms.some((x) => x.id !== m.id && x.name === v)) return say(`이미 「${v}」 님이 있습니다`);
+                  patch(m.id, { name: v }); say("이름을 고쳤습니다 · 지난 기록은 그대로입니다");
+                }} style={{ fontSize: 14 }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <Fld lbl="3구 수지" v={m.h3 || ""} ph="15" set={(v) => patch(m.id, { h3: Number(v.replace(/[^0-9]/g, "")) || 0 })} />
+                <Fld lbl="3구 신고 에버" v={m.e3 || ""} ph="0.700" set={(v) => patch(m.id, { e3: Number(v.replace(/[^0-9.]/g, "")) || 0 })} />
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <Fld lbl="4구 수지" v={m.h4 || ""} ph="150" set={(v) => patch(m.id, { h4: Number(v.replace(/[^0-9]/g, "")) || 0 })} />
+                <Fld lbl="4구 신고 에버" v={m.e4 || ""} ph="0.250" set={(v) => patch(m.id, { e4: Number(v.replace(/[^0-9.]/g, "")) || 0 })} />
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <Fld lbl="연락처 (총무만 봅니다)" v={m.phone || ""} ph="010-0000-0000"
+                  set={(v) => patch(m.id, { phone: hyphen(v) })} wide />
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 5 }}>상태</div>
+                <Pills cols="repeat(2,1fr)" value={m.status === "active" ? "active" : "invited"}
+                  set={(v) => patch(m.id, { status: v })}
+                  items={[["invited", "초청 중"], ["active", "정식 회원"]]} />
+                <div style={{ fontSize: 11, color: "#61798C", marginTop: 6, lineHeight: 1.6 }}>
+                  ⛔ 지금은 총무가 ★손으로 바꿉니다. 본인이 초대 코드로 들어와
+                  저절로 「정식」이 되는 것은 ★다음 판입니다.
+                </div>
+              </div>
+              <button onClick={() => del(m)} style={{
+                width: "100%", marginTop: 13, padding: 11, borderRadius: 10, fontSize: 12.5,
+                color: "#C87B74", border: "1px solid rgba(200,123,116,.35)",
+              }}>명단에서 빼기</button>
+            </div>
+          )}
+        </div>
+      ))}
 
       {add ? (
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 13, padding: 14 }}>
           <Lbl>이름</Lbl>
-          <input value={nm} onChange={(e) => setNm(e.target.value)} placeholder="김성곤" maxLength={12} autoFocus />
-          <div style={{ display: "flex", gap: 9, marginTop: 9 }}>
-            <div style={{ flex: 1 }}><Lbl>3쿠션 수지</Lbl>
-              <input value={h3} onChange={(e) => setH3(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="15" className="num" /></div>
-            <div style={{ flex: 1 }}><Lbl>4구 수지</Lbl>
-              <input value={h4} onChange={(e) => setH4(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="150" className="num" /></div>
+          <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="김성곤" maxLength={12} autoFocus />
+          <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+            <Fld lbl="3구 수지" v={f.h3} ph="15" set={(v) => setF({ ...f, h3: v.replace(/[^0-9]/g, "") })} />
+            <Fld lbl="3구 신고 에버" v={f.e3} ph="0.700" set={(v) => setF({ ...f, e3: v.replace(/[^0-9.]/g, "") })} />
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <Fld lbl="4구 수지" v={f.h4} ph="150" set={(v) => setF({ ...f, h4: v.replace(/[^0-9]/g, "") })} />
+            <Fld lbl="4구 신고 에버" v={f.e4} ph="0.250" set={(v) => setF({ ...f, e4: v.replace(/[^0-9.]/g, "") })} />
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <Fld lbl="연락처 (총무만 봅니다)" v={f.phone} ph="010-0000-0000"
+              set={(v) => setF({ ...f, phone: hyphen(v) })} wide />
           </div>
           <CBtn onClick={addOne}>넣기</CBtn>
-          <CBtn ghost onClick={() => { setAdd(false); setNm(""); }}>그냥 닫기</CBtn>
+          <CBtn ghost onClick={() => { setAdd(false); setF(blank); }}>그냥 닫기</CBtn>
         </div>
       ) : <CBtn ghost onClick={() => setAdd(true)}>＋ 회원 더하기</CBtn>}
 
       <div style={{ fontSize: 11, color: "#6F8598", lineHeight: 1.8, marginTop: 13 }}>
-        ★ 이름을 눌러 <b>고칠 수 있습니다.</b> 고쳐도 <b>지난 기록은 안 깨집니다</b> —
-        사람에게 번호가 붙어 있고 이름은 이름표일 뿐입니다.<br />
-        ★ 수지는 <b>종목마다 따로</b> 둡니다. 새 게임에서 이 사람을 고르면 그 값이 들어갑니다.<br />
-        ⛔ 명단에서 빼도 <b>친 기록은 그대로 남습니다.</b>
+        ★ <b>「신고」</b>는 본인이 알려준 값이고 <b>「실제」</b>는 쳐서 나온 값입니다.
+        기간을 바꾸면 <b>실제</b>만 바뀝니다.<br />
+        ★ 카드를 누르면 <b>그 사람이 친 기록</b>이 나옵니다. <b>✎</b> 는 고치는 칸입니다.<br />
+        ★ 이름을 고쳐도 <b>지난 기록은 안 깨집니다</b> — 사람마다 번호가 붙어 있습니다.<br />
+        ⛔ 연락처는 <b>이 기계에만</b> 남습니다. 랭킹·공유 글에는 나오지 않습니다.<br />
+        ⛔ 명단에서 빼도 <b>친 기록은 그대로</b>입니다.
       </div>
     </div>
   );
@@ -5999,18 +6115,31 @@ function Clubs({ data, save, say }) {
   const [view, setView] = useState("list");         /* list · rank · member · roster */
   const [cid, setCid] = useState("");
   const [mkey, setMkey] = useState("");
+  const [back, setBack] = useState("rank");         /* 한 사람 화면에서 ★어디로 돌아갈지 */
+  /* ★ 2026-11-13 — 종목과 기간을 ★여기서 한 벌로 쥔다 [대표님].
+        「이전 화면에서 기간을 누르면 ★양쪽에서 같이 조회되게」
+     ⇒ 랭킹에서 기간을 바꾸면 명단의 ★실제 에버도 같이 바뀐다. */
+  const [mode, setMode] = useState("3");
+  const [range, setRange] = useState("3m");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState(today());
+  const bound = useMemo(() => rangeBound(range, from, to), [range, from, to]);
+  const P = { mode, setMode, range, setRange, from, setFrom, to, setTo, bound };
+
   const club = clubById(data, cid);
   if (!club && view !== "list") { setView("list"); return null; }
   if (view === "rank") return (
-    <ClubRank data={data} save={save} say={say} club={club}
+    <ClubRank data={data} save={save} say={say} club={club} P={P}
       onBack={() => setView("list")} onRoster={() => setView("roster")}
-      onMember={(k) => { setMkey(k); setView("member"); }} />
+      onMember={(k) => { setMkey(k); setBack("rank"); setView("member"); }} />
   );
   if (view === "member") return (
-    <ClubMember data={data} club={club} mkey={mkey} onBack={() => setView("rank")} />
+    <ClubMember data={data} club={club} mkey={mkey} P={P} onBack={() => setView(back)} />
   );
   if (view === "roster") return (
-    <ClubRoster data={data} save={save} say={say} club={club} onBack={() => setView("rank")} />
+    <ClubRoster data={data} save={save} say={say} club={club} P={P}
+      onBack={() => setView("rank")}
+      onMember={(k) => { setMkey(k); setBack("roster"); setView("member"); }} />
   );
   return <ClubList data={data} save={save} say={say} onOpen={(id) => { setCid(id); setView("rank"); }} />;
 }
