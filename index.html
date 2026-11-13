@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-66 일자별 차례 — 같은 날 두 경기가 섞이던 것 -->
+<!-- build: 1판-67 3인 경기 — 사람마다 목표·등수·점수·에버 · 함께 친 분별 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7301,6 +7301,55 @@ function rankList(games, opt) {
 }
 
 /* ② 한 사람 — 일자별 줄과 상대별 묶음 */
+/* 🔴 2026-11-13 — 「3명이서 게임할 때를 생각해보자. 상세 게임 현황은
+      ★사람마다 목표·등수·달성점수·에버를 적어 주면 어때」 [대표님]
+
+   ⚠ 등수 규칙은 ★ptsOf 하나뿐이다 (00-head · 2026-09-18). 여기서 ★다시 세지 않는다.
+     닿은 사람 0명 → 무승부 · 1명 → 1등 하나와 ★공동 2등 · 2명 이상 → 닿은 차례대로.
+   ⚠ 옛 기록에는 reached·done 이 없다 — order 로 버틴다. */
+const rankRows = g => {
+  const us = (g.players || []).map(p => ({
+    name: p.name,
+    mid: p.mid || "",
+    goal: Number(p.handicap) || 0,
+    score: Number(p.score) || 0,
+    inn: Number(p.inn) || 1,
+    key: p.seatKey || p.name
+  }));
+  const n = us.length;
+  const reach = Array.isArray(g.reached) && g.reached.length ? g.reached : g.drew ? [] : Array.isArray(g.order) ? g.order : [];
+  const done = Number(g.done) || reach.length;
+  us.forEach(u => {
+    u.ri = reach.indexOf(u.key);
+    u.pt = ptsOf(n, done, u.ri);
+    u.avg = u.inn > 0 ? u.score / u.inn : 0;
+  });
+  const sorted = us.slice().sort((a, b) => b.pt - a.pt || (a.ri < 0 ? 99 : a.ri) - (b.ri < 0 ? 99 : b.ri));
+  let place = 0,
+    lastPt = null,
+    cnt = 0;
+  sorted.forEach(u => {
+    cnt++;
+    if (u.pt !== lastPt) {
+      place = cnt;
+      lastPt = u.pt;
+    }
+    u.place = place;
+  });
+  const same = {};
+  sorted.forEach(u => {
+    same[u.place] = (same[u.place] || 0) + 1;
+  });
+  sorted.forEach(u => {
+    u.tie = same[u.place] > 1;
+    /* ⚠ 아무도 못 닿은 판은 ★「공동 1등」이다 — 기록 보기가 이미 그렇게 적는다.
+          「무승부」라고 쓰면 ★같은 판을 두 화면이 다르게 부른다 [2026-11-13 대표님 화면] */
+    u.label = u.tie ? `공동 ${u.place}등` : `${u.place}등`;
+  });
+  return sorted;
+};
+/* 그 판이 ★몇 자리로 치른 것인가 — 복식은 사람 수가 아니라 ★편 수다 */
+const seatsOf = g => g.team && Array.isArray(g.teams) && g.teams.length ? g.teams.length : (g.players || []).length;
 function rankOne(games, key, opt) {
   const rows = [];
   rankPick(games, opt).forEach(g => {
@@ -7323,13 +7372,21 @@ function rankOne(games, key, opt) {
          ⇒ ★끝난 시각으로 줄을 세운다. 시각이 없는 옛 기록은 경기끼리 묶어 둔다. */
       end: Number(g.endAt) || 0,
       sk: seriesKey(g),
+      g,
+      /* ★ 3인 이상 줄을 그리려면 판 자체가 필요하다 */
       avg: (Number(me.score) || 0) / (Number(me.inn) || 1),
       res: me.won === true ? "승" : me.won === false ? "패" : "무",
       foes: g.players.filter(p => keyOfPlayer(p) !== key).map(f => ({
         key: keyOfPlayer(f),
         name: f.name || "",
         score: Number(f.score) || 0
-      }))
+      })),
+      /* 🔴 2026-11-13 — 「함께 친 분 · 판 · 1등 2등 3등 · 에버」로 묶어 보여주기로
+            [대표님]. 3인 경기를 사람마다 한 줄로 적으면 ★같은 6판이 두 줄이 되어
+            「전영교와 6판 · 양희승과 6판」처럼 보인다. 실은 ★셋이 함께 친 6판이다.
+         ⚠ 2인 경기는 묶음이 곧 그 상대 한 사람이라 ★그대로 승-무-패를 쓴다 */
+      seats: seatsOf(g),
+      place: seatsOf(g) > 2 && !g.team ? (rankRows(g).find(u => (u.mid ? u.mid : "n:" + u.name) === key) || {}).place || 0 : 0
     });
   });
   rows.sort((a, b) => {
@@ -7356,6 +7413,32 @@ function rankOne(games, key, opt) {
     t.name = f.name || t.name;
     if (r.res === "승") t.w++;else if (r.res === "패") t.l++;else t.d++;
   }));
+  /* ★ 함께 친 분 묶음 — 그 판에 나 말고 누가 있었나 (이름 순으로 열쇠를 만든다) */
+  const bm = {};
+  rows.forEach(r => {
+    const ks = r.foes.map(f => f.key).sort();
+    const mk2 = ks.join("|");
+    const t = bm[mk2] || (bm[mk2] = {
+      key: mk2,
+      names: r.foes.map(f => f.name).join(" · "),
+      n: 0,
+      w: 0,
+      d: 0,
+      l: 0,
+      pt: 0,
+      inn: 0,
+      many: r.seats > 2,
+      place: {}
+    });
+    r.mk = mk2;
+    t.n++;
+    t.pt += r.my;
+    t.inn += r.inn;
+    if (r.seats > 2) {
+      t.many = true;
+      t.place[r.place] = (t.place[r.place] || 0) + 1;
+    } else if (r.res === "승") t.w++;else if (r.res === "패") t.l++;else t.d++;
+  });
   const tot = rows.reduce((a, r) => ({
     n: a.n + 1,
     pt: a.pt + r.my,
@@ -7363,7 +7446,13 @@ function rankOne(games, key, opt) {
     w: a.w + (r.res === "승" ? 1 : 0),
     d: a.d + (r.res === "무" ? 1 : 0),
     l: a.l + (r.res === "패" ? 1 : 0),
-    hi: Math.max(a.hi, r.high)
+    hi: Math.max(a.hi, r.high),
+    /* ★ 3인 이상이 섞여 있으면 ★등수로 적어야 한다 — 1등만 「승」이라 승-무-패는 뜻이 흐려진다 */
+    many: a.many || r.seats > 2,
+    place: r.seats > 2 ? {
+      ...a.place,
+      [r.place]: (a.place[r.place] || 0) + 1
+    } : a.place
   }), {
     n: 0,
     pt: 0,
@@ -7371,7 +7460,9 @@ function rankOne(games, key, opt) {
     w: 0,
     d: 0,
     l: 0,
-    hi: 0
+    hi: 0,
+    many: false,
+    place: {}
   });
   /* ★ 친 수지 — 가장 최근 판의 값. 그 사이에 올랐거나 내렸으면 폭도 함께 준다
         (rows 는 ★최근이 앞이다) */
@@ -7385,6 +7476,10 @@ function rankOne(games, key, opt) {
   return {
     rows,
     hd,
+    mates: Object.values(bm).map(t => ({
+      ...t,
+      avg: t.inn ? t.pt / t.inn : 0
+    })).sort((a, b) => b.n - a.n),
     foes: Object.values(bf).map(t => ({
       ...t,
       avg: t.inn ? t.pt / t.inn : 0
@@ -9358,9 +9453,13 @@ function ClubMember({
   }).find(x => x.key === mkey) || {}).name : "" : "";
   const me = memById(club, mkey);
   const title = me && me.name || nm || "이름 없음";
-  const rows = foe ? o.rows.filter(r => r.foes.some(f => f.key === foe)) : o.rows;
-  const sel = foe ? o.foes.find(f => f.key === foe) : null;
-  const shownF = moreF ? o.foes : o.foes.slice(0, 6);
+  /* ⚠ foe 에는 ★사람 열쇠(알약)나 ★묶음 열쇠(표의 줄)가 들어온다.
+        묶음 열쇠에는 「|」가 들어 있다 — 혼자면 없다 */
+  const isMate = foe.indexOf("|") >= 0;
+  const rows = !foe ? o.rows : isMate ? o.rows.filter(r => r.mk === foe) : o.rows.filter(r => r.foes.some(f => f.key === foe));
+  const sel = !foe ? null : o.mates.find(m2 => m2.key === foe) || o.foes.find(f => f.key === foe) || null;
+  const selName = sel ? sel.names || sel.name : "";
+  const shownF = moreF ? o.mates : o.mates.slice(0, 6);
   const shownR = moreR ? rows : rows.slice(0, 10);
   const col = r => r === "승" ? "var(--green)" : r === "패" ? "#C87B74" : "#8FA8BC";
   return /*#__PURE__*/React.createElement("div", {
@@ -9482,7 +9581,7 @@ function ClubMember({
       fontSize: 12,
       color: "#6F8598"
     }
-  }, sel ? `${title} 님 — ${sel.name} 님과` : `${title} 님 에버`), /*#__PURE__*/React.createElement("div", {
+  }, sel ? `${title} 님 — ${selName} 님과` : `${title} 님 에버`), /*#__PURE__*/React.createElement("div", {
     className: "num",
     style: {
       fontSize: 26,
@@ -9496,7 +9595,17 @@ function ClubMember({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "num"
-  }, sel ? sel.n : o.tot.n), "판 · ", title, " ", /*#__PURE__*/React.createElement("span", {
+  }, sel ? sel.n : o.tot.n), "판 · ", title, " ", (sel || o.tot).many ? /*#__PURE__*/React.createElement(React.Fragment, null, [1, 2, 3, 4, 5].filter(k => (sel || o.tot).place[k]).map(k => /*#__PURE__*/React.createElement("span", {
+    key: k,
+    style: {
+      marginRight: 7
+    }
+  }, k, "등 ", /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      color: k === 1 ? "var(--green)" : "var(--ivory)"
+    }
+  }, (sel || o.tot).place[k])))) : null, (sel || o.tot).many ? null : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     className: "num",
     style: {
       color: "var(--green)"
@@ -9508,7 +9617,7 @@ function ClubMember({
     style: {
       color: "#C87B74"
     }
-  }, sel ? sel.l : o.tot.l), "패", !sel && /*#__PURE__*/React.createElement(React.Fragment, null, " · 하이런 ", /*#__PURE__*/React.createElement("span", {
+  }, sel ? sel.l : o.tot.l), "패"), !sel && /*#__PURE__*/React.createElement(React.Fragment, null, " · 하이런 ", /*#__PURE__*/React.createElement("span", {
     className: "num"
   }, o.tot.hi), " · ", /*#__PURE__*/React.createElement("span", {
     className: "num"
@@ -9520,7 +9629,7 @@ function ClubMember({
       color: "#6F8598",
       margin: "15px 2px 6px"
     }
-  }, "상대별 — 많이 친 순 · ", /*#__PURE__*/React.createElement("b", {
+  }, "함께 친 분별 — 많이 친 순 · ", /*#__PURE__*/React.createElement("b", {
     style: {
       color: ACCENT
     }
@@ -9549,7 +9658,7 @@ function ClubMember({
       padding: "0 0 6px",
       fontWeight: 500
     }
-  }, "상대"), /*#__PURE__*/React.createElement("th", {
+  }, "함께 친 분"), /*#__PURE__*/React.createElement("th", {
     style: {
       whiteSpace: "nowrap",
       padding: "0 6px 6px",
@@ -9561,7 +9670,7 @@ function ClubMember({
       padding: "0 6px 6px",
       fontWeight: 500
     }
-  }, "승-무-패"), /*#__PURE__*/React.createElement("th", {
+  }, o.mates.some(m2 => m2.many) ? "1등-2등-3등" : "승-무-패"), /*#__PURE__*/React.createElement("th", {
     style: {
       whiteSpace: "nowrap",
       padding: "0 0 6px",
@@ -9595,7 +9704,7 @@ function ClubMember({
       textOverflow: "ellipsis",
       whiteSpace: "nowrap"
     }
-  }, f.name || "이름 없음"), /*#__PURE__*/React.createElement("span", {
+  }, f.names || "이름 없음"), /*#__PURE__*/React.createElement("span", {
     style: {
       color: foe === f.key ? ACCENT : "#44627B",
       fontSize: 13,
@@ -9615,7 +9724,7 @@ function ClubMember({
       whiteSpace: "nowrap",
       padding: "3px 6px"
     }
-  }, f.w, "-", f.d, "-", f.l), /*#__PURE__*/React.createElement("td", {
+  }, f.many ? [1, 2, 3, 4, 5].filter(k => k <= 3 || f.place[k]).map(k => f.place[k] || 0).join("-") : `${f.w}-${f.d}-${f.l}`), /*#__PURE__*/React.createElement("td", {
     className: "num",
     style: {
       color: ACCENT,
@@ -9624,7 +9733,7 @@ function ClubMember({
       textAlign: "right",
       padding: "3px 0"
     }
-  }, fmtAvg(f.avg, mode)))))), o.foes.length > 6 && /*#__PURE__*/React.createElement("button", {
+  }, fmtAvg(f.avg, mode)))))), o.mates.length > 6 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setMoreF(v => !v),
     style: {
       width: "100%",
@@ -9652,7 +9761,7 @@ function ClubMember({
       color: "#6F8598",
       margin: "15px 2px 2px"
     }
-  }, "일자별 · ", sel ? `${sel.name} 님과 ` : "", /*#__PURE__*/React.createElement("span", {
+  }, "일자별 · ", sel ? `${selName} 님과 ` : "", /*#__PURE__*/React.createElement("span", {
     className: "num"
   }, rows.length), "판", " · ", /*#__PURE__*/React.createElement("b", {
     style: {
@@ -9736,7 +9845,7 @@ function ClubMember({
       color: "#44627B",
       fontSize: 10
     }
-  }, r.gameNo, "번")), /*#__PURE__*/React.createElement("span", {
+  }, r.gameNo, "번")), !(seatsOf(r.g) > 2 && !r.g.team) && /*#__PURE__*/React.createElement("span", {
     style: {
       flex: 1,
       minWidth: 0,
@@ -9744,7 +9853,68 @@ function ClubMember({
       textOverflow: "ellipsis",
       whiteSpace: "nowrap"
     }
-  }, r.foes.map(f => f.name).join(" · ")), /*#__PURE__*/React.createElement("span", {
+  }, r.foes.map(f => f.name).join(" · ")), seatsOf(r.g) > 2 && !r.g.team ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, rankRows(r.g).map((u, k) => {
+    const mine = mkey.indexOf("n:") === 0 ? u.name === mkey.slice(2) : u.mid === mkey;
+    return /*#__PURE__*/React.createElement("span", {
+      key: u.name + k,
+      style: {
+        display: "flex",
+        gap: 5,
+        alignItems: "baseline",
+        marginTop: k ? 4 : 0,
+        fontSize: 12,
+        color: mine ? "var(--ivory)" : "#8FA8BC",
+        fontWeight: mine ? 700 : 400
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        flex: 1,
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
+      }
+    }, u.name), /*#__PURE__*/React.createElement("span", {
+      className: "num",
+      style: {
+        fontSize: 10.5,
+        color: "#55708A",
+        width: 38,
+        flexShrink: 0,
+        textAlign: "right"
+      }
+    }, "목표", u.goal), /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 44,
+        flexShrink: 0,
+        fontSize: 10.5,
+        fontWeight: 700,
+        textAlign: "center",
+        color: u.place === 1 ? "#4FB286" : "#8FA8BC"
+      }
+    }, u.label), /*#__PURE__*/React.createElement("span", {
+      className: "num",
+      style: {
+        width: 34,
+        textAlign: "right",
+        flexShrink: 0
+      }
+    }, u.score, "점"), /*#__PURE__*/React.createElement("span", {
+      className: "num",
+      style: {
+        width: 42,
+        textAlign: "right",
+        flexShrink: 0,
+        fontSize: 12.5,
+        color: mine ? ACCENT : "#7A98AD"
+      }
+    }, fmtAvg(u.avg, mode)));
+  })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     className: "num",
     style: {
       color: "#55708A",
@@ -9784,7 +9954,7 @@ function ClubMember({
       textAlign: "right",
       flexShrink: 0
     }
-  }, r.inn, "이닝"), /*#__PURE__*/React.createElement("span", {
+  }, r.inn, "이닝")), /*#__PURE__*/React.createElement("span", {
     style: {
       color: "#44627B",
       fontSize: 13,

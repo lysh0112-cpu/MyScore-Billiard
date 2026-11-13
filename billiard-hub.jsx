@@ -4601,6 +4601,46 @@ function rankList(games, opt) {
 }
 
 /* ② 한 사람 — 일자별 줄과 상대별 묶음 */
+/* 🔴 2026-11-13 — 「3명이서 게임할 때를 생각해보자. 상세 게임 현황은
+      ★사람마다 목표·등수·달성점수·에버를 적어 주면 어때」 [대표님]
+
+   ⚠ 등수 규칙은 ★ptsOf 하나뿐이다 (00-head · 2026-09-18). 여기서 ★다시 세지 않는다.
+     닿은 사람 0명 → 무승부 · 1명 → 1등 하나와 ★공동 2등 · 2명 이상 → 닿은 차례대로.
+   ⚠ 옛 기록에는 reached·done 이 없다 — order 로 버틴다. */
+const rankRows = (g) => {
+  const us = (g.players || []).map((p) => ({
+    name: p.name, mid: p.mid || "", goal: Number(p.handicap) || 0,
+    score: Number(p.score) || 0, inn: Number(p.inn) || 1,
+    key: p.seatKey || p.name,
+  }));
+  const n = us.length;
+  const reach = Array.isArray(g.reached) && g.reached.length
+    ? g.reached
+    : (g.drew ? [] : (Array.isArray(g.order) ? g.order : []));
+  const done = Number(g.done) || reach.length;
+  us.forEach((u) => {
+    u.ri = reach.indexOf(u.key);
+    u.pt = ptsOf(n, done, u.ri);
+    u.avg = u.inn > 0 ? u.score / u.inn : 0;
+  });
+  const sorted = us.slice().sort((a, b) =>
+    (b.pt - a.pt) || ((a.ri < 0 ? 99 : a.ri) - (b.ri < 0 ? 99 : b.ri)));
+  let place = 0, lastPt = null, cnt = 0;
+  sorted.forEach((u) => { cnt++; if (u.pt !== lastPt) { place = cnt; lastPt = u.pt; } u.place = place; });
+  const same = {};
+  sorted.forEach((u) => { same[u.place] = (same[u.place] || 0) + 1; });
+  sorted.forEach((u) => {
+    u.tie = same[u.place] > 1;
+    /* ⚠ 아무도 못 닿은 판은 ★「공동 1등」이다 — 기록 보기가 이미 그렇게 적는다.
+          「무승부」라고 쓰면 ★같은 판을 두 화면이 다르게 부른다 [2026-11-13 대표님 화면] */
+    u.label = u.tie ? `공동 ${u.place}등` : `${u.place}등`;
+  });
+  return sorted;
+};
+/* 그 판이 ★몇 자리로 치른 것인가 — 복식은 사람 수가 아니라 ★편 수다 */
+const seatsOf = (g) => (g.team && Array.isArray(g.teams) && g.teams.length
+  ? g.teams.length : (g.players || []).length);
+
 function rankOne(games, key, opt) {
   const rows = [];
   rankPick(games, opt).forEach((g) => {
@@ -4618,10 +4658,19 @@ function rankOne(games, key, opt) {
             두 경기가 ★서로 끼어들었다 (5·4·3·2·2·1·1 꼴).
          ⇒ ★끝난 시각으로 줄을 세운다. 시각이 없는 옛 기록은 경기끼리 묶어 둔다. */
       end: Number(g.endAt) || 0, sk: seriesKey(g),
+      g,                                     /* ★ 3인 이상 줄을 그리려면 판 자체가 필요하다 */
       avg: (Number(me.score) || 0) / (Number(me.inn) || 1),
       res: me.won === true ? "승" : me.won === false ? "패" : "무",
       foes: g.players.filter((p) => keyOfPlayer(p) !== key)
         .map((f) => ({ key: keyOfPlayer(f), name: f.name || "", score: Number(f.score) || 0 })),
+      /* 🔴 2026-11-13 — 「함께 친 분 · 판 · 1등 2등 3등 · 에버」로 묶어 보여주기로
+            [대표님]. 3인 경기를 사람마다 한 줄로 적으면 ★같은 6판이 두 줄이 되어
+            「전영교와 6판 · 양희승과 6판」처럼 보인다. 실은 ★셋이 함께 친 6판이다.
+         ⚠ 2인 경기는 묶음이 곧 그 상대 한 사람이라 ★그대로 승-무-패를 쓴다 */
+      seats: seatsOf(g),
+      place: seatsOf(g) > 2 && !g.team
+        ? (rankRows(g).find((u) => (u.mid ? u.mid : "n:" + u.name) === key) || {}).place || 0
+        : 0,
     });
   });
   rows.sort((a, b) => {
@@ -4636,11 +4685,28 @@ function rankOne(games, key, opt) {
     t.n++; t.pt += r.my; t.inn += r.inn; t.name = f.name || t.name;
     if (r.res === "승") t.w++; else if (r.res === "패") t.l++; else t.d++;
   }));
+  /* ★ 함께 친 분 묶음 — 그 판에 나 말고 누가 있었나 (이름 순으로 열쇠를 만든다) */
+  const bm = {};
+  rows.forEach((r) => {
+    const ks = r.foes.map((f) => f.key).sort();
+    const mk2 = ks.join("|");
+    const t = bm[mk2] || (bm[mk2] = {
+      key: mk2, names: r.foes.map((f) => f.name).join(" · "),
+      n: 0, w: 0, d: 0, l: 0, pt: 0, inn: 0, many: r.seats > 2, place: {},
+    });
+    r.mk = mk2;
+    t.n++; t.pt += r.my; t.inn += r.inn;
+    if (r.seats > 2) { t.many = true; t.place[r.place] = (t.place[r.place] || 0) + 1; }
+    else if (r.res === "승") t.w++; else if (r.res === "패") t.l++; else t.d++;
+  });
   const tot = rows.reduce((a, r) => ({
     n: a.n + 1, pt: a.pt + r.my, inn: a.inn + r.inn,
     w: a.w + (r.res === "승" ? 1 : 0), d: a.d + (r.res === "무" ? 1 : 0), l: a.l + (r.res === "패" ? 1 : 0),
     hi: Math.max(a.hi, r.high),
-  }), { n: 0, pt: 0, inn: 0, w: 0, d: 0, l: 0, hi: 0 });
+    /* ★ 3인 이상이 섞여 있으면 ★등수로 적어야 한다 — 1등만 「승」이라 승-무-패는 뜻이 흐려진다 */
+    many: a.many || r.seats > 2,
+    place: r.seats > 2 ? { ...a.place, [r.place]: (a.place[r.place] || 0) + 1 } : a.place,
+  }), { n: 0, pt: 0, inn: 0, w: 0, d: 0, l: 0, hi: 0, many: false, place: {} });
   /* ★ 친 수지 — 가장 최근 판의 값. 그 사이에 올랐거나 내렸으면 폭도 함께 준다
         (rows 는 ★최근이 앞이다) */
   const hs = rows.map((r) => r.handi).filter((h) => h > 0);
@@ -4649,6 +4715,7 @@ function rankOne(games, key, opt) {
     : null;
   return {
     rows, hd,
+    mates: Object.values(bm).map((t) => ({ ...t, avg: t.inn ? t.pt / t.inn : 0 })).sort((a, b) => b.n - a.n),
     foes: Object.values(bf).map((t) => ({ ...t, avg: t.inn ? t.pt / t.inn : 0 })).sort((a, b) => b.n - a.n),
     tot: { ...tot, avg: tot.inn ? tot.pt / tot.inn : 0 },
   };
@@ -5818,9 +5885,16 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
   const nm = o.rows[0] ? (o.rows.length ? (rankList(data.games, { clubId: club.id, mode, from: "2000-01-01", to: today(), withTeam: true }).find((x) => x.key === mkey) || {}).name : "") : "";
   const me = memById(club, mkey);
   const title = (me && me.name) || nm || "이름 없음";
-  const rows = foe ? o.rows.filter((r) => r.foes.some((f) => f.key === foe)) : o.rows;
-  const sel = foe ? o.foes.find((f) => f.key === foe) : null;
-  const shownF = moreF ? o.foes : o.foes.slice(0, 6);
+  /* ⚠ foe 에는 ★사람 열쇠(알약)나 ★묶음 열쇠(표의 줄)가 들어온다.
+        묶음 열쇠에는 「|」가 들어 있다 — 혼자면 없다 */
+  const isMate = foe.indexOf("|") >= 0;
+  const rows = !foe ? o.rows
+    : isMate ? o.rows.filter((r) => r.mk === foe)
+    : o.rows.filter((r) => r.foes.some((f) => f.key === foe));
+  const sel = !foe ? null
+    : (o.mates.find((m2) => m2.key === foe) || o.foes.find((f) => f.key === foe) || null);
+  const selName = sel ? (sel.names || sel.name) : "";
+  const shownF = moreF ? o.mates : o.mates.slice(0, 6);
   const shownR = moreR ? rows : rows.slice(0, 10);
   const col = (r) => (r === "승" ? "var(--green)" : r === "패" ? "#C87B74" : "#8FA8BC");
 
@@ -5892,16 +5966,27 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
         padding: 13, marginTop: 12,
       }}>
         <div style={{ fontSize: 12, color: "#6F8598" }}>
-          {sel ? `${title} 님 — ${sel.name} 님과` : `${title} 님 에버`}
+          {sel ? `${title} 님 — ${selName} 님과` : `${title} 님 에버`}
         </div>
         <div className="num" style={{ fontSize: 26, color: ACCENT }}>
           {fmtAvg(sel ? sel.avg : o.tot.avg, mode)}
         </div>
         <div style={{ fontSize: 12.5, color: "var(--chalk)", marginTop: 5 }}>
           <span className="num">{sel ? sel.n : o.tot.n}</span>판 · {title}{" "}
+          {(sel || o.tot).many ? (
+            <>
+              {[1, 2, 3, 4, 5].filter((k) => (sel || o.tot).place[k]).map((k) => (
+                <span key={k} style={{ marginRight: 7 }}>
+                  {k}등 <span className="num" style={{ color: k === 1 ? "var(--green)" : "var(--ivory)" }}>{(sel || o.tot).place[k]}</span>
+                </span>
+              ))}
+            </>
+          ) : null}
+          {(sel || o.tot).many ? null : <>
           <span className="num" style={{ color: "var(--green)" }}>{sel ? sel.w : o.tot.w}</span>승{" "}
           <span className="num">{sel ? sel.d : o.tot.d}</span>무{" "}
           <span className="num" style={{ color: "#C87B74" }}>{sel ? sel.l : o.tot.l}</span>패
+          </>}
           {!sel && <> · 하이런 <span className="num">{o.tot.hi}</span> · <span className="num">{o.tot.pt}</span>점 <span className="num">{o.tot.inn}</span>이닝</>}
         </div>
       </div>
@@ -5909,7 +5994,7 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
       {o.foes.length > 0 && (
         <>
           <div style={{ fontSize: 11.5, color: "#6F8598", margin: "15px 2px 6px" }}>
-            상대별 — 많이 친 순 · <b style={{ color: ACCENT }}>줄을 눌러도 골라집니다</b>
+            함께 친 분별 — 많이 친 순 · <b style={{ color: ACCENT }}>줄을 눌러도 골라집니다</b>
           </div>
           <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 13px" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -5917,9 +6002,11 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
                 {/* ★ 2026-11-13 — 머리글이 「승- 무-패」 「내 에 버」로 쪼개져 있었다.
                       ⇒ 줄바꿈을 막고 글자를 줄인다 (폰 390px 에서 잰 값) */}
                 <tr style={{ fontSize: 11, color: "#6F8598", fontWeight: 500 }}>
-                  <th style={{ textAlign: "left", whiteSpace: "nowrap", padding: "0 0 6px", fontWeight: 500 }}>상대</th>
+                  <th style={{ textAlign: "left", whiteSpace: "nowrap", padding: "0 0 6px", fontWeight: 500 }}>함께 친 분</th>
                   <th style={{ whiteSpace: "nowrap", padding: "0 6px 6px", fontWeight: 500 }}>판</th>
-                  <th style={{ whiteSpace: "nowrap", padding: "0 6px 6px", fontWeight: 500 }}>승-무-패</th>
+                  <th style={{ whiteSpace: "nowrap", padding: "0 6px 6px", fontWeight: 500 }}>
+                    {o.mates.some((m2) => m2.many) ? "1등-2등-3등" : "승-무-패"}
+                  </th>
                   <th style={{ whiteSpace: "nowrap", padding: "0 0 6px", textAlign: "right", fontWeight: 500 }}>{title} 에버</th>
                 </tr>
                 {shownF.map((f) => (
@@ -5927,7 +6014,7 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
                     <td style={{ textAlign: "left", fontWeight: 600, width: "100%", color: foe === f.key ? ACCENT : "inherit" }}>
                       <span style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
                         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {f.name || "이름 없음"}
+                          {f.names || "이름 없음"}
                         </span>
                         <span style={{ color: foe === f.key ? ACCENT : "#44627B", fontSize: 13, paddingRight: 6, flexShrink: 0 }}>
                           {foe === f.key ? "✓" : "›"}
@@ -5935,13 +6022,19 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
                       </span>
                     </td>
                     <td className="num" style={{ whiteSpace: "nowrap", padding: "3px 6px" }}>{f.n}</td>
-                    <td className="num" style={{ color: "var(--chalk)", whiteSpace: "nowrap", padding: "3px 6px" }}>{f.w}-{f.d}-{f.l}</td>
+                    {/* ★ 2026-11-13 — 3인 이상은 ★등수로 적는다 [대표님].
+                          승-무-패로 적으면 1등만 「승」이라 뜻이 흐려진다 */}
+                    <td className="num" style={{ color: "var(--chalk)", whiteSpace: "nowrap", padding: "3px 6px" }}>
+                      {f.many
+                        ? [1, 2, 3, 4, 5].filter((k) => k <= 3 || f.place[k]).map((k) => f.place[k] || 0).join("-")
+                        : `${f.w}-${f.d}-${f.l}`}
+                    </td>
                     <td className="num" style={{ color: ACCENT, fontSize: 15, whiteSpace: "nowrap", textAlign: "right", padding: "3px 0" }}>{fmtAvg(f.avg, mode)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {o.foes.length > 6 && (
+            {o.mates.length > 6 && (
               <button onClick={() => setMoreF((v) => !v)} style={{
                 width: "100%", textAlign: "center", fontSize: 12, color: "#8FA8BC",
                 padding: "10px 0 2px", borderTop: "1px solid rgba(244,238,223,.07)", marginTop: 6,
@@ -5961,7 +6054,7 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
         }} />
 
       <div style={{ fontSize: 11.5, color: "#6F8598", margin: "15px 2px 2px" }}>
-        일자별 · {sel ? `${sel.name} 님과 ` : ""}<span className="num">{rows.length}</span>판
+        일자별 · {sel ? `${selName} 님과 ` : ""}<span className="num">{rows.length}</span>판
         {" · "}<b style={{ color: ACCENT }}>누르면 그 판 기록표가 열립니다</b>
         {foe && <button onClick={() => setFoe("")} style={{ color: ACCENT, fontSize: 11.5, marginLeft: 8 }}>전체 보기</button>}
       </div>
@@ -6004,18 +6097,54 @@ function ClubMember({ data, save, say, club, mkey, P, openSheet, onBack }) {
               <span className="num" style={{ color: "#6F8598", fontSize: 11.5 }}>{md(r.date)}</span>
               <span className="num" style={{ display: "block", color: "#44627B", fontSize: 10 }}>{r.gameNo}번</span>
             </span>
-            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {r.foes.map((f) => f.name).join(" · ")}
-            </span>
-            <span className="num" style={{ color: "#55708A", fontSize: 11, width: 30, textAlign: "right", flexShrink: 0 }}>
-              {r.handi > 0 ? "수" + r.handi : ""}
-            </span>
-            <span className="num" style={{ color: "#B9CCDA", flexShrink: 0 }}>
-              {r.my} : {r.foes.map((f) => f.score).join(" : ")}
-            </span>
-            <span style={{ width: 19, textAlign: "center", flexShrink: 0, fontWeight: 700, color: col(r.res) }}>{r.res}</span>
-            <span className="num" style={{ color: ACCENT, width: 46, textAlign: "right", flexShrink: 0 }}>{fmtAvg(r.avg, mode)}</span>
-            <span className="num" style={{ color: "#55708A", fontSize: 11, width: 38, textAlign: "right", flexShrink: 0 }}>{r.inn}이닝</span>
+            {/* ⚠ 3인 이상은 이름이 ★아래 칸마다 들어가므로 여기 또 적지 않는다 (가로가 넘친다) */}
+            {!(seatsOf(r.g) > 2 && !r.g.team) && (
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.foes.map((f) => f.name).join(" · ")}
+              </span>
+            )}
+            {/* 🔴 2026-11-13 — 「3명이서 게임할 때…사람마다 ★목표·등수·달성점수·에버」
+                   [대표님]. ⛔ 두 자리(단식·복식)는 ★그대로 둔다 —
+                   「두 명이서 게임할 때는 이대로 하면 될 것 같아」 하셨다.
+                 ⚠ 등수는 ★rankRows 가 ptsOf 로 센다. 여기서 다시 세지 않는다 */}
+            {seatsOf(r.g) > 2 && !r.g.team ? (
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {rankRows(r.g).map((u, k) => {
+                  const mine = mkey.indexOf("n:") === 0 ? u.name === mkey.slice(2) : u.mid === mkey;
+                  return (
+                    <span key={u.name + k} style={{
+                      display: "flex", gap: 5, alignItems: "baseline",
+                      marginTop: k ? 4 : 0, fontSize: 12,
+                      color: mine ? "var(--ivory)" : "#8FA8BC", fontWeight: mine ? 700 : 400,
+                    }}>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</span>
+                      <span className="num" style={{ fontSize: 10.5, color: "#55708A", width: 38, flexShrink: 0, textAlign: "right" }}>목표{u.goal}</span>
+                      <span style={{
+                        width: 44, flexShrink: 0, fontSize: 10.5, fontWeight: 700, textAlign: "center",
+                        color: u.place === 1 ? "#4FB286" : "#8FA8BC",
+                      }}>{u.label}</span>
+                      <span className="num" style={{ width: 34, textAlign: "right", flexShrink: 0 }}>{u.score}점</span>
+                      <span className="num" style={{
+                        width: 42, textAlign: "right", flexShrink: 0, fontSize: 12.5,
+                        color: mine ? ACCENT : "#7A98AD",
+                      }}>{fmtAvg(u.avg, mode)}</span>
+                    </span>
+                  );
+                })}
+              </span>
+            ) : (
+              <>
+                <span className="num" style={{ color: "#55708A", fontSize: 11, width: 30, textAlign: "right", flexShrink: 0 }}>
+                  {r.handi > 0 ? "수" + r.handi : ""}
+                </span>
+                <span className="num" style={{ color: "#B9CCDA", flexShrink: 0 }}>
+                  {r.my} : {r.foes.map((f) => f.score).join(" : ")}
+                </span>
+                <span style={{ width: 19, textAlign: "center", flexShrink: 0, fontWeight: 700, color: col(r.res) }}>{r.res}</span>
+                <span className="num" style={{ color: ACCENT, width: 46, textAlign: "right", flexShrink: 0 }}>{fmtAvg(r.avg, mode)}</span>
+                <span className="num" style={{ color: "#55708A", fontSize: 11, width: 38, textAlign: "right", flexShrink: 0 }}>{r.inn}이닝</span>
+              </>
+            )}
             <span style={{ color: "#44627B", fontSize: 13, flexShrink: 0, paddingLeft: 2 }}>›</span>
           </button>
         ))}
