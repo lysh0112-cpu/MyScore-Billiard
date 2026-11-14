@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-78 총무 표시 · 총무 맡기기 -->
+<!-- build: 1판-79 동우회 판 자동 올리기·내려받기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7264,6 +7264,17 @@ const hyphen = v => {
    ⇒ 판마다 ★동우회 목록(clubIds)을 둔다.
    ⚠ 어제까지 친 기록에는 clubIds 가 없다 — ★clubId 하나만 있다.
      읽는 쪽이 ★둘 다 본다. 옛 기록을 고쳐 쓰지 않는다. */
+/* 🔴 2026-11-14 — ★2단계 [대표님]
+      「멤버들 중 누구든 ★동우회를 고르고 경기를 한 경우 ⇒ ★자동으로 올라가기
+       동우회가 아닌 상태에서 경기를 한 경우 ⇒ ★선택해서 올리기」
+
+   ⇒ 내 판은 data.games 에, ★남이 올린 판은 data.pool 에 따로 담는다.
+   ⛔ 남의 판을 data.games 에 섞지 않는다 — 「기록 보기」는 ★내가 친 기록이다.
+     섞으면 내가 안 친 판이 내 기록에 뜨고, 지우거나 다시 올릴 위험도 생긴다.
+   ⇒ 동우회 셈(랭킹·명단·개인)만 ★둘을 합쳐 본다. */
+const allGames = d => [...(d && d.games || []), ...(d && d.pool || [])];
+/* 판마다 「어느 동우회」가 붙었는지 한 줄로 — 이것이 바뀌면 다시 올린다 */
+const clubTag = d => (d && d.games || []).map(g => g.id + ":" + clubsOfGame(g).join(",")).join("|");
 const clubsOfGame = g => {
   const a = Array.isArray(g.clubIds) ? g.clubIds.filter(Boolean) : [];
   if (g.clubId && a.indexOf(g.clubId) < 0) a.unshift(g.clubId);
@@ -8911,7 +8922,7 @@ function ClubList({
       color: "var(--ivory)"
     }
   }, "상대별 전적"), "을 볼 수 있습니다."), cs.map(c => {
-    const gs = clubGames(data.games, c.id);
+    const gs = clubGames(allGames(data), c.id);
     const thisMon = gs.filter(g => (g.date || "").slice(0, 7) === mon).length;
     return /*#__PURE__*/React.createElement("button", {
       key: c.id,
@@ -9149,14 +9160,14 @@ function ClubRank({
      ⇒ 닫힘은 null, 빈 칸은 "" — ★두 가지를 갈라 둔다.
      ⛔ 「값이 없음」과 「닫힘」을 ★한 값으로 쓰지 말 것. 다 지울 수 있는 칸이면 반드시 터진다 */
   const [ren, setRen] = useState(null);
-  const rows = useMemo(() => rankList(data.games, {
+  const rows = useMemo(() => rankList(allGames(data), {
     clubId: club.id,
     mode,
     from: bound[0],
     to: bound[1],
     withTeam: team
-  }), [data.games, club.id, mode, bound, team]);
-  const games = useMemo(() => rankPick(data.games, {
+  }), [data.games, data.pool, club.id, mode, bound, team]);
+  const games = useMemo(() => rankPick(allGames(data), {
     clubId: club.id,
     mode,
     from: bound[0],
@@ -9930,14 +9941,14 @@ function ClubMember({
   const [moreF, setMoreF] = useState(false);
   const [orpOn, setOrp] = useState(false); /* 지난 기록 고르는 창 */
   const [moreR, setMoreR] = useState(false);
-  const o = useMemo(() => rankOne(data.games, mkey, {
+  const o = useMemo(() => rankOne(allGames(data), mkey, {
     clubId: club.id,
     mode,
     from: bound[0],
     to: bound[1],
     withTeam: false
-  }), [data.games, club.id, mkey, mode, bound]);
-  const nm = o.rows[0] ? o.rows.length ? (rankList(data.games, {
+  }), [data.games, data.pool, club.id, mkey, mode, bound]);
+  const nm = o.rows[0] ? o.rows.length ? (rankList(allGames(data), {
     clubId: club.id,
     mode,
     from: "2000-01-01",
@@ -10305,7 +10316,7 @@ function ClubMember({
   })()), shownR.map((r, i) => /*#__PURE__*/React.createElement("button", {
     key: r.id + i,
     onClick: () => {
-      const g = data.games.find(x => x.id === r.id);
+      const g = allGames(data).find(x => x.id === r.id);
       if (g) openSheet(g);
     },
     style: {
@@ -10537,6 +10548,103 @@ const mergeClubs = (local, srvList) => {
   return out.slice(0, CLUB_MAX);
 };
 
+/* ══════ 동우회 경기 — 올리고 내려받기 (★2단계) ══════
+   ⚠ 같은 판이 두 번 올라가지 않게 ★(club_id, client_id) 가 열쇠다 (sql 에 그렇게 박혀 있다).
+     merge-duplicates 로 보내면 이미 있는 판은 ★덮어쓴다.
+   ⛔ 복식·4구를 가리지 않고 ★그 동우회 판이면 다 올린다 — 거르는 것은 보는 쪽에서 한다.
+   ⚠ 어느 동우회에 올렸는지 판마다 적어 둔다(cup). 안 적으면 켤 때마다 ★다시 올린다. */
+const cupOf = g => Array.isArray(g.cup) ? g.cup : [];
+const pushClubGames = async (tok, data) => {
+  const todo = [];
+  bilGames(data.games).forEach(g => {
+    clubsOfGame(g).forEach(cid => {
+      const c = clubById(data, cid);
+      if (!c || !c.srv) return; /* 서버에 없는 동우회는 올릴 곳이 없다 */
+      if (cupOf(g).indexOf(cid) >= 0) return; /* 이미 올렸다 */
+      todo.push({
+        g,
+        cid
+      });
+    });
+  });
+  /* 🔴 2026-11-14 — ★동우회에서 뺀 판은 ★서버에서도 빼야 한다.
+        안 그러면 대표님 화면에서는 빠지는데 ★다른 분 화면에는 그대로 남는다.
+     ⚠ sql 상 ★내가 올린 판(owner) 과 ★총무만 지울 수 있다 — 안 되면 조용히 둔다. */
+  const gone = [];
+  bilGames(data.games).forEach(g => {
+    const has = clubsOfGame(g);
+    cupOf(g).forEach(cid => {
+      if (has.indexOf(cid) < 0) gone.push({
+        g,
+        cid
+      });
+    });
+  });
+  if (!todo.length && !gone.length) return null;
+  const off = {};
+  for (const t of gone.slice(0, 100)) {
+    try {
+      await cueDel(tok, `cue_club_games?club_id=eq.${t.cid}&client_id=eq.${encodeURIComponent(t.g.id)}`);
+      (off[t.g.id] = off[t.g.id] || []).push(t.cid);
+    } catch (e) {/* 못 지워도 나머지는 */}
+  }
+  const done = {};
+  for (const t of todo.slice(0, 200)) {
+    try {
+      await cuePost(tok, "cue_club_games", {
+        club_id: t.cid,
+        client_id: t.g.id,
+        played_on: t.g.date || null,
+        mode: t.g.mode || "3",
+        data: t.g
+      }, "resolution=merge-duplicates,return=minimal");
+      (done[t.g.id] = done[t.g.id] || []).push(t.cid);
+    } catch (e) {/* 한 판 못 올려도 나머지는 올린다 */}
+  }
+  if (!Object.keys(done).length && !Object.keys(off).length) return null;
+  return d => ({
+    ...d,
+    games: d.games.map(g => {
+      if (!done[g.id] && !off[g.id]) return g;
+      const cup = [...new Set([...cupOf(g), ...(done[g.id] || [])])].filter(c => (off[g.id] || []).indexOf(c) < 0);
+      return {
+        ...g,
+        cup
+      };
+    })
+  });
+};
+/* 🔴 2026-11-14 — ★같은 판을 두 분이 따로 적어 올리면 ★두 번 세어진다.
+      판 번호는 기계마다 다르니 번호로는 못 잡는다.
+   ⇒ 날짜 + 친 분들 + 점수로 ★지문을 떠서 맞춰 본다. */
+const gameSig = g => [g.date || "", g.mode || "", (g.players || []).map(p => `${p.name}/${Number(p.score) || 0}/${Number(p.handicap) || 0}`).sort().join(";")].join("|");
+
+/* 그 동우회의 판을 내려받는다 — ★내가 친 판은 뺀다 (내 것은 data.games 에 있다) */
+const pullClubGames = async (tok, data, clubIds) => {
+  const mine = new Set((data.games || []).map(g => g.id));
+  const sig = new Set((data.games || []).map(gameSig));
+  const out = [];
+  for (const cid of clubIds.slice(0, CLUB_MAX)) {
+    try {
+      const rows = await cueGet(tok, `cue_club_games?club_id=eq.${cid}&select=client_id,data&order=played_on.desc&limit=400`);
+      (Array.isArray(rows) ? rows : []).forEach(r => {
+        const g = r && r.data;
+        if (!g || !Array.isArray(g.players)) return; /* 남이 보낸 글이다 — 꼴을 본다 */
+        if (mine.has(g.id)) return; /* 내가 친 판 */
+        if (sig.has(gameSig(g))) return; /* 내가 적어 둔 그 판 */
+        if (out.some(x => x.id === g.id || gameSig(x) === gameSig(g))) return;
+        out.push({
+          ...g,
+          id: String(g.id || r.client_id),
+          sport: "billiard",
+          fromClub: true
+        });
+      });
+    } catch (e) {/* 한 동우회 못 읽어도 나머지는 */}
+  }
+  return out;
+};
+
 /* 동우회 한 개와 그 명단을 서버에서 내려받는다 */
 const pullClub = async (tok, id, myUid) => {
   const cs = await cueGet(tok, `cue_clubs?id=eq.${id}&select=id,name,code,owner`);
@@ -10646,7 +10754,7 @@ const removeClub = (data, club) => ({
   } : data.setup,
   games: data.games.map(g => inClub(g, club.id) ? setGameClub(g, club.id, false) : g)
 });
-const askRemoveClub = (data, club) => confirm(`「${club.name}」을 지울까요?\n\n` + `★친 기록 ${clubGames(data.games, club.id).length}판은 ★안 지워집니다 — ` + `이 동우회에서만 빠집니다. 다른 동우회에도 든 판은 그쪽에 그대로 남습니다.\n` + `다시 만들어 [기록 보기에서 골라 넣기] 를 누르면 그대로 돌아옵니다.\n` + `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`);
+const askRemoveClub = (data, club) => confirm(`「${club.name}」을 지울까요?\n\n` + `★친 기록 ${clubGames(allGames(data), club.id).length}판은 ★안 지워집니다 — ` + `이 동우회에서만 빠집니다. 다른 동우회에도 든 판은 그쪽에 그대로 남습니다.\n` + `다시 만들어 [기록 보기에서 골라 넣기] 를 누르면 그대로 돌아옵니다.\n` + `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`);
 
 /* 🔴 2026-11-13 — 「동우회 기록에 넣을 ★「기록 보기」의 자료들을 불러오지를 못하네.
       ★기록 보기 자료들 중 선택할 기능을 넣어주면 어떨까?」 [대표님]
@@ -11426,7 +11534,7 @@ function ClubRoster({
   /* 그 기간·그 종목에서 ★실제로 친 값 */
   const live = useMemo(() => {
     const by = {};
-    rankList(data.games, {
+    rankList(allGames(data), {
       clubId: club.id,
       mode,
       from: bound[0],
@@ -11436,15 +11544,15 @@ function ClubRoster({
       if (m.mid) by[m.mid] = m;
     });
     return by;
-  }, [data.games, club.id, mode, bound]);
+  }, [data.games, data.pool, club.id, mode, bound]);
   /* 판 수는 ★기간과 상관없이 모두 센다 — 「이 사람이 우리와 몇 판 쳤나」 */
   const allN = useMemo(() => {
     const by = {};
-    clubGames(data.games, club.id).forEach(g => g.players.forEach(p => {
+    clubGames(allGames(data), club.id).forEach(g => g.players.forEach(p => {
       if (p.mid) by[p.mid] = (by[p.mid] || 0) + 1;
     }));
     return by;
-  }, [data.games, club.id]);
+  }, [data.games, data.pool, club.id]);
 
   /* 🔴 2026-11-14 — 명단을 ★서버와 맞춘다 [대표님 「초청하기 기능」].
         초대 코드로 들어온 분을 ★이름으로 이어 주려면, 총무가 적어 둔 이름이
@@ -12562,6 +12670,50 @@ function App() {
     }, 600);
     return () => clearTimeout(t);
   }, [data.me, data.session?.token]); // eslint-disable-line
+
+  /* 🔴🔴 2026-11-14 — ★2단계 [대표님]
+        「동우회를 고르고 경기를 한 경우 ⇒ ★자동으로 올라가기」
+     ⇒ 올리기와 내려받기는 ★한 몸이다. 올리기만 하면 내 화면에는
+       남이 친 판이 끝내 안 보인다 — 대표님은 ★같은 성적표를 보셔야 한다.
+     ⚠ 받은 판을 그대로 save 하면 games 가 바뀌지도 않았는데 ★무한히 돈다.
+       ⇒ 판 번호를 이어 붙여 ★달라졌을 때만 저장한다. */
+  const poolKey = a => (a || []).map(g => g.id).sort().join("|");
+  const cgBusy = useRef(false);
+  const cgSync = async () => {
+    if (cgBusy.current) return;
+    cgBusy.current = true;
+    try {
+      const d0 = dataRef.current;
+      if (!d0.me || !d0.session?.token) return;
+      const srv = clubsOf(d0).filter(c => c.srv && !c.gone);
+      if (!srv.length) return;
+      const tok = await cueTok(d0, s2 => patch(p => ({
+        ...p,
+        session: s2
+      })));
+      if (!tok) return;
+      const up = await pushClubGames(tok, dataRef.current);
+      if (up) save(up(dataRef.current));
+      const got = await pullClubGames(tok, dataRef.current, srv.map(c => c.id));
+      const d2 = dataRef.current;
+      if (poolKey(d2.pool) === poolKey(got)) return;
+      save({
+        ...d2,
+        pool: got
+      });
+    } catch (e) {/* 서버가 안 돼도 앱은 그대로 쓴다 */} finally {
+      cgBusy.current = false;
+    }
+  };
+  const cgRef = useRef(cgSync);
+  cgRef.current = cgSync;
+
+  /* 켤 때 한 번 · 판을 저장했을 때 · 동우회를 골랐다 풀었을 때 */
+  useEffect(() => {
+    if (!data.me || !data.session?.token) return;
+    const t = setTimeout(() => cgRef.current(), 2200);
+    return () => clearTimeout(t);
+  }, [data.me, data.session?.token, data.games.length, clubTag(data), (data.clubs || []).length]); // eslint-disable-line
 
   /* 저장이 끝나면 잠깐 뒤에 저절로 올린다 (사용자가 누를 필요 없게) */
   useEffect(() => {
