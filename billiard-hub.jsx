@@ -5596,7 +5596,7 @@ function ClubList({ data, save, say, onOpen }) {
        같은 동우회인데 ★판이 안 모인다.
      ⚠ 서버는 만들 때 총무 줄을 ★'총무'라는 이름으로 넣는다 (cue_club_born).
        내 이름으로 고쳐 준다. */
-  const [busy, setBusy] = useState(false);
+  const [busy, once] = useOnce();
 
   /* 🔴 2026-11-14 — 초대 코드로 들어가기 [대표님 「초청하기 기능도 넣어볼까?」]
      ⚠ cue_join 은 ★세 가지를 알아서 한다 —
@@ -5604,14 +5604,12 @@ function ClubList({ data, save, say, onOpen }) {
         ③ 없으면 새로 한 줄. ⇒ 앱에서 ★다시 판단하지 않는다 (두 곳이 어긋난다).
      ⚠ 들어간 뒤 ★동우회와 명단을 내려받아 이 기계에도 둔다 — 안 그러면
        「들어갔다는데 화면에 없다」가 된다. */
-  const joinGo = async () => {
+  const joinRun = async () => {
     const cd = code.trim();
     if (cd.length !== 6) return say("여섯 자리를 다 넣어주세요");
     if (cs.length >= CLUB_MAX) return say(`동우회는 ${CLUB_MAX}개까지 들 수 있습니다`);
     const tok = await cueTok(data);
     if (!tok) return say("먼저 로그인해 주세요 — 오른쪽 위입니다");
-    if (busy) return;
-    setBusy(true);
     try {
       const cid = await cueRpc(tok, "cue_join", { p_code: cd, p_name: (data.nick || "회원").slice(0, 20) });
       const id = typeof cid === "string" ? cid : (cid && cid.cue_join) || "";
@@ -5620,22 +5618,19 @@ function ClubList({ data, save, say, onOpen }) {
       if (!got) throw new Error("동우회를 못 읽었습니다");
       const rest = cs.filter((c) => c.id !== got.id);
       save({ ...data, clubs: [...rest, got], clubId: got.id });
-      setCode(""); setJoin(false); setBusy(false);
+      setCode(""); setJoin(false);
       say(`「${got.name}」에 들어왔습니다`);
       onOpen(got.id);
     } catch (e) {
-      setBusy(false);
       say(String(e.message || "").includes("코드") ? "초대 코드가 맞지 않습니다" : (e.message || "들어가지 못했습니다"));
     }
   };
 
-  const make = async () => {
+  const makeGo = async () => {
     const nm = name.trim();
     if (!nm) return say("동우회 이름을 적어주세요");
     if (cs.some((c) => c.name === nm)) return say("같은 이름의 동우회가 이미 있습니다");
     if (cs.length >= CLUB_MAX) return say(`동우회는 ${CLUB_MAX}개까지 들 수 있습니다`);
-    if (busy) return;
-    setBusy(true);
     let c = null;
     const tok = await cueTok(data);
     if (tok) {
@@ -5656,7 +5651,7 @@ function ClubList({ data, save, say, onOpen }) {
     }
     if (!c) c = { id: "c_" + uid(), name: nm, code: newCode(), owner: true, createdAt: Date.now(), members: [] };
     save({ ...data, clubs: [...cs, c], clubId: c.id });
-    setName(""); setMk(false); setBusy(false);
+    setName(""); setMk(false);
     say(c.srv ? `「${nm}」을 만들었습니다 · 초대 코드 ${c.code}` : `「${nm}」을 만들었습니다`);
     onOpen(c.id);
   };
@@ -5701,6 +5696,42 @@ function ClubList({ data, save, say, onOpen }) {
                   ⚠ 카드 전체가 단추다. 그 안에 단추를 또 넣으면 ★겹쳐 눌린다 —
                     stopPropagation 으로 막는다.
                   ⛔ 총무(만든 사람)만 지울 수 있다 */}
+            {/* 🔴 2026-11-14 — 더 이상 회원이 아닌 동우회 [대표님] */}
+            {c.gone && (
+              <div style={{ fontSize: 11.5, color: "#E0A36B", marginTop: 8, lineHeight: 1.6 }}>
+                ⚠ 더 이상 이 동우회의 회원이 아닙니다 — 총무님이 내보내셨거나 나가셨습니다.
+              </div>
+            )}
+
+            {/* ★ 총무가 아니면 ★나가기 (서버에서 내 줄만 뺀다 — 남의 줄은 못 건드린다) */}
+            {!c.owner && c.srv && (
+              <span role="button" tabIndex={0} aria-label="동우회 나가기" onClick={async (e) => {
+                e.stopPropagation();
+                if (!confirm(
+                  `「${c.name}」에서 나갈까요?\n\n` +
+                  `이 동우회가 목록에서 사라집니다.\n` +
+                  `친 기록은 그대로 남습니다 — 다시 초대받으면 돌아옵니다.`)) return;
+                const tok = await cueTok(data);
+                if (tok) {
+                  /* 내 줄만 「초청 중」으로 되돌린다 — 그래야 회원에서 빠진다.
+                     ⚠ 남의 줄을 지우는 것은 ★총무만 할 수 있다 (서버 규칙) */
+                  try {
+                    await cuePatch(tok, `cue_club_members?club_id=eq.${c.id}&user_id=eq.${data.me}`, { status: "invited" });
+                  } catch (e2) {}
+                }
+                save({
+                  ...data,
+                  clubs: clubsOf(data).filter((x) => x.id !== c.id),
+                  clubId: data.clubId === c.id ? "" : data.clubId,
+                  games: data.games.map((g) => (inClub(g, c.id) ? setGameClub(g, c.id, false) : g)),
+                });
+                say(`「${c.name}」에서 나왔습니다 · 친 기록은 그대로입니다`);
+              }} style={{
+                display: "inline-block", marginTop: 10, padding: "7px 11px", borderRadius: 9,
+                fontSize: 11.5, color: "#C87B74", border: "1px solid rgba(200,123,116,.3)",
+              }}>나가기</span>
+            )}
+
             {c.owner && (
               <span role="button" tabIndex={0} aria-label="동우회 지우기" onClick={(e) => {
                 e.stopPropagation();
@@ -5723,7 +5754,7 @@ function ClubList({ data, save, say, onOpen }) {
           <div style={{ fontSize: 11.5, color: "#6F8598", marginTop: 7, lineHeight: 1.6 }}>
             당구장 이름이나 모임 이름을 적으세요. 나중에 고칠 수 있습니다.
           </div>
-          <CBtn onClick={make}>{busy ? "만드는 중…" : "만들기"}</CBtn>
+          <CBtn onClick={() => once(makeGo)}>{busy ? "만드는 중…" : "만들기"}</CBtn>
           <CBtn ghost onClick={() => { setMk(false); setName(""); }}>그냥 닫기</CBtn>
         </div>
       ) : join ? (
@@ -5739,7 +5770,7 @@ function ClubList({ data, save, say, onOpen }) {
               ? <>명단에 <b style={{ color: "var(--ivory)" }}>{data.nick || "회원"}</b> 님으로 올라 있으면 그대로 이어집니다.</>
               : <span style={{ color: "#C8A05A" }}>⛔ 먼저 <b>오른쪽 위에서 로그인</b>하셔야 합니다 — 서버가 누구인지 알아야 합니다.</span>}
           </div>
-          <CBtn onClick={joinGo}>{busy ? "들어가는 중…" : "들어가기"}</CBtn>
+          <CBtn onClick={() => once(joinRun)}>{busy ? "들어가는 중…" : "들어가기"}</CBtn>
           <CBtn ghost onClick={() => { setJoin(false); setCode(""); }}>닫기</CBtn>
         </div>
       ) : (
@@ -5758,7 +5789,7 @@ function ClubList({ data, save, say, onOpen }) {
 }
 
 /* ── ② 랭킹 ── */
-function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
+function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember, onSwap }) {
   const { mode, setMode, range, setRange, from, setFrom, to, setTo, bound } = P;
   const [sort, setSort] = useState("avg");
   const [grp, setGrp] = useState("all");
@@ -5855,7 +5886,43 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
      ⚠ 동우회 번호가 ★바뀐다 (서버가 새 번호를 준다). 그 번호를 쓰는 ★판들도
        함께 고쳐 줘야 한다 — 안 그러면 기록이 통째로 사라져 보인다.
      ⛔ 연락처는 안 올린다. */
+  /* 🔴🔴 2026-11-14 — 「★같은 동우회가 두 개가 나오는 것이 정상인가?」 [대표님].
+        ⛔ 정상이 아니다. ★이 단추에 잠금이 없었다. 서버를 부르는 데 한두 초가
+          걸리는데 그 사이에 한 번 더 눌리면 ★동우회가 두 개 만들어진다.
+          대표님 폰에서 실제로 그랬다 (육방회 8명 · 육방회 9명).
+        ⇒ ★누르는 순간 잠근다. 이미 올라간 것이면 아예 안 올린다.
+        ⚠ 서버를 부르는 ★모든 단추에 잠금이 있어야 한다 — 손가락은 늘 두 번 눌린다. */
+  /* 🔴 2026-11-14 — 「총무만 명단을 넣고 빼고… ★멤버로 초대받은 본인이 탈퇴하고
+        싶으면 어떻게 빠져나가지?」 [대표님]
+     ⇒ 본인이 나가는 길은 ★여기(동우회 맨 아래)와 목록 카드 두 곳에 둔다.
+       목록에만 두면 ★못 찾으신다.
+     ⚠ 서버 규칙상 ★남의 줄은 총무만 지운다. 본인은 ★자기 줄만 고칠 수 있다.
+       ⇒ 나갈 때는 내 줄을 「초청 중」으로 되돌린다 — 그러면 회원에서 빠진다. */
+  const amAdmin = !club.srv || !!club.owner
+    || memsOf(club).some((m) => m.uid && m.uid === data.me && m.role === "admin");
+  const [pushing, pushOnce] = useOnce();
+  const leaveClub = async () => {
+    if (!confirm(
+      `「${club.name}」에서 나갈까요?\n\n` +
+      `이 동우회가 목록에서 사라집니다.\n` +
+      `친 기록은 그대로 남습니다 — 다시 초대받으면 돌아옵니다.`)) return;
+    const tok = await cueTok(data);
+    if (tok) {
+      try {
+        await cuePatch(tok, `cue_club_members?club_id=eq.${club.id}&user_id=eq.${data.me}`, { status: "invited" });
+      } catch (e) {}
+    }
+    save({
+      ...data,
+      clubs: clubsOf(data).filter((c) => c.id !== club.id),
+      clubId: data.clubId === club.id ? "" : data.clubId,
+      games: data.games.map((g) => (inClub(g, club.id) ? setGameClub(g, club.id, false) : g)),
+    });
+    say(`「${club.name}」에서 나왔습니다 · 친 기록은 그대로입니다`);
+    onBack();
+  };
   const pushClub = async () => {
+    if (club.srv) return say("이미 올라가 있습니다");
     if (!data.me) return say("먼저 로그인해 주세요 — 오른쪽 위입니다");
     const tok = await cueTok(data);
     if (!tok) return say("먼저 로그인해 주세요 — 오른쪽 위입니다");
@@ -5878,6 +5945,9 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
         mems.push({ ...m, srvId });
       }
       const old = club.id;
+      /* ⚠⚠ 번호를 ★먼저 알려 주고 저장한다. 저장부터 하면 그 사이의 다시 그리기에서
+            「그런 동우회 없다」가 되어 ★목록으로 튕긴다 (검사가 잡았다) */
+      if (onSwap) onSwap(r.id);
       save({
         ...data,
         clubs: clubsOf(data).map((c) => (c.id === old
@@ -5935,10 +6005,10 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
       <Back onClick={onBack}>동우회</Back>
       <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
         {/* ★ 이름을 누르면 고칠 수 있다 — 명단에서 회원 이름을 고치는 것과 ★같은 방식 */}
-        <button onClick={() => setRen(club.name)} style={{
+        <button onClick={() => amAdmin && setRen(club.name)} style={{
           fontSize: 19, fontWeight: 700, flex: 1, minWidth: 0, textAlign: "left",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>{club.name} <span style={{ fontSize: 12, color: "#44627B", fontWeight: 500 }}>✎</span></button>
+        }}>{club.name}{amAdmin && <span style={{ fontSize: 12, color: "#44627B", fontWeight: 500 }}> ✎</span>}</button>
         {/* ★ 2026-11-13 — 「명단 버튼을 조금 키워줘」 [대표님].
                글자 12.5 · 넓이 47×29 였다 → 테두리를 두르고 ★74×38 로 */}
         <button onClick={onRoster} style={{
@@ -5982,12 +6052,12 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
           </div>
         </div>
       ) : (
-        <button onClick={() => pushClub()} style={{
+        <button onClick={() => pushOnce(pushClub)} style={{
           width: "100%", marginTop: 9, padding: "10px 11px", borderRadius: 10,
           background: "rgba(232,184,56,.1)", border: "1px solid rgba(232,184,56,.4)",
           color: ACCENT, fontSize: 12, fontWeight: 700, textAlign: "left", lineHeight: 1.5,
         }}>
-          ☁ 서버에 올려서 ★초청하기 — {data.me ? "누르면 올라갑니다" : "먼저 로그인하세요"}
+          ☁ 서버에 올려서 ★초청하기 — {pushing ? "올리는 중…" : data.me ? "누르면 올라갑니다" : "먼저 로그인하세요"}
         </button>
       )}
 
@@ -6114,6 +6184,15 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
             borderRadius: 10, padding: 13, fontSize: 12.5, color: "#8FA8BC", marginTop: 4,
           }}>▸ 가끔 나온 분 {few.length}명 ({min}판 미만) — 누르면 펼칩니다</button>
         )
+      )}
+
+      {/* ★ 2026-11-14 — 본인이 나가는 길 [대표님]. ⛔ 총무는 안 나간다 —
+             총무가 나가면 동우회가 주인 없이 남는다. 총무는 [동우회 지우기]를 쓴다 */}
+      {club.srv && !amAdmin && (
+        <button onClick={leaveClub} style={{
+          width: "100%", marginTop: 16, padding: 12, borderRadius: 10, fontSize: 12.5,
+          color: "#C87B74", border: "1px solid rgba(200,123,116,.35)",
+        }}>「{club.name}」에서 나가기</button>
       )}
 
       <div style={{ fontSize: 11, color: "#6F8598", lineHeight: 1.8, marginTop: 14 }}>
@@ -6627,6 +6706,22 @@ const takeSeries = (data, club, picked, alsoAdd, all) => {
   };
 };
 
+/* 🔴🔴 2026-11-14 — 「★같은 동우회가 두 개가 나오는 것이 정상인가?」 [대표님].
+      ⛔ 처음엔 useState 로 잠갔다. ★그것으로는 안 잠긴다 —
+        setBusy(true) 는 ★곧바로 반영되지 않는다. 손가락이 두 번 닿는 사이에
+        busy 는 ★아직 false 다. 검사가 그대로 잡았다 (1개 → 3개).
+      ⇒ ★useRef 로 잠근다. ref 는 ★그 자리에서 바뀐다.
+      ⚠ 서버를 부르는 단추는 ★모두 이 잠금을 쓴다. 손가락은 늘 두 번 눌린다. */
+const useOnce = () => {
+  const lock = useRef(false);
+  const [on, setOn] = useState(false);
+  return [on, async (fn) => {
+    if (lock.current) return;
+    lock.current = true; setOn(true);
+    try { await fn(); } finally { lock.current = false; setOn(false); }
+  }];
+};
+
 /* 🔴 2026-11-14 — 초대장 창 [대표님 「심플하게」].
       ★두 번만 누르면 끝난다 —
         ㉠ 로그인 안 돼 있으면 [카카오로 로그인하고 들어가기]
@@ -7024,6 +7119,9 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
         ★ 2026-11-13 에 대표님과 정한 것 — 「총무나 회장만 초청·수정, 일반회원 보기만」 */
   const amAdmin = !club.srv || !!club.owner
     || ms.some((m) => m.uid && m.uid === data.me && m.role === "admin");
+  /* ⚠ 2026-11-14 — 여기에도 ★잠금을 단다. 서버를 부르는 사이에 한 번 더 눌리면
+        ★같은 분이 둘이 된다 (동우회가 둘이 된 것과 ★같은 구멍이다) */
+  const [adding, addOnce] = useOnce();
   const addOne = async () => {
     const n = f.name.trim();
     if (!n) return say("이름을 적어주세요");
@@ -7293,7 +7391,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
           {/* ★ 단추는 ★옆으로 나란히 [대표님] · 저장이 오른쪽(엄지가 닿는 쪽) */}
           <Pair>
             <CBtn ghost onClick={() => { setAdd(false); setF(blank); }}>닫기</CBtn>
-            <CBtn onClick={addOne}>저장하기</CBtn>
+            <CBtn onClick={() => addOnce(addOne)}>{adding ? "넣는 중…" : "저장하기"}</CBtn>
           </Pair>
         </div>
       ) : amAdmin ? <CBtn ghost onClick={() => setAdd(true)}>＋ 회원 더하기</CBtn> : (
@@ -7343,7 +7441,7 @@ function Clubs({ data, save, say, openSheet }) {
   if (!club && view !== "list") { setView("list"); return null; }
   if (view === "rank") return (
     <ClubRank data={data} save={save} say={say} club={club} P={P}
-      onBack={() => setView("list")} onRoster={() => setView("roster")}
+      onBack={() => setView("list")} onRoster={() => setView("roster")} onSwap={setCid}
       onMember={(k) => { setMkey(k); setBack("rank"); setView("member"); }} />
   );
   if (view === "member") return (
@@ -7423,7 +7521,7 @@ export default function App() {
        ⇒ 처음 오신 분에게는 ★이름이 안 나온다 — 코드만 보여주고, 들어온 ★뒤에
          이름을 알려 준다. ⛔ 이름을 지어내지 않는다.
        이미 든 분이 초대 주소를 다시 누르면 그때는 이름이 나온다. */
-  const [joining, setJoining] = useState(false);
+  const [joining, joinOnce] = useOnce();
   const [joinClub, setJoinClub] = useState(null);
   const [bare, setBare] = useState(false);
   const [tv, setTv] = useState(false);
@@ -7625,9 +7723,17 @@ export default function App() {
           const tok = await cueTok(d0, (s2) => patch((p) => ({ ...p, session: s2 })));
           if (!tok || !d0.me) return;
           const list = await pullMyClubs(tok, d0.me);
-          if (!list.length) return;
           const d1 = dataRef.current;
-          save({ ...d1, clubs: mergeClubs(clubsOf(d1), list) });
+          /* 🔴 2026-11-14 — 총무가 ★내보낸 동우회를 알아챈다 [대표님
+                「탈퇴를 시켰어…같은 동우회가 두 개가 나오는 것이」].
+             ⚠ 내보내져도 ★그 사람 기계에는 그대로 남아 있었다 — 아무도 안 알려준다.
+             ⛔ 말없이 지우지 않는다. 서버가 잠깐 안 될 수도 있고, 무엇보다
+               ★친 기록이 딸려 있다. ⇒ 「나가셨습니다」라고 ★표시만 하고
+               지우는 것은 대표님이 누르신다. */
+          const mineIds = new Set(list.map((c) => c.id));
+          const marked = mergeClubs(clubsOf(d1), list)
+            .map((c) => (c.srv && !mineIds.has(c.id) ? { ...c, gone: true } : (c.gone ? { ...c, gone: false } : c)));
+          save({ ...d1, clubs: marked });
         } catch (e) { /* 조용히 */ }
       })();
     }, 600);
@@ -7742,12 +7848,10 @@ export default function App() {
         code={data.joinCode || ""} data={data} busy={joining} club={joinClub}
         onLogin={sbKakaoGo}
         onClose={() => save({ ...data, joinCode: "" })}
-        onJoin={async () => {
-          if (joining) return;
-          setJoining(true);
+        onJoin={() => joinOnce(async () => {
           try {
             const tok = await cueTok(data, (s2) => patch((p) => ({ ...p, session: s2 })));
-            if (!tok) { setJoining(false); return say("먼저 로그인해 주세요"); }
+            if (!tok) return say("먼저 로그인해 주세요");
             const got = await cueRpc(tok, "cue_join", {
               p_code: data.joinCode, p_name: (data.nick || "회원").slice(0, 20),
             });
@@ -7760,13 +7864,12 @@ export default function App() {
               ...d1, joinCode: "", clubId: c.id,
               clubs: mergeClubs(clubsOf(d1).filter((x) => x.id !== c.id), [c]),
             });
-            setJoining(false); setTab("club");
+            setTab("club");
             say(`「${c.name}」에 들어왔습니다`);
           } catch (e) {
-            setJoining(false);
             say(String(e.message || "").includes("코드") ? "초대 코드가 맞지 않습니다" : (e.message || "들어가지 못했습니다"));
           }
-        }} />
+        })} />
 
       {toast && (
         <div style={{
