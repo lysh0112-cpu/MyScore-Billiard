@@ -5953,17 +5953,34 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
           ⛔ 서버에 안 올라간 동우회는 ★코드를 안 보여준다 — 넣어도 들어올 곳이 없다.
             대신 올리는 길을 알려준다. */}
       {club.srv ? (
-        <button onClick={async () => {
-          try { await navigator.clipboard.writeText(club.code); say(`초대 코드 ${club.code} 를 복사했습니다`); }
-          catch (e) { say("복사하지 못했습니다"); }
-        }} style={{
-          display: "flex", alignItems: "center", gap: 8, marginTop: 9, padding: "9px 12px",
-          borderRadius: 10, background: "rgba(0,0,0,.25)", border: "1px solid var(--line)",
+        /* 🔴 2026-11-14 — 「초대코드 복사 부분과 초청문자 복사 부분이 ★따로 되어 있잖아?
+              이것은 문제 있어 보인다」 [대표님].
+           ⛔ 맞는 말씀이다. ★코드만 복사하면 반쪽이다 — 받은 분이 ★어디에 넣는지 모른다.
+             두 자리가 ★서로 다른 것을 복사하니 더 헷갈린다.
+           ⇒ 두 곳 다 ★「초청 글」을 복사한다. 코드는 ★보여주기만 한다 (불러 줄 때 쓴다).
+             여기 것은 ★이름 없는 글 — 단톡방에 통째로 뿌릴 때.
+             명단 카드 것은 ★그 사람 이름이 든 글 — 한 분께 보낼 때. */
+        <div style={{
+          marginTop: 9, padding: "11px 12px", borderRadius: 11,
+          background: "rgba(0,0,0,.25)", border: "1px solid var(--line)",
         }}>
-          <span style={{ fontSize: 11, color: "#6F8598" }}>초대 코드</span>
-          <span className="num" style={{ fontSize: 17, letterSpacing: 3, color: ACCENT, fontWeight: 700 }}>{club.code}</span>
-          <span style={{ fontSize: 11, color: "#55708A" }}>복사</span>
-        </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: "#6F8598" }}>초대 코드</span>
+            <span className="num" style={{ fontSize: 19, letterSpacing: 3, color: ACCENT, fontWeight: 700 }}>{club.code}</span>
+            <span style={{ flex: 1, fontSize: 10.5, color: "#55708A", textAlign: "right" }}>불러 주실 때 쓰세요</span>
+          </div>
+          <button onClick={async () => {
+            try { await navigator.clipboard.writeText(inviteTxt(club, "")); say("초청 글을 복사했습니다 · 카톡에 붙여넣으세요"); }
+            catch (e) { say("복사하지 못했습니다"); }
+          }} style={{
+            width: "100%", marginTop: 9, padding: "10px 11px", borderRadius: 10,
+            background: "rgba(232,184,56,.12)", border: "1px solid rgba(232,184,56,.45)",
+            color: ACCENT, fontSize: 12.5, fontWeight: 700,
+          }}>📋 초청 글 복사 — 단톡방에 붙여넣기</button>
+          <div style={{ fontSize: 10.5, color: "#55708A", marginTop: 7, lineHeight: 1.6 }}>
+            한 분께만 보내시려면 <b style={{ color: "#8FA8BC" }}>명단</b>에서 그분 카드의 초청 글을 쓰세요 — 이름이 들어갑니다.
+          </div>
+        </div>
       ) : (
         <button onClick={() => pushClub()} style={{
           width: "100%", marginTop: 9, padding: "10px 11px", borderRadius: 10,
@@ -6613,16 +6630,24 @@ const takeSeries = (data, club, picked, alsoAdd, all) => {
 /* 🔴 2026-11-14 — 초청 글 [대표님 「초청하기 기능도 넣어볼까?」]
    ⚠ 큐보드는 카톡을 ★대신 보내지 못한다. 웹이라 남의 번호로 못 보낸다.
      ⇒ 결과표를 복사해 보내시는 것과 ★똑같이, 복사해서 붙여넣기다.
-   ⛔ 연락처는 글에 ★안 넣는다 — 단톡방에 그대로 붙여도 되게. */
+   ⛔ 연락처는 글에 ★안 넣는다 — 단톡방에 그대로 붙여도 되게.
+   🔴 2026-11-14 — 「로그인」 줄을 ★빠뜨렸다 [대표님 「버튼만 누르면 자동으로 깔려지나?」].
+      받은 분이 주소를 눌러 바로 코드를 넣으면 ★「먼저 로그인해 주세요」만 뜬다.
+      ⇒ ②에 로그인을 넣고, ★「따로 깔 앱이 없다」는 것도 적는다 (웹이라 설치가 없다).
+      ⛔ 「앱을 받으세요」라고 쓰지 말 것 — 받을 앱이 없다. */
 const inviteTxt = (club, name) =>
   `큐보드 「${club.name}」에서 함께 치고 있습니다.\n` +
-  `${name} 님을 동우회 회원으로 모십니다.\n\n` +
+  (name ? `${name} 님을 동우회 회원으로 모십니다.\n\n`
+        : `우리 동우회 회원으로 모십니다.\n\n`) +
   `① 아래 주소를 누르세요\n` +
   `https://cue.myjae.kr\n\n` +
-  `② 아래 ★동우회 ▸ 초대 코드로 들어가기\n\n` +
-  `③ 코드 ${club.code} 을 넣으세요\n\n` +
+  `② 오른쪽 위 [로그인] — 카카오로 3초면 됩니다\n\n` +
+  `③ 아래 [동우회] ▸ [초대 코드로 들어가기]\n\n` +
+  `④ 코드 ${club.code} 을 넣으세요\n\n` +
   `들어오시면 그동안 함께 친 기록이\n` +
-  `동우회 성적에 그대로 들어갑니다.`;
+  `동우회 성적에 그대로 들어갑니다.\n\n` +
+  `※ 따로 깔 앱이 없습니다. 주소만 누르면 바로 쓰십니다.\n` +
+  `   자주 쓰시려면 크롬 오른쪽 위 ⋮ ▸ 「홈 화면에 추가」`;
 
 /* ★ 기록 보기에서 골라 넣는 창 — ⛔ 모듈 자리에 둔다 */
 function PickGamesSheet({ open, club, list, onTake, onClose }) {
@@ -6961,6 +6986,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
   };
 
   const nActive = ms.filter((m) => m.status === "active").length;
+  const nJoined = ms.filter((m) => m.uid).length;          /* ★ 진짜로 들어온 분 */
   const list = ms
     .filter((m) => tab === "all" || (tab === "active" ? m.status === "active" : m.status !== "active"))
     .filter((m) => !q.trim() || m.name.includes(q.trim()));
@@ -6989,6 +7015,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
         <div style={{ fontSize: 19, fontWeight: 700, flex: 1 }}>명단</div>
         <span style={{ fontSize: 11.5, color: "#6F8598" }}>
           회원 <span className="num">{ms.length}</span>명 · 정식 <span className="num">{nActive}</span>
+          {club.srv && <> · 들어옴 <span className="num" style={{ color: nJoined ? "var(--green)" : "#6F8598" }}>{nJoined}</span></>}
         </span>
       </div>
 
@@ -7061,11 +7088,23 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
             <span>모두 <span className="num" style={{ color: "#B9CCDA" }}>{allN[m.id] || 0}</span>판</span>
           </div>
 
+          {/* ★ 2026-11-14 — 본인이 들어온 분은 ★들어왔다고 보여준다.
+                 상태 알약(초청 중·정식)은 총무가 손으로 바꾸는 것이라 ★이것과 다르다 */}
+          {club.srv && m.uid && (
+            <div style={{ fontSize: 11, color: "var(--green)", marginTop: 7 }}>
+              ✓ 본인이 들어와 있습니다
+            </div>
+          )}
+
           {/* 🔴 2026-11-14 — 초청 글 복사 [대표님].
-                 ★「초청 중」인 분에게만 나온다. 수락해서 「정식」이 되면 사라진다.
+                 ⛔ 처음에는 ★「초청 중」인 분에게만 달았다. 그런데 총무가 ★손으로
+                   「정식」으로 바꿔 둔 분들은 단추가 ★숨어 버렸다 — 실제로는 아직
+                   아무도 안 들어오셨는데도 [대표님 「초대코드는 있는데 초청하기는 어디에?」].
+                 ⇒ 기준은 상태 알약이 아니라 ★「본인이 들어왔는가」다.
+                   서버가 그 사람 계정을 들고 있으면(uid) 들어온 것이고, 없으면 아직이다.
                  ⛔ 서버에 안 올라간 동우회에서는 ★안 보여준다 — 코드를 넣어도
                    들어올 곳이 없으니 되는 척하면 안 된다. */}
-          {club.srv && m.status !== "active" && (
+          {club.srv && !m.uid && (
             <button onClick={async () => {
               const t = inviteTxt(club, m.name);
               try { await navigator.clipboard.writeText(t); say("초청 글을 복사했습니다 · 카톡에 붙여넣으세요"); }
@@ -7074,7 +7113,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
               width: "100%", marginTop: 9, padding: "10px 11px", borderRadius: 10,
               background: "rgba(232,184,56,.1)", border: "1px solid rgba(232,184,56,.4)",
               color: ACCENT, fontSize: 12, fontWeight: 700, textAlign: "left", lineHeight: 1.5,
-            }}>📋 초청 글 복사 — 카톡에 붙여넣기</button>
+            }}>📋 「{m.name}」 님께 보낼 초청 글 복사</button>
           )}
 
           {/* 🔴 2026-11-13 — 동우회를 안 고르고 친 판이 ★이 사람 이름으로 남아 있으면
