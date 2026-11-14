@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-74 초청 글 — 두 곳을 한 가지로 · 로그인 줄 넣음 -->
+<!-- build: 1판-75 초대 주소 — 누르면 코드가 따라간다 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -10675,6 +10675,138 @@ const takeSeries = (data, club, picked, alsoAdd, all) => {
   };
 };
 
+/* 🔴 2026-11-14 — 초대장 창 [대표님 「심플하게」].
+      ★두 번만 누르면 끝난다 —
+        ㉠ 로그인 안 돼 있으면 [카카오로 로그인하고 들어가기]
+        ㉡ 돌아오면 [「◻◻◻」에 들어가기]
+      ⚠ 로그인 전에는 ★동우회 이름을 모른다 — 서버가 로그인한 사람에게만
+        보여주기 때문이다(RLS). 그래서 ㉠에서는 ★코드만 보여준다.
+        되는 척하며 이름을 지어내지 않는다.
+      ⛔ 저절로 가입시키지 않는다 — 어느 동우회인지 ★보고 누르셔야 한다. */
+function JoinSheet({
+  code,
+  data,
+  onLogin,
+  onJoin,
+  onClose,
+  busy,
+  club
+}) {
+  if (!code) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 140,
+      background: "rgba(0,0,0,.62)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 420,
+      background: "#0C2E46",
+      borderRadius: 16,
+      padding: "20px 17px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: ACCENT,
+      fontWeight: 700
+    }
+  }, "동우회 초대장"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      fontWeight: 700,
+      marginTop: 8,
+      lineHeight: 1.5
+    }
+  }, club ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ACCENT
+    }
+  }, "「", club.name, "」"), "에", /*#__PURE__*/React.createElement("br", null), "초대받으셨습니다") : /*#__PURE__*/React.createElement(React.Fragment, null, "동우회에 초대받으셨습니다")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 13,
+      padding: "11px 12px",
+      borderRadius: 10,
+      background: "rgba(0,0,0,.28)",
+      border: "1px solid var(--line)",
+      display: "flex",
+      alignItems: "center",
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: "#6F8598"
+    }
+  }, "초대 코드"), /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      fontSize: 19,
+      letterSpacing: 3,
+      color: "var(--ivory)",
+      fontWeight: 700
+    }
+  }, code)), data.me ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(CBtn, {
+    onClick: onJoin
+  }, busy ? "들어가는 중…" : club ? `「${club.name}」에 들어가기` : "들어가기"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      marginTop: 9,
+      lineHeight: 1.7
+    }
+  }, "명단에 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, data.nick || "회원"), " 님으로 올라 있으면 그동안 함께 친 기록이 그대로 이어집니다.")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(CBtn, {
+    onClick: onLogin
+  }, "카카오로 로그인하고 들어가기"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      marginTop: 9,
+      lineHeight: 1.7
+    }
+  }, "처음 오셨어도 이 단추 하나면 됩니다. 따로 가입하실 것이 없어요.", /*#__PURE__*/React.createElement("br", null), "돌아오면 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "들어가기"), "만 한 번 누르시면 끝입니다.")), /*#__PURE__*/React.createElement(CBtn, {
+    ghost: true,
+    onClick: onClose
+  }, "나중에")));
+}
+
+/* 🔴 2026-11-14 — 「초대문을 누르면 ★자동으로 그 동우회로 들어가게 할 수는 없나?
+      받은 문자를 눌러 클릭 ▸ 카카오 로그인 ▸ 무슨 버튼을 누르면 자동으로 가입」 [대표님]
+   ⇒ 주소에 코드를 싣는다 — https://cue.myjae.kr/?j=100003
+   ⚠⚠ 카카오에 다녀오면 ★물음표 뒤가 날아간다 (authBack 은 origin+pathname 만 보낸다).
+      그래서 ★앱을 켜자마자 저장칸에 적어 둔다. 안 그러면 로그인하고 돌아왔을 때
+      「무슨 동우회였지」가 된다.
+   ⛔ 주소는 ★담자마자 지운다 — 남에게 넘어가면 그대로 초대장이다. */
+const joinFromUrl = () => {
+  try {
+    const m = /[?&]j=(\d{6})\b/.exec(location.search || "");
+    if (!m) return "";
+    const c = m[1];
+    const q = new URLSearchParams(location.search);
+    q.delete("j");
+    const rest = q.toString();
+    history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + (location.hash || ""));
+    return c;
+  } catch (e) {
+    return "";
+  }
+};
+
 /* 🔴 2026-11-14 — 초청 글 [대표님 「초청하기 기능도 넣어볼까?」]
    ⚠ 큐보드는 카톡을 ★대신 보내지 못한다. 웹이라 남의 번호로 못 보낸다.
      ⇒ 결과표를 복사해 보내시는 것과 ★똑같이, 복사해서 붙여넣기다.
@@ -10683,7 +10815,7 @@ const takeSeries = (data, club, picked, alsoAdd, all) => {
       받은 분이 주소를 눌러 바로 코드를 넣으면 ★「먼저 로그인해 주세요」만 뜬다.
       ⇒ ②에 로그인을 넣고, ★「따로 깔 앱이 없다」는 것도 적는다 (웹이라 설치가 없다).
       ⛔ 「앱을 받으세요」라고 쓰지 말 것 — 받을 앱이 없다. */
-const inviteTxt = (club, name) => `큐보드 「${club.name}」에서 함께 치고 있습니다.\n` + (name ? `${name} 님을 동우회 회원으로 모십니다.\n\n` : `우리 동우회 회원으로 모십니다.\n\n`) + `① 아래 주소를 누르세요\n` + `https://cue.myjae.kr\n\n` + `② 오른쪽 위 [로그인] — 카카오로 3초면 됩니다\n\n` + `③ 아래 [동우회] ▸ [초대 코드로 들어가기]\n\n` + `④ 코드 ${club.code} 을 넣으세요\n\n` + `들어오시면 그동안 함께 친 기록이\n` + `동우회 성적에 그대로 들어갑니다.\n\n` + `※ 따로 깔 앱이 없습니다. 주소만 누르면 바로 쓰십니다.\n` + `   자주 쓰시려면 크롬 오른쪽 위 ⋮ ▸ 「홈 화면에 추가」`;
+const inviteTxt = (club, name) => `큐보드 「${club.name}」에서 함께 치고 있습니다.\n` + (name ? `${name} 님을 동우회 회원으로 모십니다.\n\n` : `우리 동우회 회원으로 모십니다.\n\n`) + `① 아래 주소를 누르세요 (코드가 들어 있습니다)\n` + `https://cue.myjae.kr/?j=${club.code}\n\n` + `② [카카오로 로그인하고 들어가기] 를 누르세요\n\n` + `③ 돌아오면 [「${club.name}」에 들어가기] 한 번\n\n` + `들어오시면 그동안 함께 친 기록이\n` + `동우회 성적에 그대로 들어갑니다.\n\n` + `※ 따로 깔 앱이 없습니다. 주소만 누르면 바로 쓰십니다.\n` + `   자주 쓰시려면 크롬 오른쪽 위 ⋮ ▸ 「홈 화면에 추가」\n` + `※ 주소가 안 열리면 큐보드에서 [동우회] ▸ [초대 코드로 들어가기] ·\n` + `   코드 ${club.code}`;
 
 /* ★ 기록 보기에서 골라 넣는 창 — ⛔ 모듈 자리에 둔다 */
 function PickGamesSheet({
@@ -11941,6 +12073,13 @@ function App() {
   const [tab, setTab] = useState("home");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
+  /* 🔴 2026-11-14 — 초대장 [대표님].
+     ⚠ 동우회 이름은 ★든 사람에게만 보여준다 (RLS: owner 이거나 cue_is_member).
+       ⇒ 처음 오신 분에게는 ★이름이 안 나온다 — 코드만 보여주고, 들어온 ★뒤에
+         이름을 알려 준다. ⛔ 이름을 지어내지 않는다.
+       이미 든 분이 초대 주소를 다시 누르면 그때는 이름이 나온다. */
+  const [joining, setJoining] = useState(false);
+  const [joinClub, setJoinClub] = useState(null);
   const [bare, setBare] = useState(false);
   const [tv, setTv] = useState(false);
   const [login, setLogin] = useState(false);
@@ -11975,6 +12114,23 @@ function App() {
              ⚠ 저장칸을 읽고 곧바로 return 하면, ★이미 쓰던 폰은 여기까지 못 온다.
                화면은 멀쩡히 뜨고 «로그인만 조용히» 안 된다 — 검사도 못 잡는다.
                그래서 조각 확인이 반드시 앞이다 */
+      /* 🔴 2026-11-14 — 초대 주소(?j=코드)를 ★제일 먼저 꺼내 적어 둔다.
+            카카오에 다녀오면 물음표 뒤가 날아가므로 ★여기서 붙잡아야 한다 */
+      const urlJoin = joinFromUrl();
+      if (urlJoin) {
+        /* ⚠⚠ 화면 상태에만 두면 ★카카오에 다녀오는 사이에 날아간다.
+              ⇒ ★곧바로 저장칸에 적는다. 돌아와서 이것을 읽는다. */
+        try {
+          const base0 = saved || normalize({
+            games: []
+          });
+          saved = {
+            ...base0,
+            joinCode: urlJoin
+          };
+          await window.storage.set(KEY, JSON.stringify(saved));
+        } catch (e) {}
+      }
       const ks = sbHashSess();
       if (ks) {
         sbHashClear(); /* ⛔ 담자마자 지운다 */
@@ -12002,7 +12158,8 @@ function App() {
                 id: uid,
                 email: u?.email || "",
                 nickname: nm
-              }
+              },
+              joinCode: urlJoin || base.joinCode || ""
             });
             put(n);
             /* ★ 카카오로 돌아왔을 때 아무 말도 없으면 로그인이 된 줄 모른다.
@@ -12032,7 +12189,8 @@ function App() {
             me: h.me,
             nick: h.nick,
             session: h.session,
-            games: bilGames(h.games)
+            games: bilGames(h.games),
+            joinCode: urlJoin
           }));
         }
       } catch (e) {}
@@ -12158,6 +12316,29 @@ function App() {
         ★받을 것만 있는 경우를 빠뜨렸다.
      ⇒ 로그인돼 있으면 ★앱을 켤 때 한 번은 무조건 맞춘다.
      ⚠ 한 번만 — ref 로 잠근다. 안 그러면 기록이 바뀔 때마다 서버를 부른다 */
+  useEffect(() => {
+    if (!data.joinCode || !data.me) {
+      if (joinClub) setJoinClub(null);
+      return;
+    }
+    let off = false;
+    (async () => {
+      try {
+        const tok = await cueTok(dataRef.current);
+        if (!tok || off) return;
+        const rows = await cueGet(tok, `cue_clubs?code=eq.${encodeURIComponent(data.joinCode)}&select=id,name,code,owner`);
+        const c = Array.isArray(rows) ? rows[0] : null;
+        if (!off) setJoinClub(c ? {
+          id: c.id,
+          name: String(c.name || "").slice(0, 30)
+        } : null);
+      } catch (e) {/* 이름을 못 읽어도 들어가기는 된다 */}
+    })();
+    return () => {
+      off = true;
+    };
+  }, [data.joinCode, data.me]); // eslint-disable-line
+
   const firstSync = useRef(false);
   useEffect(() => {
     if (!data.me || !data.session?.token) return;
@@ -12342,6 +12523,51 @@ function App() {
     })(),
     onClose: () => setSheet(null),
     say: say
+  }), /*#__PURE__*/React.createElement(JoinSheet, {
+    code: data.joinCode || "",
+    data: data,
+    busy: joining,
+    club: joinClub,
+    onLogin: sbKakaoGo,
+    onClose: () => save({
+      ...data,
+      joinCode: ""
+    }),
+    onJoin: async () => {
+      if (joining) return;
+      setJoining(true);
+      try {
+        const tok = await cueTok(data, s2 => patch(p => ({
+          ...p,
+          session: s2
+        })));
+        if (!tok) {
+          setJoining(false);
+          return say("먼저 로그인해 주세요");
+        }
+        const got = await cueRpc(tok, "cue_join", {
+          p_code: data.joinCode,
+          p_name: (data.nick || "회원").slice(0, 20)
+        });
+        const id = typeof got === "string" ? got : got && got.cue_join || "";
+        if (!id) throw new Error("들어가지 못했습니다");
+        const c = await pullClub(tok, id, data.me);
+        if (!c) throw new Error("동우회를 못 읽었습니다");
+        const d1 = dataRef.current;
+        save({
+          ...d1,
+          joinCode: "",
+          clubId: c.id,
+          clubs: mergeClubs(clubsOf(d1).filter(x => x.id !== c.id), [c])
+        });
+        setJoining(false);
+        setTab("club");
+        say(`「${c.name}」에 들어왔습니다`);
+      } catch (e) {
+        setJoining(false);
+        say(String(e.message || "").includes("코드") ? "초대 코드가 맞지 않습니다" : e.message || "들어가지 못했습니다");
+      }
+    }
   }), toast && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
