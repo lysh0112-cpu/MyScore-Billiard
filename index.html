@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-82 동우회 지우기 — 서버에서도 지운다 -->
+<!-- build: 1판-83 한 분이 두 줄로 생기던 것 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -11375,15 +11375,21 @@ function JoinSheet({
 const joinFromUrl = () => {
   try {
     const m = /[?&]j=(\d{6})\b/.exec(location.search || "");
-    if (!m) return "";
+    if (!m) return null;
     const c = m[1];
     const q = new URLSearchParams(location.search);
+    /* ★ 이름이 실려 있으면 ★그 이름으로 들어간다 — 내 앱 이름이 아니라 */
+    const nm = (q.get("n") || "").slice(0, 20);
     q.delete("j");
+    q.delete("n");
     const rest = q.toString();
     history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + (location.hash || ""));
-    return c;
+    return {
+      code: c,
+      name: nm
+    };
   } catch (e) {
-    return "";
+    return null;
   }
 };
 
@@ -11395,7 +11401,16 @@ const joinFromUrl = () => {
       받은 분이 주소를 눌러 바로 코드를 넣으면 ★「먼저 로그인해 주세요」만 뜬다.
       ⇒ ②에 로그인을 넣고, ★「따로 깔 앱이 없다」는 것도 적는다 (웹이라 설치가 없다).
       ⛔ 「앱을 받으세요」라고 쓰지 말 것 — 받을 앱이 없다. */
-const inviteTxt = (club, name) => `큐보드 「${club.name}」에서 함께 치고 있습니다.\n` + (name ? `${name} 님을 동우회 회원으로 모십니다.\n\n` : `우리 동우회 회원으로 모십니다.\n\n`) + `① 아래 주소를 누르세요 (코드가 들어 있습니다)\n` + `https://cue.myjae.kr/?j=${club.code}\n\n` + `② [카카오로 로그인하고 들어가기] 를 누르세요\n\n` + `③ 돌아오면 [「${club.name}」에 들어가기] 한 번\n\n` + `들어오시면 그동안 함께 친 기록이\n` + `동우회 성적에 그대로 들어갑니다.\n\n` + `※ 따로 깔 앱이 없습니다. 주소만 누르면 바로 쓰십니다.\n` + `   자주 쓰시려면 크롬 오른쪽 위 ⋮ ▸ 「홈 화면에 추가」\n` + `※ 주소가 안 열리면 큐보드에서 [동우회] ▸ [초대 코드로 들어가기] ·\n` + `   코드 ${club.code}`;
+const inviteTxt = (club, name) => `큐보드 「${club.name}」에서 함께 치고 있습니다.\n` + (name ? `${name} 님을 동우회 회원으로 모십니다.\n\n` : `우리 동우회 회원으로 모십니다.\n\n`) + `① 아래 주소를 누르세요 (코드가 들어 있습니다)\n` +
+/* 🔴🔴 2026-11-14 — 주소에 ★이름을 같이 싣는다 [대표님
+      「오연희와 연희가 ★따로 있는 거야… 어차피 카카오 로그인으로 들어오는 것이잖아」].
+   까닭 — cue_join 은 빈자리를 ★이름이 똑같을 때만 잇는다
+     (sql: user_id is null and name = p_name).
+     총무가 적어 둔 「오연희」와 그분 앱 이름 「연희」가 달라 ★두 줄이 되었다.
+   ⇒ 「○○ 님께 보낼 초청 글」에는 주소에 ★그 이름을 실어 보낸다.
+     그러면 그분 앱 이름이 무엇이든 ★그 자리로 꽂힌다.
+   ⚠ 단톡방에 뿌리는 글(이름 없음)은 ★그대로다 — 각자 제 이름으로 들어온다. */
+`https://cue.myjae.kr/?j=${club.code}${name ? "&n=" + encodeURIComponent(name) : ""}\n\n` + `② [카카오로 로그인하고 들어가기] 를 누르세요\n\n` + `③ 돌아오면 [「${club.name}」에 들어가기] 한 번\n\n` + `들어오시면 그동안 함께 친 기록이\n` + `동우회 성적에 그대로 들어갑니다.\n\n` + `※ 따로 깔 앱이 없습니다. 주소만 누르면 바로 쓰십니다.\n` + `   자주 쓰시려면 크롬 오른쪽 위 ⋮ ▸ 「홈 화면에 추가」\n` + `※ 주소가 안 열리면 큐보드에서 [동우회] ▸ [초대 코드로 들어가기] ·\n` + `   코드 ${club.code}`;
 
 /* ★ 기록 보기에서 골라 넣는 창 — ⛔ 모듈 자리에 둔다 */
 function PickGamesSheet({
@@ -11820,6 +11835,152 @@ const takeOrphansFor = (data, club, list) => {
      ★ 카드를 누르면 ★그 사람 기록. ✎ 를 누르면 고치는 칸.
      ★ 「신고 에버」는 ★본인이 알려준 값이고, 「실제」는 ★쳐서 나온 값이다.
         둘을 한 칸으로 합치면 반드시 어긋난다 — ★나란히 둔다. */
+/* 🔴 2026-11-14 — 합치기 창 [대표님 「오연희와 연희가 따로 있는 거야」].
+   ⚠ 기계가 혼자 못 고른다 — 총무가 ★짚어 주셔야 한다.
+     카카오 번호는 그분이 로그인해야 생기고, 총무는 그때까지 ★모른다.
+   ⛔ 컴포넌트 ★안에 두면 안 된다 — 다시 그릴 때마다 창이 ★새로 태어난다. */
+function MergeSheet({
+  m,
+  list,
+  busy,
+  onClose,
+  onMerge
+}) {
+  const [sel, setSel] = useState("");
+  useEffect(() => {
+    setSel(list.length === 1 ? list[0].id : "");
+  }, [m && m.id]); // eslint-disable-line
+  if (!m) return null;
+  const real = list.find(x => x.id === sel);
+  return /*#__PURE__*/React.createElement("div", {
+    onClick: onClose,
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 130,
+      background: "rgba(0,0,0,.6)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      background: "#0C2E46",
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 14px 20px",
+      maxHeight: "86vh",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      marginBottom: 3
+    }
+  }, "「", m.name, "」 은(는) 어느 분입니까?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      lineHeight: 1.6,
+      marginBottom: 13
+    }
+  }, "총무님이 적어 두신 이름과 그분이 쓰시는 이름이 다르면 두 줄이 됩니다.", /*#__PURE__*/React.createElement("br", null), "같은 분을 고르시면 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "한 줄로 합칩니다.")), list.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "22px 0",
+      textAlign: "center",
+      fontSize: 13,
+      color: "var(--chalk)",
+      lineHeight: 1.8
+    }
+  }, "아직 들어와 계신 분이 없습니다.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#6F8598"
+    }
+  }, "한 분이라도 들어오셔야 합칠 수 있습니다.")), list.map(x => /*#__PURE__*/React.createElement("button", {
+    key: x.id,
+    onClick: () => setSel(x.id),
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      width: "100%",
+      textAlign: "left",
+      background: sel === x.id ? "rgba(232,184,56,.09)" : "rgba(0,0,0,.22)",
+      border: `1px solid ${sel === x.id ? ACCENT : "var(--line)"}`,
+      borderRadius: 10,
+      padding: 11,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 19,
+      height: 19,
+      borderRadius: "50%",
+      flexShrink: 0,
+      border: `2px solid ${sel === x.id ? ACCENT : "var(--chalk)"}`,
+      background: sel === x.id ? `radial-gradient(${ACCENT} 45%, transparent 46%)` : "none"
+    }
+  }), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 14.5
+    }
+  }, x.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: 11,
+      color: "#6F8598",
+      marginTop: 2
+    }
+  }, x.role === "admin" ? "총무 · " : "", "들어와 계십니다")))), real && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--chalk)",
+      lineHeight: 1.7,
+      margin: "12px 0",
+      background: "rgba(79,178,134,.1)",
+      border: "1px solid rgba(79,178,134,.3)",
+      borderRadius: 8,
+      padding: "9px 10px"
+    }
+  }, "합치면 —", /*#__PURE__*/React.createElement("br", null), "· 이름은 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, m.name), " 로 남습니다", /*#__PURE__*/React.createElement("br", null), "· 수지 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "3구 ", m.h3 || real.h3 || "–", " · 4구 ", m.h4 || real.h4 || "–"), " 도 그대로 옮깁니다", /*#__PURE__*/React.createElement("br", null), "· 그분이 친 기록은 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "하나도 안 없어집니다")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 9,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    disabled: !real || busy,
+    style: {
+      opacity: real && !busy ? 1 : .45
+    },
+    onClick: () => real && onMerge(real)
+  }, busy ? "합치는 중…" : "합치기"), /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    onClick: onClose
+  }, "닫기"))));
+}
 function ClubRoster({
   data,
   save,
@@ -11850,6 +12011,8 @@ function ClubRoster({
      ⇒ 칸에 보이는 것은 ★치신 글자 그대로, 저장만 숫자로 한다. */
   const [ef, setEf] = useState({});
   const [orpFor, setOrp] = useState(null); /* 지난 기록을 고르는 중인 회원 */
+  const [mgFor, setMg] = useState(null); /* 합칠 「초청 중」 회원 */
+  const [mgBusy, mgOnce] = useOnce();
   const openEdit = m => {
     if (edit === m.id) {
       setEdit("");
@@ -11898,6 +12061,60 @@ function ClubRoster({
       members: next
     } : c)
   });
+
+  /* 🔴🔴 2026-11-14 — 두 줄을 ★한 줄로 [대표님 「하나로 통일되어야 하는 것 아니냐」]
+     ⇒ 들어와 계신 줄(uid 가 있는 쪽)을 ★남기고, 총무가 적어 둔 줄은 ★지운다.
+       이름·수지·연락처는 ★총무가 적어 둔 쪽을 쓴다 — 그게 제대로 된 값이다.
+     ⛔ 지워지는 줄의 회원 번호로 적힌 ★판들을 남는 줄로 ★옮겨 둔다.
+       안 옮기면 그분 기록이 ★주인 없는 판이 된다.
+     ⚠ 서버부터 고치고, 된 다음에 내 기계를 고친다 — 순서가 거꾸로면
+       서버가 막았을 때 ★화면만 합쳐진 척한다. */
+  const mergeRun = async (ghost, real) => {
+    const nm = (ghost.name || real.name || "회원").slice(0, 20);
+    const h3 = ghost.h3 || real.h3 || 0;
+    const h4 = ghost.h4 || real.h4 || 0;
+    if (club.srv) {
+      const tok = await cueTok(data);
+      if (!tok) return say("로그인하신 뒤에 합칠 수 있습니다");
+      try {
+        if (real.srvId) await cuePatch(tok, `cue_club_members?id=eq.${real.srvId}`, {
+          name: nm,
+          h3,
+          h4
+        });
+        if (ghost.srvId) await cueDel(tok, `cue_club_members?id=eq.${ghost.srvId}`);
+      } catch (e) {
+        return say("서버에서 합치지 못했습니다 — 잠시 뒤 다시");
+      }
+    }
+    const next = ms.filter(x => x.id !== ghost.id).map(x => x.id === real.id ? {
+      ...x,
+      name: nm,
+      h3,
+      h4,
+      phone: ghost.phone || x.phone || ""
+    } : x);
+    /* ★ 지워지는 회원 번호로 적힌 판을 ★남는 번호로 옮긴다 */
+    const fixMid = gs => (gs || []).map(g => (g.players || []).some(pp => pp.mid === ghost.id) ? {
+      ...g,
+      players: g.players.map(pp => pp.mid === ghost.id ? {
+        ...pp,
+        mid: real.id,
+        name: nm
+      } : pp)
+    } : g);
+    save({
+      ...data,
+      clubs: clubsOf(data).map(c => c.id === club.id ? {
+        ...c,
+        members: next
+      } : c),
+      games: fixMid(data.games),
+      pool: fixMid(data.pool)
+    });
+    setMg(null);
+    say(`「${nm}」 한 분으로 합쳤습니다`);
+  };
   /* 그 기간·그 종목에서 ★실제로 친 값 */
   const live = useMemo(() => {
     const by = {};
@@ -12282,7 +12499,22 @@ function ClubRoster({
       textAlign: "left",
       lineHeight: 1.5
     }
-  }, "📋 「", m.name, "」 님께 보낼 초청 글 복사"), (() => {
+  }, "📋 「", m.name, "」 님께 보낼 초청 글 복사"), amAdmin && club.srv && !m.uid && ms.some(x => x.uid) && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setMg(m),
+    style: {
+      width: "100%",
+      marginTop: 9,
+      padding: "10px 11px",
+      borderRadius: 10,
+      background: "rgba(232,184,56,.1)",
+      border: "1px solid rgba(232,184,56,.45)",
+      color: ACCENT,
+      fontSize: 12,
+      fontWeight: 700,
+      textAlign: "left",
+      lineHeight: 1.5
+    }
+  }, "🔗 벌써 들어와 계신 분과 합치기"), (() => {
     const orp = orphansOf(data.games, m.name);
     if (!orp.length) return null;
     return /*#__PURE__*/React.createElement("button", {
@@ -12527,6 +12759,12 @@ function ClubRoster({
       say(`${orpFor.name} 님의 지난 기록 ${pick.length}판을 넣었습니다`);
       setOrp(null);
     }
+  }), /*#__PURE__*/React.createElement(MergeSheet, {
+    m: mgFor,
+    list: mgFor ? ms.filter(x => x.uid && x.id !== mgFor.id) : [],
+    busy: mgBusy,
+    onClose: () => setMg(null),
+    onMerge: real => mgOnce(() => mergeRun(mgFor, real))
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
@@ -12781,7 +13019,8 @@ function App() {
           });
           saved = {
             ...base0,
-            joinCode: urlJoin
+            joinCode: urlJoin.code,
+            joinName: urlJoin.name || ""
           };
           await window.storage.set(KEY, JSON.stringify(saved));
         } catch (e) {}
@@ -12814,7 +13053,8 @@ function App() {
                 email: u?.email || "",
                 nickname: nm
               },
-              joinCode: urlJoin || base.joinCode || ""
+              joinCode: urlJoin && urlJoin.code || base.joinCode || "",
+              joinName: urlJoin && urlJoin.name || base.joinName || ""
             });
             put(n);
             /* ★ 카카오로 돌아왔을 때 아무 말도 없으면 로그인이 된 줄 모른다.
@@ -12845,7 +13085,8 @@ function App() {
             nick: h.nick,
             session: h.session,
             games: bilGames(h.games),
-            joinCode: urlJoin
+            joinCode: urlJoin && urlJoin.code || "",
+            joinName: urlJoin && urlJoin.name || ""
           }));
         }
       } catch (e) {}
@@ -13243,7 +13484,8 @@ function App() {
     onLogin: sbKakaoGo,
     onClose: () => save({
       ...data,
-      joinCode: ""
+      joinCode: "",
+      joinName: ""
     }),
     onJoin: () => joinOnce(async () => {
       try {
@@ -13253,8 +13495,9 @@ function App() {
         })));
         if (!tok) return say("먼저 로그인해 주세요");
         const got = await cueRpc(tok, "cue_join", {
+          /* ★ 주소에 이름이 실려 왔으면 ★그 이름으로 — 총무가 비워 둔 자리에 꽂힌다 */
           p_code: data.joinCode,
-          p_name: (data.nick || "회원").slice(0, 20)
+          p_name: (data.joinName || data.nick || "회원").slice(0, 20)
         });
         const id = typeof got === "string" ? got : got && got.cue_join || "";
         if (!id) throw new Error("들어가지 못했습니다");
@@ -13264,6 +13507,7 @@ function App() {
         save({
           ...d1,
           joinCode: "",
+          joinName: "",
           clubId: c.id,
           clubs: mergeClubs(clubsOf(d1).filter(x => x.id !== c.id), [c])
         });
