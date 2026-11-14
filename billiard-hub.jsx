@@ -5696,7 +5696,11 @@ function ClubRank({ data, save, say, club, P, onBack, onRoster, onMember }) {
   const { mode, setMode, range, setRange, from, setFrom, to, setTo, bound } = P;
   const [sort, setSort] = useState("avg");
   const [grp, setGrp] = useState("all");
-  const [min, setMin] = useState(10);
+  /* ★ 2026-11-14 — 「★전부 보기가 기본 세팅으로 바꿔줘… 나중에 많이 쌓이면
+        기본 세팅을 바꾸자」 [대표님].
+     ⚠ 10판으로 두면 이제 막 시작한 동우회는 ★윗 표가 통째로 비어 「왜 아무것도
+       없지」가 된다. 기록이 쌓이면 그때 10판으로 되돌린다. */
+  const [min, setMin] = useState(0);
   const [q, setQ] = useState("");
   const [team, setTeam] = useState(false);
   const [open, setOpen] = useState(false);          /* 가끔 나온 분 펼치기 */
