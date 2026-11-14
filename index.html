@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-77 두 번 눌려 둘이 되던 것 · 본인 나가기 -->
+<!-- build: 1판-78 총무 표시 · 총무 맡기기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -11459,6 +11459,10 @@ function ClubRoster({
           바뀌고 서버는 안 바뀌니 ★제일 나쁜 꼴이다. 아예 안 보여준다.
         ★ 2026-11-13 에 대표님과 정한 것 — 「총무나 회장만 초청·수정, 일반회원 보기만」 */
   const amAdmin = !club.srv || !!club.owner || ms.some(m => m.uid && m.uid === data.me && m.role === "admin");
+  /* ⚠ 동우회를 ★만든 분은 이 기계에서 club.owner 로만 알 수 있다 (서버에서 owner 칸을
+        내려받지 않는다). 내 동우회면 ★나다. 남의 동우회면 모른다 — 그때는 표시 안 한다 */
+  const clubOwnerUid = club.owner ? data.me : "";
+  const nAdmin = ms.filter(m => m.role === "admin").length;
   /* ⚠ 2026-11-14 — 여기에도 ★잠금을 단다. 서버를 부르는 사이에 한 번 더 눌리면
         ★같은 분이 둘이 된다 (동우회가 둘이 된 것과 ★같은 구멍이다) */
   const [adding, addOnce] = useOnce();
@@ -11715,10 +11719,18 @@ function ClubRoster({
       fontSize: 10,
       fontWeight: 700,
       verticalAlign: 2,
-      background: m.status === "active" ? "rgba(79,178,134,.16)" : "rgba(244,238,223,.09)",
-      color: m.status === "active" ? "var(--green)" : "#8FA8BC"
+      background: m.role === "admin" ? "rgba(232,184,56,.18)" : m.status === "active" ? "rgba(79,178,134,.16)" : "rgba(244,238,223,.09)",
+      color: m.role === "admin" ? ACCENT : m.status === "active" ? "var(--green)" : "#8FA8BC"
     }
-  }, m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중")), amAdmin && /*#__PURE__*/React.createElement("button", {
+  }, m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중"), m.uid && club.srv && m.uid === clubOwnerUid && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#55708A",
+      marginLeft: 5,
+      fontWeight: 500,
+      verticalAlign: 2
+    }
+  }, "만든 분")), amAdmin && /*#__PURE__*/React.createElement("button", {
     onClick: () => openEdit(m),
     "aria-label": "수정",
     style: {
@@ -11883,6 +11895,44 @@ function ClubRoster({
     ph: "150",
     set: v => typeNum(m.id, "h4", v)
   })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 9
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#6F8598",
+      marginBottom: 5
+    }
+  }, "역할"), /*#__PURE__*/React.createElement(Pills, {
+    cols: "repeat(2,1fr)",
+    value: m.role === "admin" ? "admin" : "member",
+    set: v => {
+      if (v === "member" && m.role === "admin" && nAdmin <= 1) {
+        return say("마지막 총무입니다 · 다른 분께 먼저 맡겨 주세요");
+      }
+      patch(m.id, {
+        role: v
+      });
+      say(v === "admin" ? `${m.name} 님께 총무를 맡겼습니다` : `${m.name} 님을 회원으로 바꿨습니다`);
+    },
+    items: [["member", "회원"], ["admin", "총무"]]
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#61798C",
+      marginTop: 6,
+      lineHeight: 1.6
+    }
+  }, "총무는 명단을 고치고 초청할 수 있습니다. ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "#8FA8BC"
+    }
+  }, "여럿이어도 됩니다."), club.owner && m.uid === data.me && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "⛔ 동우회를 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "#8FA8BC"
+    }
+  }, "지우는 것"), "은 만든 분만 할 수 있습니다."))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 9
     }

@@ -7119,6 +7119,10 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
         ★ 2026-11-13 에 대표님과 정한 것 — 「총무나 회장만 초청·수정, 일반회원 보기만」 */
   const amAdmin = !club.srv || !!club.owner
     || ms.some((m) => m.uid && m.uid === data.me && m.role === "admin");
+  /* ⚠ 동우회를 ★만든 분은 이 기계에서 club.owner 로만 알 수 있다 (서버에서 owner 칸을
+        내려받지 않는다). 내 동우회면 ★나다. 남의 동우회면 모른다 — 그때는 표시 안 한다 */
+  const clubOwnerUid = club.owner ? data.me : "";
+  const nAdmin = ms.filter((m) => m.role === "admin").length;
   /* ⚠ 2026-11-14 — 여기에도 ★잠금을 단다. 서버를 부르는 사이에 한 번 더 눌리면
         ★같은 분이 둘이 된다 (동우회가 둘이 된 것과 ★같은 구멍이다) */
   const [adding, addOnce] = useOnce();
@@ -7246,12 +7250,20 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}>
               {m.name}
+              {/* 🔴 2026-11-14 — 「★누가 총무인지 표시를 해줄 수 있나?」 [대표님].
+                     표시는 있었는데 ★색이 정식·초청 중과 같아 눈에 안 띄었다.
+                     ⇒ 총무는 ★노랗게. 한눈에 갈린다. */}
               <span style={{
                 display: "inline-block", marginLeft: 7, padding: "2px 7px", borderRadius: 999,
                 fontSize: 10, fontWeight: 700, verticalAlign: 2,
-                background: m.status === "active" ? "rgba(79,178,134,.16)" : "rgba(244,238,223,.09)",
-                color: m.status === "active" ? "var(--green)" : "#8FA8BC",
+                background: m.role === "admin" ? "rgba(232,184,56,.18)"
+                  : m.status === "active" ? "rgba(79,178,134,.16)" : "rgba(244,238,223,.09)",
+                color: m.role === "admin" ? ACCENT
+                  : m.status === "active" ? "var(--green)" : "#8FA8BC",
               }}>{m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중"}</span>
+              {m.uid && club.srv && m.uid === clubOwnerUid && (
+                <span style={{ fontSize: 10, color: "#55708A", marginLeft: 5, fontWeight: 500, verticalAlign: 2 }}>만든 분</span>
+              )}
             </button>
             {/* 🔴 2026-11-13 — 「수정 단추가 너무 작아서 찾기가 힘들다 · 조금 더 키우고
                    선명한 노란색으로」 [대표님] ⇒ ㉯ 안으로 정하심.
@@ -7352,6 +7364,29 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
                 <Fld lbl="3구 핸디" v={ef.h3} ph="15" set={(v) => typeNum(m.id, "h3", v)} />
                 <Fld lbl="4구 핸디" v={ef.h4} ph="150" set={(v) => typeNum(m.id, "h4", v)} />
               </div>
+              {/* 🔴 2026-11-14 — 「★총무를 다른 사람에게 넘겨주는 기능도 필요하지 않을까?」
+                     [대표님]. ⇒ 총무를 ★맡길 수 있다. 서버 규칙이 이미 「총무면 고친다」라
+                     되어 있어(cue_is_admin) 자리만 만들면 된다.
+                   ★ 총무는 ★여럿이어도 된다 — 회장과 총무가 함께 맡는 동우회가 많다.
+                   ⛔ ★마지막 총무는 내려놓을 수 없다. 아무도 못 고치는 동우회가 된다.
+                   ⚠ 아직 안 들어오신 분도 맡길 수 있다 — 들어오시는 ★그때부터 먹힌다. */}
+              <div style={{ marginTop: 9 }}>
+                <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 5 }}>역할</div>
+                <Pills cols="repeat(2,1fr)" value={m.role === "admin" ? "admin" : "member"}
+                  set={(v) => {
+                    if (v === "member" && m.role === "admin" && nAdmin <= 1) {
+                      return say("마지막 총무입니다 · 다른 분께 먼저 맡겨 주세요");
+                    }
+                    patch(m.id, { role: v });
+                    say(v === "admin" ? `${m.name} 님께 총무를 맡겼습니다` : `${m.name} 님을 회원으로 바꿨습니다`);
+                  }}
+                  items={[["member", "회원"], ["admin", "총무"]]} />
+                <div style={{ fontSize: 11, color: "#61798C", marginTop: 6, lineHeight: 1.6 }}>
+                  총무는 명단을 고치고 초청할 수 있습니다. <b style={{ color: "#8FA8BC" }}>여럿이어도 됩니다.</b>
+                  {club.owner && m.uid === data.me && <><br />⛔ 동우회를 <b style={{ color: "#8FA8BC" }}>지우는 것</b>은 만든 분만 할 수 있습니다.</>}
+                </div>
+              </div>
+
               <div style={{ marginTop: 9 }}>
                 <div style={{ fontSize: 10.5, color: "#6F8598", marginBottom: 5 }}>상태</div>
                 <Pills cols="repeat(2,1fr)" value={m.status === "active" ? "active" : "invited"}
