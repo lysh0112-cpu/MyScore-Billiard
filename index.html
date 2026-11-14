@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-83 한 분이 두 줄로 생기던 것 -->
+<!-- build: 1판-84 동우회마다 이름이 다를 때 맞추기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -11835,6 +11835,291 @@ const takeOrphansFor = (data, club, list) => {
      ★ 카드를 누르면 ★그 사람 기록. ✎ 를 누르면 고치는 칸.
      ★ 「신고 에버」는 ★본인이 알려준 값이고, 「실제」는 ★쳐서 나온 값이다.
         둘을 한 칸으로 합치면 반드시 어긋난다 — ★나란히 둔다. */
+/* ══════ 같은 분인데 ★동우회마다 이름이 다를 때 ══════
+   🔴🔴 2026-11-14 — [대표님 「새로 동우회를 만들어서 기존 멤버건 새로운 멤버건
+        초청을 하면, 기존 멤버의 경우 ★카카오 로그인으로 확인을 하고,
+        중복이 되면 ★이름을 하나로 통일하라고 메시지를 팝업으로 줄 수 없나?」]
+
+   ★ 된다. 서버에 더 물을 것이 없다 — pullMyClubs 가 내가 든 동우회의 명단을
+     ★카카오 번호(uid)까지 함께 내려받아 두었다. 앱이 ★혼자 찾는다.
+   ⚠ 번호가 같으면 ★같은 분이다. 이름이 다르면 그것은 ★적는 사람이 달랐을 뿐이다.
+   ⛔ 총무가 아닌 동우회는 ★못 바꾼다 — 서버가 막는다(cue_is_admin).
+      「바꿨습니다」 하고 넘어가면 ★거짓말이 된다. 못 바꾼 곳은 ★이름 대고 말한다. */
+const amAdminOf = (data, c) => !c.srv || !!c.owner || (c.members || []).some(m => m.uid && m.uid === data.me && m.role === "admin");
+const uidGroups = data => {
+  const by = {};
+  clubsOf(data).forEach(c => (c.members || []).forEach(m => {
+    if (!m.uid) return; /* 아직 안 들어오신 분 — 번호가 없다 */
+    (by[m.uid] = by[m.uid] || []).push({
+      uid: m.uid,
+      mid: m.id,
+      srvId: m.srvId || "",
+      name: m.name || "",
+      clubId: c.id,
+      clubName: c.name,
+      admin: amAdminOf(data, c)
+    });
+  }));
+  return Object.keys(by).map(u => by[u])
+  /* 🔴 2026-11-14 — ⛔ 처음엔 「이름이 갈리면 묻는다」로 했다. ★그것으로는 안 된다.
+        총무가 아닌 동우회가 끼면 그곳은 ★영영 못 바꾸는데, 맞추고 다시 켜도
+        여전히 갈려 있어 ★또 물었다 (검사가 잡았다 — 「또 떴다」).
+     ⇒ ★내가 총무인 동우회끼리 갈렸을 때만 묻는다.
+        거기까지 맞추셨으면 ★대표님이 하실 수 있는 일은 끝난 것이다. */.filter(rows => rows.length > 1 && new Set(rows.filter(r => r.admin).map(r => r.name)).size > 1);
+};
+/* 「이 분은 이미 물어봤다」를 적어 두는 글 — 이름이 또 바뀌면 다시 묻는다 */
+const uniSig = rows => rows[0].uid + "|" + [...new Set(rows.map(r => r.name))].sort().join(",");
+const uidPick = data => uidGroups(data).find(rows => (data.uniSkip || []).indexOf(uniSig(rows)) < 0);
+
+/* 고른 이름으로 ★맞춘다. 총무인 동우회만 바뀐다 */
+const unifyRun = async (data, rows, name, save, say) => {
+  const todo = rows.filter(r => r.name !== name);
+  const can = todo.filter(r => r.admin);
+  const cant = todo.filter(r => !r.admin);
+  let okN = 0;
+  const tok = await cueTok(data);
+  for (const r of can) {
+    const c = clubById(data, r.clubId);
+    if (c && c.srv) {
+      if (!tok) {
+        say("로그인하신 뒤에 맞출 수 있습니다");
+        return;
+      }
+      try {
+        if (r.srvId) await cuePatch(tok, `cue_club_members?id=eq.${r.srvId}`, {
+          name
+        });
+      } catch (e) {
+        continue;
+      } /* 한 곳 못 바꿔도 나머지는 */
+    }
+    okN++;
+  }
+  const fixIds = new Set(can.map(r => r.clubId + "/" + r.mid));
+  save({
+    ...data,
+    clubs: clubsOf(data).map(c => ({
+      ...c,
+      members: (c.members || []).map(m => fixIds.has(c.id + "/" + m.id) ? {
+        ...m,
+        name
+      } : m)
+    })),
+    uniSkip: [...(data.uniSkip || []), uniSig(rows)].slice(-40)
+  });
+  say(cant.length ? `${okN}곳을 「${name}」으로 맞췄습니다 · ${cant.map(r => r.clubName).join("·")}는 총무가 달라 못 바꿨습니다` : `「${name}」으로 맞췄습니다`);
+};
+function UnifySheet({
+  rows,
+  data,
+  onDone,
+  onLater
+}) {
+  const names = useMemo(() => {
+    const cnt = {};
+    (rows || []).forEach(r => {
+      cnt[r.name] = (cnt[r.name] || 0) + 1;
+    });
+    return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a] || b.length - a.length).map(n => ({
+      n,
+      c: cnt[n]
+    }));
+  }, [rows]);
+  const [sel, setSel] = useState("");
+  const [busy, once] = useOnce();
+  useEffect(() => {
+    setSel(names.length ? names[0].n : "");
+  }, [rows && rows[0] && rows[0].uid]); // eslint-disable-line
+  if (!rows || !rows.length) return null;
+  const todo = rows.filter(r => r.name !== sel);
+  const cant = todo.filter(r => !r.admin);
+  const can = todo.filter(r => r.admin);
+  return /*#__PURE__*/React.createElement("div", {
+    onClick: onLater,
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 140,
+      background: "rgba(0,0,0,.62)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      background: "#0C2E46",
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 14px 20px",
+      maxHeight: "88vh",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15.5,
+      fontWeight: 700,
+      marginBottom: 4
+    }
+  }, "같은 분이 이름이 다릅니다"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      lineHeight: 1.65,
+      marginBottom: 14
+    }
+  }, "카카오 번호가 같으니 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "한 분"), "입니다.", /*#__PURE__*/React.createElement("br", null), "이름을 하나로 맞춰 두시면 성적이 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "한 줄로 모입니다.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(0,0,0,.22)",
+      border: "1px solid var(--line)",
+      borderRadius: 10,
+      padding: "11px 12px",
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#6F8598",
+      letterSpacing: ".08em"
+    }
+  }, "같은 카카오 번호"), rows.map(r => /*#__PURE__*/React.createElement("div", {
+    key: r.clubId + r.mid,
+    style: {
+      display: "flex",
+      alignItems: "baseline",
+      gap: 8,
+      marginTop: 6,
+      fontSize: 13
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#6F8598",
+      fontSize: 11.5,
+      minWidth: 86
+    }
+  }, r.clubName), /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 14.5
+    }
+  }, r.name), !r.admin && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: "#8A6A6A"
+    }
+  }, "총무 아님")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      letterSpacing: ".1em",
+      color: "var(--chalk)",
+      fontWeight: 600,
+      margin: "14px 0 7px"
+    }
+  }, "어느 이름으로 맞출까요?"), names.map(x => /*#__PURE__*/React.createElement("button", {
+    key: x.n,
+    onClick: () => setSel(x.n),
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      width: "100%",
+      textAlign: "left",
+      background: sel === x.n ? "rgba(232,184,56,.09)" : "rgba(0,0,0,.22)",
+      border: `1px solid ${sel === x.n ? ACCENT : "var(--line)"}`,
+      borderRadius: 10,
+      padding: 11,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 19,
+      height: 19,
+      borderRadius: "50%",
+      flexShrink: 0,
+      border: `2px solid ${sel === x.n ? ACCENT : "var(--chalk)"}`,
+      background: sel === x.n ? `radial-gradient(${ACCENT} 45%, transparent 46%)` : "none"
+    }
+  }), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 14.5
+    }
+  }, x.n), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: 11,
+      color: "#6F8598",
+      marginTop: 2
+    }
+  }, "동우회 ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, x.c), "곳에서 쓰는 이름")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--chalk)",
+      lineHeight: 1.7,
+      margin: "13px 0",
+      background: "rgba(79,178,134,.1)",
+      border: "1px solid rgba(79,178,134,.3)",
+      borderRadius: 8,
+      padding: 10
+    }
+  }, can.length ? /*#__PURE__*/React.createElement(React.Fragment, null, "바뀌는 곳 — ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, can.map(r => r.clubName).join(" · ")), /*#__PURE__*/React.createElement("br", null)) : /*#__PURE__*/React.createElement(React.Fragment, null, "바뀌는 곳이 없습니다 — 이미 그 이름입니다", /*#__PURE__*/React.createElement("br", null)), "· 친 기록 · 수지 · 연락처는 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "하나도 안 바뀝니다")), cant.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#D9A8A3",
+      lineHeight: 1.7,
+      margin: "13px 0",
+      background: "rgba(200,123,116,.1)",
+      border: "1px solid rgba(200,123,116,.35)",
+      borderRadius: 8,
+      padding: 10
+    }
+  }, "⛔ ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, cant.map(r => r.clubName).join(" · ")), " 는(은) 총무가 다른 분이라 이 기계에서 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "못 바꿉니다."), /*#__PURE__*/React.createElement("br", null), "그 동우회 총무님께 말씀해 주세요."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 9,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    disabled: !can.length || busy,
+    style: {
+      opacity: can.length && !busy ? 1 : .45
+    },
+    onClick: () => once(async () => {
+      await onDone(sel);
+    })
+  }, busy ? "맞추는 중…" : cant.length ? `나머지 ${can.length}곳만 맞추기` : "맞추기"), /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    onClick: onLater
+  }, "나중에"))));
+}
+
 /* 🔴 2026-11-14 — 합치기 창 [대표님 「오연희와 연희가 따로 있는 거야」].
    ⚠ 기계가 혼자 못 고른다 — 총무가 ★짚어 주셔야 한다.
      카카오 번호는 그분이 로그인해야 생기고, 총무는 그때까지 ★모른다.
@@ -12012,6 +12297,7 @@ function ClubRoster({
   const [ef, setEf] = useState({});
   const [orpFor, setOrp] = useState(null); /* 지난 기록을 고르는 중인 회원 */
   const [mgFor, setMg] = useState(null); /* 합칠 「초청 중」 회원 */
+  const [uniFor, setUni] = useState(null); /* 이름 맞추는 창 */
   const [mgBusy, mgOnce] = useOnce();
   const openEdit = m => {
     if (edit === m.id) {
@@ -12315,7 +12601,51 @@ function ClubRoster({
     style: {
       color: nJoined ? "var(--green)" : "#6F8598"
     }
-  }, nJoined)))), /*#__PURE__*/React.createElement("div", {
+  }, nJoined)))), (() => {
+    const g = uidGroups(data).find(rows => rows.some(r => r.clubId === club.id));
+    if (!g) return null;
+    const nms = [...new Set(g.map(r => r.name))];
+    return /*#__PURE__*/React.createElement("button", {
+      onClick: () => setUni(g),
+      style: {
+        display: "flex",
+        gap: 9,
+        alignItems: "flex-start",
+        width: "100%",
+        textAlign: "left",
+        background: "rgba(232,184,56,.1)",
+        border: "1px solid rgba(232,184,56,.45)",
+        borderRadius: 11,
+        padding: "11px 12px",
+        marginTop: 11,
+        fontSize: 12.5,
+        lineHeight: 1.55
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "⚠"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "var(--ivory)"
+      }
+    }, "같은 분이 ", /*#__PURE__*/React.createElement("b", null, "이름이 다릅니다"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: "block",
+        fontSize: 11.5,
+        color: "#6F8598",
+        marginTop: 2
+      }
+    }, nms.join(" · "))), /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: "auto",
+        flexShrink: 0,
+        fontSize: 11.5,
+        fontWeight: 700,
+        color: ACCENT,
+        border: "1px solid rgba(232,184,56,.5)",
+        borderRadius: 999,
+        padding: "5px 11px",
+        whiteSpace: "nowrap"
+      }
+    }, "맞추기"));
+  })(), /*#__PURE__*/React.createElement("div", {
     style: {
       height: 11
     }
@@ -12759,6 +13089,14 @@ function ClubRoster({
       say(`${orpFor.name} 님의 지난 기록 ${pick.length}판을 넣었습니다`);
       setOrp(null);
     }
+  }), uniFor && /*#__PURE__*/React.createElement(UnifySheet, {
+    rows: uniFor,
+    data: data,
+    onDone: async nm => {
+      await unifyRun(data, uniFor, nm, save, say);
+      setUni(null);
+    },
+    onLater: () => setUni(null)
   }), /*#__PURE__*/React.createElement(MergeSheet, {
     m: mgFor,
     list: mgFor ? ms.filter(x => x.uid && x.id !== mgFor.id) : [],
@@ -12973,6 +13311,8 @@ function App() {
        이미 든 분이 초대 주소를 다시 누르면 그때는 이름이 나온다. */
   const [joining, joinOnce] = useOnce();
   const [joinClub, setJoinClub] = useState(null);
+  /* ★ 이름이 갈린 분 한 분 — 없으면 null. 명단을 내려받고 나서야 드러난다 */
+  const uniRows = useMemo(() => uidPick(data) || null, [data.clubs, data.uniSkip, data.me]); // eslint-disable-line
   const [bare, setBare] = useState(false);
   const [tv, setTv] = useState(false);
   const [login, setLogin] = useState(false);
@@ -13476,6 +13816,16 @@ function App() {
     })(),
     onClose: () => setSheet(null),
     say: say
+  }), uniRows && /*#__PURE__*/React.createElement(UnifySheet, {
+    rows: uniRows,
+    data: data,
+    onDone: async nm => {
+      await unifyRun(data, uniRows, nm, save, say);
+    },
+    onLater: () => save({
+      ...data,
+      uniSkip: [...(data.uniSkip || []), uniSig(uniRows)].slice(-40)
+    })
   }), /*#__PURE__*/React.createElement(JoinSheet, {
     code: data.joinCode || "",
     data: data,
