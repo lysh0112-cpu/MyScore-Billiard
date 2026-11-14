@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-86 동우회 기록 관리 — 삭제 -->
+<!-- build: 1판-87 「이대로 두기」 단추 이름 바로잡기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9087,10 +9087,13 @@ function Account({
 /* ══════════ 동우회 화면 ══════════
    목록 → 랭킹 → 명단. 들어갈수록 깊어지고 ‹ 로 돌아온다 [대표님 확인 2026-11-13] */
 
+/* ⚠ 2026-11-14 — style 을 ★합친다. 전에는 {...rest} 뒤에 style 을 써서
+      밖에서 준 style 이 ★조용히 지워졌다 (눌리지 않는 표시가 안 먹었다). */
 const CBtn = ({
   on,
   ghost,
   children,
+  style,
   ...rest
 }) => /*#__PURE__*/React.createElement("button", {
   ...rest,
@@ -9107,7 +9110,11 @@ const CBtn = ({
     marginTop: 9,
     background: ghost ? "rgba(0,0,0,.28)" : ACCENT,
     color: ghost ? "var(--chalk)" : "#141200",
-    border: ghost ? "1px solid var(--line)" : "none"
+    border: ghost ? "1px solid var(--line)" : "none",
+    ...(rest.disabled ? {
+      opacity: .45
+    } : null),
+    ...(style || null)
   }
 }, children);
 /* 🔴 2026-11-13 — 단추 둘을 ★옆으로 나란히 [대표님].
@@ -11806,8 +11813,15 @@ function PickGamesSheet({
     ghost: true,
     onClick: onClose
   }, "닫기"), /*#__PURE__*/React.createElement(CBtn, {
-    onClick: () => onTake(on, addMem)
-  }, "이대로 두기"))));
+    disabled: added === 0 && dropped === 0,
+    style: {
+      opacity: added === 0 && dropped === 0 ? .45 : 1
+    },
+    onClick: () => {
+      if (added === 0 && dropped === 0) return;
+      onTake(on, addMem);
+    }
+  }, added > 0 && dropped > 0 ? `${added}경기 넣고 ${dropped}경기 빼기` : added > 0 ? `${added}경기 넣기` : dropped > 0 ? `${dropped}경기 빼기` : "바뀌는 것 없음"))));
 }
 
 /* 🔴 2026-11-13 — 「11/6 김경석하고 친 기록이 있는데, 디딤돌에서 김경석을
