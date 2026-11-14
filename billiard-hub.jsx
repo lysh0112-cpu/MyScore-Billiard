@@ -7017,6 +7017,13 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
      ⚠ 서버가 안 돼도 ★이 기계에는 저장된다. 앱이 멈추면 안 된다.
      ⚠ 서버에 못 올린 줄은 srvId 가 없다 — 다음에 열 때 [명단 올리기]로 올린다. */
   const srvOn = () => club.srv && !!data.me;
+  /* 🔴 2026-11-14 — 「내가 초청하는 총무야」 [대표님].
+        ⛔ 지금은 ★일반 회원에게도 [수정]·[회원 더하기]·[초청 글 복사]가 보인다.
+          눌러도 ★서버가 막는다 (cue_mem_ins/upd/del 은 총무만) — 이 기계에서만
+          바뀌고 서버는 안 바뀌니 ★제일 나쁜 꼴이다. 아예 안 보여준다.
+        ★ 2026-11-13 에 대표님과 정한 것 — 「총무나 회장만 초청·수정, 일반회원 보기만」 */
+  const amAdmin = !club.srv || !!club.owner
+    || ms.some((m) => m.uid && m.uid === data.me && m.role === "admin");
   const addOne = async () => {
     const n = f.name.trim();
     if (!n) return say("이름을 적어주세요");
@@ -7057,8 +7064,16 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
       .catch(() => { /* 조용히 — 다음에 맞춘다 */ });
   };
   const del = async (m) => {
-    if (!confirm(`${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
-    put(ms.filter((x) => x.id !== m.id)); setEdit(""); say("명단에서 뺐습니다");
+    /* ★ 2026-11-14 — 이미 들어오신 분을 빼는 것은 ★탈퇴다 [대표님 「탈퇴시키는 방법은?」].
+          그분 큐보드에서 이 동우회가 사라지므로 ★그 말을 분명히 적는다 */
+    const joined = !!m.uid;
+    if (!confirm(joined
+      ? `${m.name} 님을 「${club.name}」에서 내보낼까요?\n\n` +
+        `★그분 큐보드에서 이 동우회가 사라집니다.\n` +
+        `친 기록은 그대로 남습니다 — 다시 초청하면 돌아옵니다.`
+      : `${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
+    put(ms.filter((x) => x.id !== m.id)); setEdit("");
+    say(joined ? `${m.name} 님을 내보냈습니다` : "명단에서 뺐습니다");
     if (m.srvId && srvOn()) {
       const tok = await cueTok(data);
       if (tok) { try { await cueDel(tok, `cue_club_members?id=eq.${m.srvId}`); } catch (e) {} }
@@ -7149,13 +7164,13 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
                  ⛔ 꽉 찬 노랑으로 만들지 말 것 — 이 앱에서 꽉 찬 노랑은 「지금 누를 것」
                     ([다음 ⇒]·[저장하기]) 자리다. 카드마다 노란 덩어리가 박히면
                     정작 눌러야 할 것이 묻힌다. 열려 있을 때만 꽉 채운다 */}
-            <button onClick={() => openEdit(m)} aria-label="수정" style={{
+            {amAdmin && <button onClick={() => openEdit(m)} aria-label="수정" style={{
               padding: "8px 11px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
               lineHeight: 1.2, whiteSpace: "nowrap", flexShrink: 0,
               background: edit === m.id ? ACCENT : "rgba(232,184,56,.14)",
               border: edit === m.id ? "1px solid " + ACCENT : "1px solid rgba(232,184,56,.5)",
               color: edit === m.id ? "#141200" : ACCENT,
-            }}>{edit === m.id ? "✓ 수정완료" : "✎ 수정"}</button>
+            }}>{edit === m.id ? "✓ 수정완료" : "✎ 수정"}</button>}
             <button onClick={() => onMember(m.id)} aria-label="기록 보기"
               style={{ padding: "5px 4px", fontSize: 15, color: "#44627B" }}>›</button>
           </div>
@@ -7184,7 +7199,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
                    서버가 그 사람 계정을 들고 있으면(uid) 들어온 것이고, 없으면 아직이다.
                  ⛔ 서버에 안 올라간 동우회에서는 ★안 보여준다 — 코드를 넣어도
                    들어올 곳이 없으니 되는 척하면 안 된다. */}
-          {club.srv && !m.uid && (
+          {amAdmin && club.srv && !m.uid && (
             <button onClick={async () => {
               const t = inviteTxt(club, m.name);
               try { await navigator.clipboard.writeText(t); say("초청 글을 복사했습니다 · 카톡에 붙여넣으세요"); }
@@ -7252,7 +7267,7 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
               <button onClick={() => del(m)} style={{
                 width: "100%", marginTop: 13, padding: 11, borderRadius: 10, fontSize: 12.5,
                 color: "#C87B74", border: "1px solid rgba(200,123,116,.35)",
-              }}>명단 삭제</button>
+              }}>{m.uid ? "동우회에서 내보내기" : "명단 삭제"}</button>
             </div>
           )}
         </div>
@@ -7281,7 +7296,12 @@ function ClubRoster({ data, save, say, club, P, onBack, onMember }) {
             <CBtn onClick={addOne}>저장하기</CBtn>
           </Pair>
         </div>
-      ) : <CBtn ghost onClick={() => setAdd(true)}>＋ 회원 더하기</CBtn>}
+      ) : amAdmin ? <CBtn ghost onClick={() => setAdd(true)}>＋ 회원 더하기</CBtn> : (
+        <div style={{ fontSize: 11.5, color: "#6F8598", textAlign: "center", padding: "14px 10px", lineHeight: 1.8 }}>
+          명단은 <b style={{ color: "var(--ivory)" }}>총무님</b>이 고치십니다.<br />
+          고칠 것이 있으면 총무님께 말씀해 주세요.
+        </div>
+      )}
 
       <OrphanSheet open={!!orpFor} name={orpFor ? orpFor.name : ""} clubName={club.name}
         list={orpFor ? orphansOf(data.games, orpFor.name) : []}

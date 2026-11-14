@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-75 초대 주소 — 누르면 코드가 따라간다 -->
+<!-- build: 1판-76 총무만 명단을 고친다 · 내보내기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -11348,6 +11348,12 @@ function ClubRoster({
      ⚠ 서버가 안 돼도 ★이 기계에는 저장된다. 앱이 멈추면 안 된다.
      ⚠ 서버에 못 올린 줄은 srvId 가 없다 — 다음에 열 때 [명단 올리기]로 올린다. */
   const srvOn = () => club.srv && !!data.me;
+  /* 🔴 2026-11-14 — 「내가 초청하는 총무야」 [대표님].
+        ⛔ 지금은 ★일반 회원에게도 [수정]·[회원 더하기]·[초청 글 복사]가 보인다.
+          눌러도 ★서버가 막는다 (cue_mem_ins/upd/del 은 총무만) — 이 기계에서만
+          바뀌고 서버는 안 바뀌니 ★제일 나쁜 꼴이다. 아예 안 보여준다.
+        ★ 2026-11-13 에 대표님과 정한 것 — 「총무나 회장만 초청·수정, 일반회원 보기만」 */
+  const amAdmin = !club.srv || !!club.owner || ms.some(m => m.uid && m.uid === data.me && m.role === "admin");
   const addOne = async () => {
     const n = f.name.trim();
     if (!n) return say("이름을 적어주세요");
@@ -11405,10 +11411,13 @@ function ClubRoster({
     cueTok(data).then(tok => tok && cuePatch(tok, `cue_club_members?id=eq.${m.srvId}`, up)).catch(() => {/* 조용히 — 다음에 맞춘다 */});
   };
   const del = async m => {
-    if (!confirm(`${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
+    /* ★ 2026-11-14 — 이미 들어오신 분을 빼는 것은 ★탈퇴다 [대표님 「탈퇴시키는 방법은?」].
+          그분 큐보드에서 이 동우회가 사라지므로 ★그 말을 분명히 적는다 */
+    const joined = !!m.uid;
+    if (!confirm(joined ? `${m.name} 님을 「${club.name}」에서 내보낼까요?\n\n` + `★그분 큐보드에서 이 동우회가 사라집니다.\n` + `친 기록은 그대로 남습니다 — 다시 초청하면 돌아옵니다.` : `${m.name} 님을 명단에서 뺄까요?\n친 기록은 그대로 남습니다.`)) return;
     put(ms.filter(x => x.id !== m.id));
     setEdit("");
-    say("명단에서 뺐습니다");
+    say(joined ? `${m.name} 님을 내보냈습니다` : "명단에서 뺐습니다");
     if (m.srvId && srvOn()) {
       const tok = await cueTok(data);
       if (tok) {
@@ -11601,7 +11610,7 @@ function ClubRoster({
       background: m.status === "active" ? "rgba(79,178,134,.16)" : "rgba(244,238,223,.09)",
       color: m.status === "active" ? "var(--green)" : "#8FA8BC"
     }
-  }, m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중")), /*#__PURE__*/React.createElement("button", {
+  }, m.role === "admin" ? "총무" : m.status === "active" ? "정식" : "초청 중")), amAdmin && /*#__PURE__*/React.createElement("button", {
     onClick: () => openEdit(m),
     "aria-label": "수정",
     style: {
@@ -11655,7 +11664,7 @@ function ClubRoster({
       color: "var(--green)",
       marginTop: 7
     }
-  }, "✓ 본인이 들어와 있습니다"), club.srv && !m.uid && /*#__PURE__*/React.createElement("button", {
+  }, "✓ 본인이 들어와 있습니다"), amAdmin && club.srv && !m.uid && /*#__PURE__*/React.createElement("button", {
     onClick: async () => {
       const t = inviteTxt(club, m.name);
       try {
@@ -11800,7 +11809,7 @@ function ClubRoster({
       color: "#C87B74",
       border: "1px solid rgba(200,123,116,.35)"
     }
-  }, "명단 삭제")))), add ? /*#__PURE__*/React.createElement("div", {
+  }, m.uid ? "동우회에서 내보내기" : "명단 삭제")))), add ? /*#__PURE__*/React.createElement("div", {
     style: {
       background: "var(--card)",
       border: "1px solid var(--line)",
@@ -11859,10 +11868,22 @@ function ClubRoster({
     }
   }, "닫기"), /*#__PURE__*/React.createElement(CBtn, {
     onClick: addOne
-  }, "저장하기"))) : /*#__PURE__*/React.createElement(CBtn, {
+  }, "저장하기"))) : amAdmin ? /*#__PURE__*/React.createElement(CBtn, {
     ghost: true,
     onClick: () => setAdd(true)
-  }, "＋ 회원 더하기"), /*#__PURE__*/React.createElement(OrphanSheet, {
+  }, "＋ 회원 더하기") : /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      textAlign: "center",
+      padding: "14px 10px",
+      lineHeight: 1.8
+    }
+  }, "명단은 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "총무님"), "이 고치십니다.", /*#__PURE__*/React.createElement("br", null), "고칠 것이 있으면 총무님께 말씀해 주세요."), /*#__PURE__*/React.createElement(OrphanSheet, {
     open: !!orpFor,
     name: orpFor ? orpFor.name : "",
     clubName: club.name,
