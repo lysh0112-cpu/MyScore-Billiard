@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-79 동우회 판 자동 올리기·내려받기 -->
+<!-- build: 1판-80 ± 단추 색 선명하게 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -839,6 +839,19 @@ const NEXT_HI = "#4AA8F0";
 /* 점수 단추 (−2 −1 +1 +2) — 알약 모양 */
 const PT_PAD = "clamp(8px, 2.1vh, 22px) 0";
 const PT_FS = "clamp(14px, 3.2vh, 38px)";
+/* 🔴🔴 2026-11-14 — ± 단추 색 [대표님
+      「실전에서 쓰다보니 ★잘 못찾겠더라구 · 더 선명하게」].
+   ⚠ 왜 안 보였는지 ★재 보았다. 바탕이 #2a1c1a·#18261a 였는데
+     순 검정(#000)과 명암비가 ★1.3 이다. 1.0 이 「똑같은 색」이니
+     ★검정 위의 검정이었다 — 글자만 겨우 떠 있었다.
+   ⇒ 바탕을 ★확실한 색으로 올린다. 검정과 ★4.4, 흰 글자와 ★4.8.
+     당구장 조명 아래 ★눈길 한 번에 잡히게 — 들여다보는 화면이 아니다.
+   ⛔ [다음 ⇒] 파랑(#2F86D9)·이닝 줄(초록→노랑→빨강)과 ★색이 안 겹친다.
+   ★ 빨강=깎기 / 초록=올리기 로 갈려서 ★잘못 누르는 일도 준다. */
+const PT_MBG = "#D23B35"; /* 깎기 바탕 — 검정과 4.4 */
+const PT_MFG = "#FFFFFF"; /* 깎기 글자 — 바탕과 4.8 */
+const PT_PBG = "#17833F"; /* 올리기 바탕 — 검정과 4.4 */
+const PT_PFG = "#FFFFFF"; /* 올리기 글자 — 바탕과 4.8 */
 
 /* 🔴 2026-11-05 — 15⁰ 꼴(큰 15 + 작은 0)을 ★걷어냈다 [대표님].
       「150 숫자가 조금 낯설고 어색하다. 숫자를 약간 줄이더라도 ★같은 크기로 보여달라」
@@ -6793,8 +6806,8 @@ function Billiard({
     key: l,
     onClick: () => d < 0 ? minus(-d) : addPt(d),
     style: {
-      background: d < 0 ? "#2a1c1a" : "#18261a",
-      color: d < 0 ? "#d99e99" : "#8fc79a",
+      background: d < 0 ? PT_MBG : PT_PBG,
+      color: d < 0 ? PT_MFG : PT_PFG,
       padding: PT_PAD,
       fontSize: PT_FS,
       fontWeight: 700,
@@ -6811,8 +6824,8 @@ function Billiard({
     key: l,
     onClick: () => minus(-d),
     style: {
-      background: "#2a1c1a",
-      color: "#d99e99",
+      background: PT_MBG,
+      color: PT_MFG,
       padding: PT_PAD,
       fontSize: PT_FS,
       fontWeight: 700,
@@ -6835,8 +6848,8 @@ function Billiard({
     key: l,
     onClick: () => addPt(d),
     style: {
-      background: "#18261a",
-      color: "#8fc79a",
+      background: PT_PBG,
+      color: PT_PFG,
       padding: PT_PAD,
       fontSize: PT_FS,
       fontWeight: 700,
