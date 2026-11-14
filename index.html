@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-81 기록 보기에서 이름만 고치기 -->
+<!-- build: 1판-82 동우회 지우기 — 서버에서도 지운다 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9351,8 +9351,7 @@ function ClubList({
       onClick: e => {
         e.stopPropagation();
         if (!askRemoveClub(data, c)) return;
-        save(removeClub(data, c));
-        say("동우회를 지웠습니다 · 친 기록은 그대로입니다");
+        once(() => dropClubRun(data, c, save, say));
       },
       style: {
         display: "inline-block",
@@ -9463,6 +9462,8 @@ function ClubRank({
   onMember,
   onSwap
 }) {
+  /* ⚠ 두 번 눌리면 두 번 지우러 간다 — ★ref 로 잠근다 (useState 로는 안 잠긴다) */
+  const [rmBusy, rmOnce] = useOnce();
   const {
     mode,
     setMode,
@@ -10007,9 +10008,7 @@ function ClubRank({
   }, "닫기"), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       if (!askRemoveClub(data, club)) return;
-      save(removeClub(data, club));
-      say("동우회를 지웠습니다 · 친 기록은 그대로입니다");
-      onBack();
+      rmOnce(() => dropClubRun(data, club, save, say, onBack));
     },
     style: {
       width: "100%",
@@ -11083,9 +11082,46 @@ const removeClub = (data, club) => ({
     clubId: "",
     clubName: ""
   } : data.setup,
-  games: data.games.map(g => inClub(g, club.id) ? setGameClub(g, club.id, false) : g)
+  games: data.games.map(g => inClub(g, club.id) ? setGameClub(g, club.id, false) : g),
+  /* 남이 올려 내려받아 둔 판도 ★같이 턴다 — 안 털면 판 수가 그대로 남는다 */
+  pool: (data.pool || []).filter(g => !inClub(g, club.id))
 });
-const askRemoveClub = (data, club) => confirm(`「${club.name}」을 지울까요?\n\n` + `★친 기록 ${clubGames(allGames(data), club.id).length}판은 ★안 지워집니다 — ` + `이 동우회에서만 빠집니다. 다른 동우회에도 든 판은 그쪽에 그대로 남습니다.\n` + `다시 만들어 [기록 보기에서 골라 넣기] 를 누르면 그대로 돌아옵니다.\n` + `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`);
+/* 🔴🔴 2026-11-14 — [대표님 「육방회라는 동우회가 2개라서 아랫쪽 한 개를
+      ★지워도 계속해서 없어지지 않아」]
+
+   까닭 — removeClub 은 ★내 기계에서만 지웠다. 서버에는 그대로 남아 있고,
+     앱을 켤 때마다 pullMyClubs 가 ★내가 든 동우회를 모두 내려받는다.
+     그래서 지운 것이 ★2~3초 뒤 곧바로 되살아났다. 몇 번을 눌러도 같다.
+   ⇒ 서버 동우회는 ★서버에서도 지운다 (명단·판은 sql 의 cascade 로 함께).
+   ⛔ 서버에서 못 지웠으면 ★내 기계에서도 지우지 않는다 —
+      지운 척했다가 되살아나는 것이 ★제일 나쁘다. 그것이 지금 벌어진 일이다.
+   ⚠ 총무가 아니면 지우는 것이 아니라 ★[나가기] 다 — 단추도 총무에게만 보인다. */
+const dropClubRun = async (data, club, save, say, after) => {
+  if (club.srv) {
+    const tok = await cueTok(data);
+    if (!tok) {
+      say("로그인하신 뒤에 지울 수 있습니다 — 오른쪽 위입니다");
+      return;
+    }
+    try {
+      await cueDel(tok, `cue_clubs?id=eq.${club.id}`);
+      /* ★ 정말 지워졌는지 ★다시 읽어 확인한다 — 안 지워졌는데 지운 척하면
+            또 되살아난다. RLS 가 막으면 DELETE 는 ★조용히 0줄이다. */
+      const left = await cueGet(tok, `cue_clubs?id=eq.${club.id}&select=id`);
+      if (Array.isArray(left) && left.length) {
+        say("서버에서 못 지웠습니다 — 총무만 지울 수 있습니다");
+        return;
+      }
+    } catch (e) {
+      say("서버에서 못 지웠습니다 — 잠시 뒤 다시 눌러주세요");
+      return;
+    }
+  }
+  save(removeClub(data, club));
+  say("동우회를 지웠습니다 · 친 기록은 그대로입니다");
+  if (after) after();
+};
+const askRemoveClub = (data, club) => confirm(`「${club.name}」을 지울까요?\n\n` + (club.srv ? `⛔ ★서버에서도 지워집니다 — ★다른 회원들 화면에서도 사라집니다.\n` : "") + `★친 기록 ${clubGames(allGames(data), club.id).length}판은 ★안 지워집니다 — ` + `이 동우회에서만 빠집니다. 다른 동우회에도 든 판은 그쪽에 그대로 남습니다.\n` + `다시 만들어 [기록 보기에서 골라 넣기] 를 누르면 그대로 돌아옵니다.\n` + `⛔ 명단 ${memsOf(club).length}명은 사라집니다.`);
 
 /* 🔴 2026-11-13 — 「동우회 기록에 넣을 ★「기록 보기」의 자료들을 불러오지를 못하네.
       ★기록 보기 자료들 중 선택할 기능을 넣어주면 어떨까?」 [대표님]
