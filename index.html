@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-89 같은 분이 여러 줄로 갈리던 것 -->
+<!-- build: 1판-90 같은 이름 — 합치겠느냐고 묻기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7400,7 +7400,7 @@ const dupNames = members => {
      번호는 ★기계가 다르면 갈라지고, 이름은 ★고치면 갈라진다 —
      둘을 이어 붙이면 ★양쪽 구멍이 다 막힌다.
    ⚠ 명단에 같은 이름이 둘이면 ★이름으로는 안 잇는다 (dup) — 성적이 섞인다. */
-const linkPlayers = (list, dup) => {
+const linkPlayers = (list, dup, ok) => {
   const par = {};
   const add = x => {
     if (par[x] === undefined) par[x] = x;
@@ -7421,7 +7421,10 @@ const linkPlayers = (list, dup) => {
     add("n:" + n);
     if (p.mid) {
       add("m:" + p.mid);
-      if (n && !(dup && dup.has(n))) join("m:" + p.mid, "n:" + n);
+      /* 🔴🔴 2026-11-15 — [대표님 「합치겠느냐고 창을 띄우면 어때?」]
+            ⛔ 1판-89 는 ★말없이 합쳤다. 대표님은 ★보시고 누르기를 원하신다.
+            ⇒ ★허락하신 이름만 잇는다 (ok). 허락 전에는 ★두 줄로 그대로 보인다. */
+      if (n && !(dup && dup.has(n)) && ok && ok.has(n)) join("m:" + p.mid, "n:" + n);
     }
   });
   /* 묶음마다 ★보여줄 열쇠 하나 — 번호가 있으면 번호 (이름을 고쳐도 그대로다) */
@@ -7437,11 +7440,77 @@ const linkPlayers = (list, dup) => {
     return pick[r] || "n:" + n;
   };
 };
+/* ══════ 같은 이름이 두 줄로 갈렸는가 ══════
+   🔴🔴 2026-11-15 — [대표님 「이인승이 올린 문재길과 류승현이 올린 문재길이
+        같은 동우회에 뜨게 한 후, ★합치겠느냐는 그 창이 활성화되게 하면
+        되지 않을까?」]
+
+   ⚠ 적어 두는 것은 ★이름 하나뿐이다 — 「연희 테스트 ▸ 문재길 = 한 사람」.
+     ⛔ 폰 번호를 적어 두지 않는다. 적으면 ★세 번째 폰에서 또 묻게 되고,
+       폰을 바꾸시면 ★죽은 줄이 된다. 이름만 적으면 그런 일이 없다.
+   ⛔ 명단에 같은 이름이 둘이면 ★아예 안 묻는다 — 대표님이 이미 두 분이라
+     해두신 것이다. */
+const oneSet = (data, clubId) => new Set((data && data.nameOne || {})[clubId] || []);
+const skipSet = (data, clubId) => new Set((data && data.nameSkip || {})[clubId] || []);
+const putName = (data, clubId, name, where) => {
+  const bag = {
+    ...(data && data[where] || {})
+  };
+  bag[clubId] = [...new Set([...(bag[clubId] || []), name])];
+  return {
+    ...data,
+    [where]: bag
+  };
+};
+const dropName = (data, clubId, name, where) => {
+  const bag = {
+    ...(data && data[where] || {})
+  };
+  bag[clubId] = (bag[clubId] || []).filter(x => x !== name);
+  return {
+    ...data,
+    [where]: bag
+  };
+};
+/* 갈린 이름 하나를 찾는다 — 어느 폰에서 몇 판씩 왔는지까지 */
+const splitName = (rows, games, data, clubId) => {
+  const skip = skipSet(data, clubId);
+  const cnt = {};
+  rows.forEach(r => {
+    const n = (r.name || "").trim();
+    if (n) (cnt[n] = cnt[n] || []).push(r);
+  });
+  const hit = Object.keys(cnt).find(n => cnt[n].length > 1 && !skip.has(n));
+  if (!hit) return null;
+  const keys = new Set(cnt[hit].map(r => r.key));
+  const src = {};
+  (games || []).forEach(g => {
+    (g.players || []).forEach(p => {
+      if ((p.name || "").trim() !== hit) return;
+      const who = (g.by || "").trim() || "다른 분";
+      const t = src[who] || (src[who] = {
+        who,
+        n: 0,
+        last: ""
+      });
+      t.n++;
+      if (g.date > t.last) t.last = g.date;
+    });
+  });
+  return {
+    name: hit,
+    rows: cnt[hit],
+    keys,
+    tot: cnt[hit].reduce((a, r) => a + r.n, 0),
+    src: Object.values(src).sort((a, b) => b.n - a.n)
+  };
+};
 function rankList(games, opt) {
   const by = {};
   const dup = dupNames(opt && opt.members);
   const picked = rankPick(games, opt);
-  const keyOfPlayer = linkPlayers(picked.reduce((a, g) => a.concat(g.players || []), []), dup);
+  const flat = picked.reduce((a, g) => a.concat(g.players || []), []);
+  const keyOfPlayer = linkPlayers(flat, dup, opt && opt.oneNames);
   picked.forEach(g => {
     /* 🔴 2026-11-13 — 「당초 우리가 ★그림을 그린 내용과는 다른데…
           함께 친 분 | 판 | ★1등-2등-3등 | 에버 — 이렇게 보여준다면서」 [대표님]
@@ -7465,8 +7534,10 @@ function rankList(games, opt) {
         hi: 0,
         last: "",
         many: false,
-        place: {}
+        place: {},
+        src: {}
       });
+      m.src[p.mid || "n:" + (p.name || "")] = true; /* 몇 군데서 왔는가 */
       m.n++;
       m.pt += Number(p.score) || 0;
       m.inn += Number(p.inn) || 1;
@@ -7498,7 +7569,8 @@ function rankList(games, opt) {
   });
   return Object.values(by).map(m => ({
     ...m,
-    avg: m.inn ? m.pt / m.inn : 0
+    avg: m.inn ? m.pt / m.inn : 0,
+    joined: Object.keys(m.src || {}).length > 1
   }));
 }
 /* 「1등-2등-3등」 또는 「승-무-패」 — 한 곳에서만 글자를 만든다.
@@ -7574,7 +7646,7 @@ function rankOne(games, key, opt) {
   /* ⚠ 2026-11-15 — ★랭킹 표와 ★같은 자로 사람을 가려야 한다.
         따로 가르면 표에서는 7판인데 들어가 보면 3판이 된다. */
   const picked = rankPick(games, opt);
-  const keyOfPlayer = linkPlayers(picked.reduce((a, g) => a.concat(g.players || []), []), dupNames(opt && opt.members));
+  const keyOfPlayer = linkPlayers(picked.reduce((a, g) => a.concat(g.players || []), []), dupNames(opt && opt.members), opt && opt.oneNames);
   picked.forEach(g => {
     const me = g.players.find(p => keyOfPlayer(p) === key);
     if (!me) return;
@@ -9741,14 +9813,24 @@ function ClubRank({
      ⇒ 닫힘은 null, 빈 칸은 "" — ★두 가지를 갈라 둔다.
      ⛔ 「값이 없음」과 「닫힘」을 ★한 값으로 쓰지 말 것. 다 지울 수 있는 칸이면 반드시 터진다 */
   const [ren, setRen] = useState(null);
+
+  /* ★ 대표님이 ★허락하신 이름만 합친다 (1판-90). 허락 전에는 두 줄로 보인다 */
+  const oneNames = useMemo(() => oneSet(data, club.id), [data.nameOne, club.id]); // eslint-disable-line
   const rows = useMemo(() => rankList(allGames(data), {
     clubId: club.id,
     mode,
     from: bound[0],
     to: bound[1],
     withTeam: team,
-    members: memsOf(club) /* 같은 이름이 둘이면 ★번호로 가른다 */
-  }), [data.games, data.pool, data.clubs, club.id, mode, bound, team]);
+    members: memsOf(club),
+    oneNames /* 같은 이름이 둘이면 ★번호로 가른다 */
+  }), [data.games, data.pool, data.clubs, club.id, mode, bound, team, oneNames]);
+
+  /* 갈린 이름 하나 — 있으면 알림 줄이 뜬다 */
+  const splitOne = useMemo(() => splitName(rows, clubGames(allGames(data), club.id), data, club.id), [rows, data.games, data.pool, data.nameSkip, club.id]); // eslint-disable-line
+  const [snOpen, setSn] = useState(false);
+  const [snBusy, snOnce] = useOnce();
+  const [undoNm, setUndo] = useState("");
   const games = useMemo(() => rankPick(allGames(data), {
     clubId: club.id,
     mode,
@@ -9848,7 +9930,23 @@ function ClubRank({
       textOverflow: "ellipsis",
       whiteSpace: "nowrap"
     }
-  }, m.name || "이름 없음"), /*#__PURE__*/React.createElement("span", {
+  }, m.name || "이름 없음", m.joined && /*#__PURE__*/React.createElement("span", {
+    onClick: e => {
+      e.stopPropagation();
+      setUndo(m.name || "");
+    },
+    style: {
+      display: "inline-block",
+      fontSize: 10,
+      fontWeight: 600,
+      padding: "2px 8px",
+      borderRadius: 999,
+      marginLeft: 6,
+      verticalAlign: 1,
+      background: "rgba(79,178,134,.16)",
+      color: "var(--green)"
+    }
+  }, "합친 분")), /*#__PURE__*/React.createElement("span", {
     style: {
       color: "#44627B",
       fontSize: 13,
@@ -10396,7 +10494,121 @@ function ClubRank({
     }
   }, " ", "· 동우회 없는 기록 ", /*#__PURE__*/React.createElement("span", {
     className: "num"
-  }, orphan.length), "판")), cgRows.length > 0 && /*#__PURE__*/React.createElement("button", {
+  }, orphan.length), "판")), splitOne && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setSn(true),
+    style: {
+      display: "flex",
+      gap: 9,
+      alignItems: "flex-start",
+      width: "100%",
+      textAlign: "left",
+      background: "rgba(232,184,56,.1)",
+      border: "1px solid rgba(232,184,56,.45)",
+      borderRadius: 11,
+      padding: "11px 12px",
+      marginBottom: 11,
+      fontSize: 12.5,
+      lineHeight: 1.55
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "⚠"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "같은 이름이 ", /*#__PURE__*/React.createElement("b", null, /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, splitOne.rows.length), "줄"), "로 올라왔습니다", /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: 11.5,
+      color: "#6F8598",
+      marginTop: 2
+    }
+  }, splitOne.name, " · 폰 ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, splitOne.src.length), "대에서")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: "auto",
+      flexShrink: 0,
+      fontSize: 11.5,
+      fontWeight: 700,
+      color: ACCENT,
+      border: "1px solid rgba(232,184,56,.5)",
+      borderRadius: 999,
+      padding: "5px 11px",
+      whiteSpace: "nowrap"
+    }
+  }, "확인")), /*#__PURE__*/React.createElement(SameNameSheet, {
+    s: snOpen ? splitOne : null,
+    club: club,
+    busy: snBusy,
+    onClose: () => setSn(false),
+    onJoin: () => snOnce(async () => {
+      save(putName(data, club.id, splitOne.name, "nameOne"));
+      setSn(false);
+      say(`「${splitOne.name}」 ${splitOne.tot}판을 한 분으로 합쳤습니다`);
+    }),
+    onSkip: () => {
+      save(putName(data, club.id, splitOne.name, "nameSkip"));
+      setSn(false);
+      say("따로 두었습니다 · 다시 묻지 않습니다");
+    }
+  }), undoNm && /*#__PURE__*/React.createElement("div", {
+    onClick: () => setUndo(""),
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 134,
+      background: "rgba(0,0,0,.62)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      background: "#0C2E46",
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 14px 20px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      marginBottom: 4
+    }
+  }, "「", undoNm, "」 을(를) 다시 나눌까요?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      lineHeight: 1.7,
+      marginBottom: 14
+    }
+  }, "폰마다 올린 기록이 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "따로 보이게"), " 됩니다.", /*#__PURE__*/React.createElement("br", null), "친 기록은 하나도 안 바뀝니다."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    onClick: () => {
+      save(dropName(data, club.id, undoNm, "nameOne"));
+      setUndo("");
+      say(`「${undoNm}」 을(를) 다시 나눴습니다`);
+    }
+  }, "다시 나누기"), /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    style: {
+      fontSize: 14
+    },
+    onClick: () => setUndo("")
+  }, "그대로 두기")))), cgRows.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setTidy(true),
     style: {
       width: "100%",
@@ -10542,20 +10754,26 @@ function ClubMember({
   const [moreF, setMoreF] = useState(false);
   const [orpOn, setOrp] = useState(false); /* 지난 기록 고르는 창 */
   const [moreR, setMoreR] = useState(false);
+
+  /* ⚠ 2026-11-15 — ★명단을 같이 넘긴다. 안 넘기면 표에서는 「김철수」 둘을
+        갈라 놓고 ★여기서는 합쳐 버린다 — 두 화면이 ★다른 자를 쓰게 된다. */
   const o = useMemo(() => rankOne(allGames(data), mkey, {
     clubId: club.id,
     mode,
     from: bound[0],
     to: bound[1],
-    withTeam: false
-  }), [data.games, data.pool, club.id, mkey, mode, bound]);
+    withTeam: false,
+    members: memsOf(club),
+    oneNames: oneSet(data, club.id)
+  }), [data.games, data.pool, data.clubs, data.nameOne, club.id, mkey, mode, bound]);
   const nm = o.rows[0] ? o.rows.length ? (rankList(allGames(data), {
     clubId: club.id,
     mode,
     from: "2000-01-01",
     to: today(),
     withTeam: true,
-    members: memsOf(club)
+    members: memsOf(club),
+    oneNames: oneSet(data, club.id)
   }).find(x => x.key === mkey) || {}).name : "" : "";
   const me = memById(club, mkey);
   const title = me && me.name || nm || "이름 없음";
@@ -12454,6 +12672,152 @@ function UnifySheet({
       ★삭제할 기능을 넣으면 어때」]
    ⚠ 한 판씩이 아니라 ★경기(한 자리에서 친 묶음)로 보여준다 — 6게임을
      여섯 번 지우게 할 수는 없다. 기록 보기도 그렇게 묶어 보여준다. */
+/* 🔴 2026-11-15 — 같은 이름 합치기 창 [대표님 「합치겠느냐는 그 창이
+     활성화되게 하면 되지 않을까?」]
+   ⚠ ★자동으로 합치지 않는다. 대표님이 보시고 누르셔야 합친다. */
+function SameNameSheet({
+  s,
+  club,
+  busy,
+  onJoin,
+  onSkip,
+  onClose
+}) {
+  if (!s) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    onClick: onClose,
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 134,
+      background: "rgba(0,0,0,.62)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      background: "#0C2E46",
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 14px 20px",
+      maxHeight: "86vh",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15.5,
+      fontWeight: 700,
+      marginBottom: 4
+    }
+  }, "「", s.name, "」 ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, s.rows.length), "줄은 같은 분입니까?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      lineHeight: 1.7,
+      marginBottom: 13
+    }
+  }, "폰마다 회원 번호를 따로 붙여서 여러 줄이 되었습니다.", /*#__PURE__*/React.createElement("br", null), "카카오 로그인을 안 하신 분은 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "공통된 번호가 없습니다.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(0,0,0,.22)",
+      border: "1px solid var(--line)",
+      borderRadius: 10,
+      padding: "11px 12px",
+      marginBottom: 11
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#6F8598",
+      letterSpacing: ".08em"
+    }
+  }, club.name, " · 같은 이름"), s.src.map(t => /*#__PURE__*/React.createElement("div", {
+    key: t.who,
+    style: {
+      display: "flex",
+      alignItems: "baseline",
+      gap: 8,
+      marginTop: 6,
+      fontSize: 13
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#6F8598",
+      fontSize: 11.5,
+      minWidth: 96
+    }
+  }, t.who, " 폰에서"), /*#__PURE__*/React.createElement("b", null, s.name), /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      color: "#6F8598",
+      fontSize: 11.5
+    }
+  }, t.n, "판 · ", md(t.last))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--chalk)",
+      lineHeight: 1.85,
+      margin: "12px 0",
+      background: "rgba(79,178,134,.1)",
+      border: "1px solid rgba(79,178,134,.3)",
+      borderRadius: 8,
+      padding: 11
+    }
+  }, "합치면 —", /*#__PURE__*/React.createElement("br", null), "· ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, s.name, " ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, s.tot), "판"), " 한 줄이 됩니다", /*#__PURE__*/React.createElement("br", null), "· 앞으로 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "다른 폰에서 올라와도"), " 저절로 한 분으로 셉니다", /*#__PURE__*/React.createElement("br", null), "· 친 기록은 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "하나도 안 바뀝니다")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 9,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "prim",
+    disabled: busy,
+    style: {
+      opacity: busy ? .45 : 1
+    },
+    onClick: onJoin
+  }, busy ? "합치는 중…" : "합치기"), /*#__PURE__*/React.createElement("button", {
+    className: "ghost",
+    style: {
+      fontSize: 14
+    },
+    onClick: onSkip
+  }, "따로 두기")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#6F8598",
+      lineHeight: 1.6,
+      marginTop: 10
+    }
+  }, "※ ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--chalk)"
+    }
+  }, "따로 두기"), " 를 누르시면 이 이름은 다시 묻지 않습니다 — 정말 두 분일 수 있으니까요. 나중에 성적표에서 되돌리실 수 있습니다.")));
+}
 function ClubGameSheet({
   open,
   club,
@@ -12975,13 +13339,14 @@ function ClubRoster({
       from: bound[0],
       to: bound[1],
       withTeam: false,
-      members: memsOf(club)
+      members: memsOf(club),
+      oneNames: oneSet(data, club.id)
     }).forEach(m => {
       if (m.mid) by[m.mid] = m;
       if (m.name) by["n:" + m.name] = m;
     });
     return by;
-  }, [data.games, data.pool, club.id, mode, bound]);
+  }, [data.games, data.pool, data.nameOne, club.id, mode, bound]);
   /* 판 수는 ★기간과 상관없이 모두 센다 — 「이 사람이 우리와 몇 판 쳤나」 */
   const allN = useMemo(() => {
     const by = {};
