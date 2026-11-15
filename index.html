@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-88 시간 안 정하고 쳤을 때 끝낼 길 -->
+<!-- build: 1판-89 같은 분이 여러 줄로 갈리던 것 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7368,10 +7368,81 @@ const rankPick = (games, {
 
 /* ① 회원별 — 판·승·무·패·점수·이닝·하이런.
    ★ 사람을 가리는 것은 ★mid(회원 번호)다. 없으면(손님·옛 기록) 이름으로 본다 */
-const keyOfPlayer = p => p.mid || "n:" + (p.name || "");
+/* 🔴🔴 2026-11-15 — [대표님 「★문재길씨가 서로 다른 사람이라서 이렇게
+      ★여러 이름으로 똑같이 나오는 건가?」 — 카카오 로그인을 안 하신 분이고,
+      이인승 폰에서 먼저 적고 나중에 류승현 폰에서 적었다]
+
+   ⛔ 전에는 ★mid(회원 번호) 를 ★먼저 보았다.
+        const keyOfPlayer = (p) => p.mid || ("n:" + p.name);
+      그런데 그 번호는 ★기계마다 다르다. 카카오 로그인을 안 하신 분은
+      ★공통된 표가 없어 폰마다 제 번호를 붙인다.
+      ⇒ 류승현 폰 3판 · 이인승 폰 3판 · 다른 분 폰 1판 ⇒ ★세 줄로 갈렸다.
+
+   ⇒ ★같은 이름이면 같은 사람으로 센다. 사람은 ★이름으로 알아보지
+     번호로 알아보지 않는다. 순서가 틀렸었다.
+   ⚠ 다만 ★명단에 같은 이름이 둘이면 그때는 ★번호로 갈라야 한다 —
+     이름만 보고 합치면 ★남의 성적이 섞인다. dupNames 가 그것이다. */
+const dupNames = members => {
+  const cnt = {},
+    dup = new Set();
+  (members || []).forEach(m => {
+    const n = (m.name || "").trim();
+    if (!n) return;
+    cnt[n] = (cnt[n] || 0) + 1;
+    if (cnt[n] > 1) dup.add(n);
+  });
+  return dup;
+};
+/* ⛔ 2026-11-15 — 처음엔 ★이름만 열쇠로 삼았다. ★그것으로는 안 된다.
+      검사가 잡았다 — [기록 보기 ▸ 이름 고치기] 로 ★몇 판만 이름을 고치면
+      그 사람이 ★둘로 갈린다. 번호로 묶던 것을 잃는다.
+   ⇒ ★번호가 같거나 이름이 같으면 ★한 사람이다 (둘 중 하나만 맞아도 잇는다).
+     번호는 ★기계가 다르면 갈라지고, 이름은 ★고치면 갈라진다 —
+     둘을 이어 붙이면 ★양쪽 구멍이 다 막힌다.
+   ⚠ 명단에 같은 이름이 둘이면 ★이름으로는 안 잇는다 (dup) — 성적이 섞인다. */
+const linkPlayers = (list, dup) => {
+  const par = {};
+  const add = x => {
+    if (par[x] === undefined) par[x] = x;
+    return x;
+  };
+  const root = x => {
+    add(x);
+    while (par[x] !== x) x = par[x] = par[par[x]];
+    return x;
+  };
+  const join = (a, b) => {
+    const ra = root(a),
+      rb = root(b);
+    if (ra !== rb) par[ra] = rb;
+  };
+  list.forEach(p => {
+    const n = (p.name || "").trim();
+    add("n:" + n);
+    if (p.mid) {
+      add("m:" + p.mid);
+      if (n && !(dup && dup.has(n))) join("m:" + p.mid, "n:" + n);
+    }
+  });
+  /* 묶음마다 ★보여줄 열쇠 하나 — 번호가 있으면 번호 (이름을 고쳐도 그대로다) */
+  const pick = {};
+  list.forEach(p => {
+    if (!p.mid) return;
+    const r = root("m:" + p.mid);
+    if (!pick[r] || pick[r] > p.mid) pick[r] = p.mid;
+  });
+  return p => {
+    const n = (p.name || "").trim();
+    const r = root(p.mid ? "m:" + p.mid : "n:" + n);
+    return pick[r] || "n:" + n;
+  };
+};
 function rankList(games, opt) {
   const by = {};
-  rankPick(games, opt).forEach(g => {
+  const dup = dupNames(opt && opt.members);
+  const picked = rankPick(games, opt);
+  const keyOfPlayer = linkPlayers(picked.reduce((a, g) => a.concat(g.players || []), []), dup);
+  picked.forEach(g => {
     /* 🔴 2026-11-13 — 「당초 우리가 ★그림을 그린 내용과는 다른데…
           함께 친 분 | 판 | ★1등-2등-3등 | 에버 — 이렇게 보여준다면서」 [대표님]
        ⛔ 랭킹 표가 3인 경기인데 ★승-무-패로 적고 있었다. 3인은 ★1등만 「승」이라
@@ -7403,10 +7474,25 @@ function rankList(games, opt) {
       if (g.date > m.last) m.last = g.date;
       if (many) {
         m.many = true;
-        const u = rk.find(x => (x.mid ? x.mid : "n:" + x.name) === k) || rk.find(x => x.name === p.name);
+        const u = rk.find(x => keyOfPlayer(x) === k) || rk.find(x => x.name === p.name);
         const pl = u && u.place || 0;
         if (pl) m.place[pl] = (m.place[pl] || 0) + 1;
-      } else if (p.won === true) m.w++;else if (p.won === false) m.l++;else m.d++;
+      } else if (p.won === true) {
+        m.w++;
+        m.place[1] = (m.place[1] || 0) + 1;
+      } else if (p.won === false) {
+        m.l++;
+        m.place[2] = (m.place[2] || 0) + 1;
+      }
+      /* 🔴🔴 2026-11-15 — 2인 경기에도 ★등수를 함께 적어 둔다.
+            ⛔ 전에는 2인은 승-무-패만, 3인 이상은 등수만 적었다. 그래서
+              ★둘 다 치신 분은 합이 ★판 수에 못 미쳤다 —
+              대표님 화면의 「류승현 ★7판 3-1-0」 이 그것이다 (3+1+0 = 4).
+            ⇒ 2인은 ★승=1등 · 패=2등 · 무승부=공동 1등 으로 센다.
+              기록 보기도 무승부를 ★「공동 1등」 이라 부른다 — 말이 같다. */else {
+        m.d++;
+        m.place[1] = (m.place[1] || 0) + 1;
+      }
       m.name = p.name || m.name; /* 이름이 바뀌었으면 ★최근 것으로 */
     });
   });
@@ -7415,8 +7501,23 @@ function rankList(games, opt) {
     avg: m.inn ? m.pt / m.inn : 0
   }));
 }
-/* 「1등-2등-3등」 또는 「승-무-패」 — 한 곳에서만 글자를 만든다 */
-const wdlTxt = m => m.many ? [1, 2, 3].map(k => m.place[k] || 0).join("-") : `${m.w}-${m.d}-${m.l}`;
+/* 「1등-2등-3등」 또는 「승-무-패」 — 한 곳에서만 글자를 만든다.
+   ⚠ 2026-11-15 — 칸 수를 ★3으로 못 박아 두었더니 4인 경기의 ★4등이 사라졌다.
+      ⇒ 실제로 나온 ★가장 낮은 등수까지 적는다 (upto). */
+const maxPlace = rows => Math.max(3, ...(rows || []).map(m => Math.max(0, ...Object.keys(m.place || {}).map(Number))));
+const placeHead = rows => {
+  const n = maxPlace(rows);
+  const a = [];
+  for (let k = 1; k <= n; k++) a.push(k + "등");
+  return a.join("-");
+};
+const wdlTxt = (m, upto) => {
+  if (!m.many) return `${m.w}-${m.d}-${m.l}`;
+  const n = upto || 3,
+    a = [];
+  for (let k = 1; k <= n; k++) a.push(m.place[k] || 0);
+  return a.join("-");
+};
 
 /* ② 한 사람 — 일자별 줄과 상대별 묶음 */
 /* 🔴 2026-11-13 — 「3명이서 게임할 때를 생각해보자. 상세 게임 현황은
@@ -7470,7 +7571,11 @@ const rankRows = g => {
 const seatsOf = g => g.team && Array.isArray(g.teams) && g.teams.length ? g.teams.length : (g.players || []).length;
 function rankOne(games, key, opt) {
   const rows = [];
-  rankPick(games, opt).forEach(g => {
+  /* ⚠ 2026-11-15 — ★랭킹 표와 ★같은 자로 사람을 가려야 한다.
+        따로 가르면 표에서는 7판인데 들어가 보면 3판이 된다. */
+  const picked = rankPick(games, opt);
+  const keyOfPlayer = linkPlayers(picked.reduce((a, g) => a.concat(g.players || []), []), dupNames(opt && opt.members));
+  picked.forEach(g => {
     const me = g.players.find(p => keyOfPlayer(p) === key);
     if (!me) return;
     rows.push({
@@ -9641,8 +9746,9 @@ function ClubRank({
     mode,
     from: bound[0],
     to: bound[1],
-    withTeam: team
-  }), [data.games, data.pool, club.id, mode, bound, team]);
+    withTeam: team,
+    members: memsOf(club) /* 같은 이름이 둘이면 ★번호로 가른다 */
+  }), [data.games, data.pool, data.clubs, club.id, mode, bound, team]);
   const games = useMemo(() => rankPick(allGames(data), {
     clubId: club.id,
     mode,
@@ -9692,7 +9798,7 @@ function ClubRank({
       ...TH,
       width: 58
     }
-  }, rows.some(m => m.many) ? "1등-2등-3등" : "승-무-패"), /*#__PURE__*/React.createElement("th", {
+  }, rows.some(m => m.many) ? placeHead(rows) : "승-무-패"), /*#__PURE__*/React.createElement("th", {
     style: {
       ...TH,
       width: 46,
@@ -9773,7 +9879,7 @@ function ClubRank({
       textAlign: "center",
       padding: "3px 5px"
     }
-  }, wdlTxt(m)), /*#__PURE__*/React.createElement("td", {
+  }, wdlTxt(m, maxPlace(rows))), /*#__PURE__*/React.createElement("td", {
     className: "num",
     style: {
       color: ACCENT,
@@ -10448,7 +10554,8 @@ function ClubMember({
     mode,
     from: "2000-01-01",
     to: today(),
-    withTeam: true
+    withTeam: true,
+    members: memsOf(club)
   }).find(x => x.key === mkey) || {}).name : "" : "";
   const me = memById(club, mkey);
   const title = me && me.name || nm || "이름 없음";
@@ -10669,7 +10776,7 @@ function ClubMember({
       padding: "0 6px 6px",
       fontWeight: 500
     }
-  }, o.mates.some(m2 => m2.many) ? "1등-2등-3등" : "승-무-패"), /*#__PURE__*/React.createElement("th", {
+  }, o.mates.some(m2 => m2.many) ? placeHead(o.mates) : "승-무-패"), /*#__PURE__*/React.createElement("th", {
     style: {
       whiteSpace: "nowrap",
       padding: "0 0 6px",
@@ -10723,7 +10830,7 @@ function ClubMember({
       whiteSpace: "nowrap",
       padding: "3px 6px"
     }
-  }, f.many ? [1, 2, 3, 4, 5].filter(k => k <= 3 || f.place[k]).map(k => f.place[k] || 0).join("-") : `${f.w}-${f.d}-${f.l}`), /*#__PURE__*/React.createElement("td", {
+  }, wdlTxt(f, maxPlace(o.mates))), /*#__PURE__*/React.createElement("td", {
     className: "num",
     style: {
       color: ACCENT,
@@ -12859,14 +12966,19 @@ function ClubRoster({
   /* 그 기간·그 종목에서 ★실제로 친 값 */
   const live = useMemo(() => {
     const by = {};
+    /* ⚠ 2026-11-15 — ⛔ 전에는 ★mid 로만 담았다. 이제 줄은 ★이름으로 묶이므로
+          그 줄에 남은 mid 는 ★남의 폰 번호일 수 있다 — 못 찾거나 엉뚱한 사람이 된다.
+       ⇒ ★이름으로도 담는다. 찾는 쪽에서 번호 → 이름 차례로 본다. */
     rankList(allGames(data), {
       clubId: club.id,
       mode,
       from: bound[0],
       to: bound[1],
-      withTeam: false
+      withTeam: false,
+      members: memsOf(club)
     }).forEach(m => {
       if (m.mid) by[m.mid] = m;
+      if (m.name) by["n:" + m.name] = m;
     });
     return by;
   }, [data.games, data.pool, club.id, mode, bound]);
@@ -12980,7 +13092,7 @@ function ClubRoster({
     md
   }) => {
     const h = md === "3" ? m.h3 : m.h4;
-    const r = mode === md ? live[m.id] : null;
+    const r = mode === md ? live[m.id] || live["n:" + (m.name || "")] : null;
     return /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
