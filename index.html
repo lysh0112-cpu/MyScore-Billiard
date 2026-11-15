@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-91 정식 회원만 보기 · 비회원 포함 보기 -->
+<!-- build: 1판-92 복식이 몇 판인지 적어 주기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9513,6 +9513,13 @@ function ClubList({
   }, "상대별 전적"), "을 볼 수 있습니다."), cs.map(c => {
     const gs = clubGames(allGames(data), c.id);
     const thisMon = gs.filter(g => (g.date || "").slice(0, 7) === mon).length;
+    /* 🔴 2026-11-15 — [대표님 「같은 동우회원들간 ★복식 경기를 한 경우…
+          기록은 에버리지를 계산 안 하더라도 ★동우회 경기기록들에는 보이는지」]
+       ⚠ 복식은 성적표에서는 ★빠진다 (점수가 「편」 것이라 한 사람 에버로
+         나누면 실제보다 높게 나온다). 그런데 이 카드는 ★세고 있었다.
+         ⇒ 카드 「모두 16판」인데 들어가면 「14판」 — ★숫자가 안 맞아 보인다.
+       ⇒ 기록은 ★다 남으므로 카드는 그대로 세되, ★몇 판이 복식인지 적어 준다. */
+    const teamN = gs.filter(g => g.team).length;
     return /*#__PURE__*/React.createElement("button", {
       key: c.id,
       onClick: () => onOpen(c.id),
@@ -9561,7 +9568,20 @@ function ClubList({
       className: "num"
     }, thisMon), "판 · 모두 ", /*#__PURE__*/React.createElement("span", {
       className: "num"
-    }, gs.length), "판"), c.gone && /*#__PURE__*/React.createElement("div", {
+    }, gs.length), "판", teamN > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#55707F"
+      }
+    }, " (복식 ", /*#__PURE__*/React.createElement("span", {
+      className: "num"
+    }, teamN), "판)")), teamN > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#55707F",
+        marginTop: 3,
+        lineHeight: 1.5
+      }
+    }, "복식은 순위·에버에서 빠집니다 — 안에서 [복식도 넣기]"), c.gone && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11.5,
         color: "#E0A36B",
@@ -9740,6 +9760,8 @@ function ClubRank({
         end: 0,
         mine: mineIds.has(g.id),
         by: g.by || "",
+        team: !!g.team,
+        mode: g.mode || "3",
         names: g.team && Array.isArray(g.teams) && g.teams.length ? g.teams.map(x => x.name) : (g.players || []).map(p => p.name)
       });
       t.n++;
@@ -13094,7 +13116,11 @@ function ClubGameSheet({
     style: {
       color: "#6F8598"
     }
-  }, " · ", r.n > 1 ? `${r.n}게임` : "단판"))), r.mine || amAdmin ? /*#__PURE__*/React.createElement("button", {
+  }, " · ", r.mode === "4" ? "4구" : "3쿠션", " · ", r.n > 1 ? `${r.n}게임` : "단판", r.team && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#55707F"
+    }
+  }, " · 복식")))), r.mine || amAdmin ? /*#__PURE__*/React.createElement("button", {
     onClick: () => setAsk(r),
     style: {
       flexShrink: 0,
