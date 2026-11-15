@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-87 「이대로 두기」 단추 이름 바로잡기 -->
+<!-- build: 1판-88 시간 안 정하고 쳤을 때 끝낼 길 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -3964,6 +3964,7 @@ function EndAsk({
   ranked,
   drew,
   overTime,
+  noLimit,
   limitMin,
   elapsedMin,
   notStarted,
@@ -4043,7 +4044,9 @@ function EndAsk({
   };
 
   /* 제목 — 지금이 어떤 상황인지 제목만 보고 알 수 있게 */
-  const title = drew ? overTime ? `${limitMin}분이 다 됐습니다` : notStarted ? "아직 시작하지 않았습니다" : "아직 치는 중입니다"
+  const title = drew ? overTime ? `${limitMin}분이 다 됐습니다` : notStarted ? "아직 시작하지 않았습니다"
+  /* ★ 시간을 안 정하셨으면 「아직 치는 중」이라고 ★단정하지 않는다 —
+        92분을 치셨을 수도 있다. 본 대로만 적는다. */ : noLimit ? "아직 아무도 목표에 닿지 못했습니다" : `${limitMin}분 중 ${elapsedMin}분 지났습니다`
   /* ★ 단판은 "1게임를 끝낼까요?" 가 아니라 그냥 경기가 끝난 것이다 (사용자 지적).
         조사도 틀렸다 — "게임를" */ : single ? "경기가 끝났습니다" : `${gameNo}${unitWord}을 끝낼까요?`;
   return /*#__PURE__*/React.createElement("div", {
@@ -4081,7 +4084,7 @@ function EndAsk({
       lineHeight: 1.7,
       marginBottom: 16
     }
-  }, names, !notStarted && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), drew ? overTime ? "아직 아무도 목표에 닿지 못했습니다" : `${limitMin > 0 ? `${limitMin}분 중 ` : ""}${elapsedMin}분 지났습니다` : `${ranked} 승리로 남습니다`), !drew && seriesLine && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+  }, names, !notStarted && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), drew ? overTime ? "아직 아무도 목표에 닿지 못했습니다" : noLimit ? `${elapsedMin}분 지났습니다 · 시간을 정하지 않으셨습니다` : "아직 아무도 목표에 닿지 못했습니다" : `${ranked} 승리로 남습니다`), !drew && seriesLine && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
     style: {
       color: willEndSeries ? "#8fd6d6" : "#E8B838"
     }
@@ -4099,32 +4102,37 @@ function EndAsk({
     onClick: onHome
   }, "🏠 홈으로 나가기"), /*#__PURE__*/React.createElement("div", {
     style: note
-  }, "지울 점수가 없습니다.")) : drew && !overTime ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
-    style: blue,
-    onClick: onBack
-  }, "잘못 눌렀으면 돌아가기"), /*#__PURE__*/React.createElement("button", {
-    style: red,
-    onClick: onWipe
-  }, "이번 판만 지우기"), /*#__PURE__*/React.createElement("div", {
-    style: note
-  }, "이번 판 점수만 지웁니다. 앞서 친 판은 그대로 남고, 점수판에 그대로 있습니다.")) : drew ?
+  }, "지울 점수가 없습니다.")) : drew ?
   /*#__PURE__*/
-  /* ③ 정한 시간이 지났는데 아무도 목표에 못 닿았다 */
+  /* 🔴 2026-11-15 — ③ 아무도 목표에 못 닿았다 [대표님].
+        ⛔ 전에는 ★시간이 지났을 때만 끝낼 수 있었다. 시간을 안 정하시면
+          그 갈래에 ★영영 못 들어가 끝낼 길이 없었다.
+        ⇒ 시간을 안 정하셨거나(noLimit) 지났으면(overTime) ★길을 다 연다.
+          시간을 정하셨는데 아직 안 지났으면 ★[다음 판]만 뺀다 —
+          아직 치는 중이니 다음 판으로 넘길 일은 드물다.
+        ⚠ 되돌릴 수 없는 [이번 판만 지우기]는 ★늘 맨 아래 빨간색이다. */
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: blue,
     onClick: onKeepPlaying
-  }, "더 치기"), /*#__PURE__*/React.createElement("button", {
+  }, "더 치기"), (noLimit || overTime) && /*#__PURE__*/React.createElement("button", {
     style: gold,
     onClick: onNextGame
   }, "무승부로 두고 다음 판"), /*#__PURE__*/React.createElement("button", {
-    style: line,
+    style: green,
     onClick: onFinishHere
-  }, "여기까지만 치고 끝내기"), /*#__PURE__*/React.createElement("button", {
+  }, "무승부로 기록하고 끝내기"), /*#__PURE__*/React.createElement("button", {
+    style: red,
+    onClick: onWipe
+  }, "이번 판만 지우기"), /*#__PURE__*/React.createElement("button", {
     style: back,
     onClick: onBack
   }, "돌아가기"), /*#__PURE__*/React.createElement("div", {
     style: note
-  }, "무승부로 두고 다음 게임을 칩니다. 앞 게임은 무승부로 남습니다.")) : willEndSeries ?
+  }, "「무승부로 기록하고 끝내기」 — 이번 판을 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, "무승부로 남기고"), " 경기를 끝냅니다. 앞서 친 판은 그대로 남습니다.", !noLimit && !overTime && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "시간이 남았어도 끝내실 수 있습니다."))) : willEndSeries ?
   /*#__PURE__*/
   /* ② 이 판으로 시리즈가 끝난다 */
   React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
@@ -7049,6 +7057,15 @@ function Billiard({
     const elapsedMin = Math.max(0, Math.round(elapsed / 60));
     /* 정한 시간이 지났는가 — 시간을 안 정했으면(0) 지난 것으로 안 본다 */
     const overTime = limitMin > 0 && elapsed >= limitMin * 60;
+    /* 🔴🔴 2026-11-15 — [대표님 「40분씩 설정을 안 하고 그냥 침… 마지막 판은
+          40분이 지나도 무승부야. 그래서 ★게임을 끝내려는데도 무승부로 기록하고
+          끝내기가 없네」]
+       까닭 — overTime 은 ★limitMin > 0 일 때만 참이 된다. 시간을 안 정하시면
+         몇 시간을 치셔도 ★영영 거짓이라, 늘 「잘못 누르셨군요」 갈래로 갔다.
+         거기에는 ★[돌아가기]와 [이번 판만 지우기] 뿐이다 — 끝낼 길이 없었다.
+       ⇒ ★시간을 안 정하셨으면 앱은 「이르다/늦었다」를 ★판단할 근거가 없다.
+         그러니 길을 ★다 열어 드린다. noLimit 이 그것이다. */
+    const noLimit = limitMin <= 0;
     /* ★ 이 판을 끝내면 시리즈가 끝나는가 — 미리 세어서 알려준다 */
     const winKey = nowDrew ? "" : (units.find(u => u.key === finishOrder[0]) || {}).key;
     const willWins = {
@@ -7065,6 +7082,7 @@ function Billiard({
       drew: nowDrew,
       ranked: (units.find(u => u.key === finishOrder[0]) || {}).name || "",
       overTime: overTime,
+      noLimit: noLimit,
       limitMin: limitMin,
       elapsedMin: elapsedMin,
       notStarted: !begun && !log.length && !Object.values(score).some(v => v > 0),
