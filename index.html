@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-90 같은 이름 — 합치겠느냐고 묻기 -->
+<!-- build: 1판-91 정식 회원만 보기 · 비회원 포함 보기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9828,6 +9828,8 @@ function ClubRank({
 
   /* 갈린 이름 하나 — 있으면 알림 줄이 뜬다 */
   const splitOne = useMemo(() => splitName(rows, clubGames(allGames(data), club.id), data, club.id), [rows, data.games, data.pool, data.nameSkip, club.id]); // eslint-disable-line
+  /* ★ 기본은 ★정식 회원만 — 동우회 성적표는 ★우리 회원들 성적표다 [대표님] */
+  const [who, setWho] = useState("mem");
   const [snOpen, setSn] = useState(false);
   const [snBusy, snOnce] = useOnce();
   const [undoNm, setUndo] = useState("");
@@ -9844,8 +9846,34 @@ function ClubRank({
     return c;
   }, [rows, sort]);
   const hit = m => !q.trim() || m.name.includes(q.trim());
-  const many = sorted.filter(m => (min === 0 || m.n >= min) && hit(m));
-  const few = sorted.filter(m => min > 0 && m.n < min && hit(m));
+  /* 🔴🔴 2026-11-15 — 정식 회원만 / 비회원 포함 [대표님].
+        ⚠ 「정식 회원」은 명단에서 ★「정식」 표가 붙은 분이다 (status active).
+          명단에 ★없는 분과 ★「초청 중」인 분은 비회원으로 본다.
+        ⛔ 숨기는 것은 ★그 줄뿐 — 회원분들 숫자는 하나도 안 바뀐다. */
+  const memNames = useMemo(() => new Set(memsOf(club).filter(m => m.status === "active").map(m => (m.name || "").trim()).filter(Boolean)), [club.members]); // eslint-disable-line
+  const isMem = m => memNames.has((m.name || "").trim());
+  const picked0 = sorted.filter(m => (min === 0 || m.n >= min) && hit(m));
+  const hiddenN = []; /* 숨긴 분 — 아래에서 채운다 */
+  const many = who === "mem" ? picked0.filter(isMem) : picked0;
+  const few0 = sorted.filter(m => min > 0 && m.n < min && hit(m));
+  const few = who === "mem" ? few0.filter(isMem) : few0;
+  if (who === "mem") [...picked0, ...few0].forEach(m => {
+    if (!isMem(m)) hiddenN.push(m);
+  });
+
+  /* 🔴🔴 2026-11-15 — ⛔ 처음엔 ★무조건 「정식 회원만」으로 열었다. ★틀렸다.
+        검사가 잡았다 — [기록 보기에서 골라 넣기] 로 들어온 분은 ★「초청 중」으로
+        등록된다. 그런 동우회는 정식이 한 분도 없어 ★표가 통째로 빈다.
+        「왜 아무것도 없지」가 된다.
+     ⇒ 이 동우회에 ★정식 회원이 한 분도 안 보이면 ★「비회원 포함」으로 연다.
+     ⚠ 알약은 ★실제로 보고 있는 쪽에 불이 켜진다 — 몰래 바꾸지 않는다. */
+  const whoFix = useRef("");
+  useEffect(() => {
+    if (whoFix.current === club.id) return;
+    if (!rows.length) return;
+    whoFix.current = club.id;
+    if (!rows.some(isMem)) setWho("all");
+  }, [club.id, rows]); // eslint-disable-line
   const hOf = m => handiOf(memById(club, m.mid), mode);
 
   /* 🔴 2026-11-13 — 「화면이 이상해」 [대표님]. 머리글이 ★세로로 쪼개져
@@ -9930,7 +9958,19 @@ function ClubRank({
       textOverflow: "ellipsis",
       whiteSpace: "nowrap"
     }
-  }, m.name || "이름 없음", m.joined && /*#__PURE__*/React.createElement("span", {
+  }, m.name || "이름 없음", who === "all" && !isMem(m) && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-block",
+      fontSize: 9.5,
+      fontWeight: 600,
+      padding: "2px 7px",
+      borderRadius: 999,
+      marginLeft: 6,
+      verticalAlign: 1,
+      background: "rgba(159,187,208,.14)",
+      color: "var(--chalk)"
+    }
+  }, "비회원"), m.joined && /*#__PURE__*/React.createElement("span", {
     onClick: e => {
       e.stopPropagation();
       setUndo(m.name || "");
@@ -10387,8 +10427,11 @@ function ClubRank({
     setFrom: setFrom,
     to: to,
     setTo: setTo,
-    bound: bound,
-    tail: ` · ${mode === "3" ? "3쿠션" : "4구"} · ${rows.length}명 · ${games}판`
+    bound: bound
+    /* ⚠ 2026-11-15 — ★보이는 수를 적는다. 거른 뒤에도 5명이라고 적으면
+          ★세 줄만 보이는데 5명이라 하는 꼴이 된다. 판 수는 그대로다 —
+          비회원과 친 판도 ★우리 동우회에서 친 판이다. */,
+    tail: ` · ${mode === "3" ? "3쿠션" : "4구"} · ${who === "mem" ? rows.filter(isMem).length : rows.length}명 · ${games}판`
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       height: 11
@@ -10453,8 +10496,7 @@ function ClubRank({
       display: "flex",
       alignItems: "center",
       gap: 7,
-      marginTop: 7,
-      marginBottom: 12
+      marginTop: 7
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -10473,6 +10515,31 @@ function ClubRank({
     value: min,
     set: setMin,
     items: MIN_ITEMS
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 7,
+      marginTop: 7,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: "#6F8598",
+      width: 26,
+      flexShrink: 0
+    }
+  }, "보기"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement(Pills, {
+    cols: "repeat(2,1fr)",
+    value: who,
+    set: setWho,
+    items: [["mem", "정식 회원만"], ["all", "비회원 포함"]]
   }))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setPick(true),
     style: {
@@ -10669,7 +10736,39 @@ function ClubRank({
   /* ⚠ 2026-11-13 — 비어 있으면 ★머리글만 덩그러니 남는다 [대표님 「화면이 이상해」].
         최소 판 수(10판)보다 적게 친 분들만 있으면 이 표가 ★0명이 된다 */ : many.length > 0 ? /*#__PURE__*/React.createElement(Table, {
     list: many
-  }) : null, few.length > 0 && (open ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }) : null, hiddenN.length > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setWho("all"),
+    style: {
+      width: "100%",
+      textAlign: "left",
+      fontSize: 11.5,
+      color: "var(--chalk)",
+      lineHeight: 1.6,
+      background: "rgba(0,0,0,.22)",
+      border: "1px solid var(--line)",
+      borderRadius: 8,
+      padding: "9px 11px",
+      marginTop: 2,
+      marginBottom: 8
+    }
+  }, "비회원 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, hiddenN.length), "분"), "을 숨겼습니다", " — ", hiddenN.slice(0, 4).map(m => m.name).join(" · "), hiddenN.length > 4 ? " 외" : "", /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: 11,
+      color: "#6F8598",
+      marginTop: 2
+    }
+  }, "회원분들 판 수·에버에는 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "var(--chalk)"
+    }
+  }, "그대로 들어 있습니다"), " · 누르면 함께 봅니다")), few.length > 0 && (open ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "#6F8598",
