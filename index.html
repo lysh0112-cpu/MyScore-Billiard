@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-92 복식이 몇 판인지 적어 주기 -->
+<!-- build: 1판-93 지운 판이 되살아나던 것 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -8682,13 +8682,67 @@ function Log({
     return by;
   }, [data.pool]);
   const list = all.filter(m => m.date >= bound[0] && m.date <= bound[1]);
-  const del = m => {
-    if (!confirm(m.ids.length > 1 ? `${md(m.date)} 경기를 지울까요? ${m.ids.length}게임이 모두 지워집니다` : `${md(m.date)} 경기를 지울까요?`)) return;
-    save({
-      ...data,
-      games: data.games.filter(g => !m.ids.includes(g.id))
+
+  /* 🔴🔴 2026-11-18 — [대표님 「그래 ★지웠는데 되살아나더라구」]
+        ⛔ 전에는 ★내 폰에서만 지웠다. 동우회에 올린 사본이 서버에 남아
+          몇 초 뒤 ★도로 내려왔다. 다른 회원 화면에서는 ★애초에 안 지워졌다.
+        ⇒ 동우회에 올라간 판이면 ★묻는다. 말없이 양쪽 다 지우면 다른 분들
+          성적이 소리 없이 바뀌고, 내 것만 지우면 ★되살아난다. */
+  const [delAsk, setDelAsk] = useState(null);
+  const [delBusy, delOnce] = useOnce();
+  const clubsOfMatch = m => {
+    const ids = new Set();
+    (data.games || []).forEach(g => {
+      if (m.ids.indexOf(g.id) < 0) return;
+      clubsOfGame(g).forEach(c => ids.add(c));
     });
+    return [...ids].map(id => clubById(data, id)).filter(Boolean);
+  };
+  const wipeLocal = (m, hide) => ({
+    ...data,
+    games: (data.games || []).filter(g => !m.ids.includes(g.id)),
+    /* ★ 서버에 사본이 남을 때만 적어 둔다 — 안 적으면 다시 내려온다 */
+    hid: hide ? [...new Set([...(data.hid || []), ...m.ids])].slice(-500) : data.hid || []
+  });
+  const del = m => {
+    const cs = clubsOfMatch(m);
+    if (cs.length) {
+      setDelAsk({
+        m,
+        cs
+      });
+      return;
+    }
+    if (!confirm(m.ids.length > 1 ? `${md(m.date)} 경기를 지울까요? ${m.ids.length}게임이 모두 지워집니다` : `${md(m.date)} 경기를 지울까요?`)) return;
+    save(wipeLocal(m, false));
     say("지웠습니다");
+  };
+  /* 동우회에서도 지운다 — 서버에서 못 지우면 ★그렇게 말씀드린다 */
+  const delBoth = async (m, cs) => {
+    let bad = [];
+    const tok = await cueTok(data);
+    for (const c of cs) {
+      if (!c.srv) continue;
+      if (!tok) {
+        bad.push(c.name);
+        continue;
+      }
+      for (const id of m.ids) {
+        try {
+          await delClubGame(tok, c.id, id);
+        } catch (e) {/* 아래에서 확인한다 */}
+      }
+      try {
+        const left = await cueGet(tok, `cue_club_games?club_id=eq.${c.id}&client_id=eq.${encodeURIComponent(m.ids[0])}&select=client_id`);
+        if (Array.isArray(left) && left.length) bad.push(c.name);
+      } catch (e) {
+        bad.push(c.name);
+      }
+    }
+    /* ★ 못 지운 동우회가 있으면 ★숨김으로라도 막는다 — 안 그러면 되살아난다 */
+    save(wipeLocal(m, bad.length > 0));
+    setDelAsk(null);
+    say(bad.length ? `내 기록에서 지웠습니다 · ${bad.join("·")}에서는 못 지웠습니다 (총무나 올린 분만 지웁니다)` : "동우회에서도 지웠습니다");
   };
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8737,7 +8791,143 @@ function Log({
       onDel: ext ? null : () => del(m),
       onFix: ext ? null : () => setFix(m)
     });
-  })())), fix && /*#__PURE__*/React.createElement(NameFixSheet, {
+  })())), delAsk && /*#__PURE__*/React.createElement("div", {
+    onClick: () => setDelAsk(null),
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 136,
+      background: "rgba(0,0,0,.62)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: "100%",
+      maxWidth: 520,
+      background: "#0C2E46",
+      borderRadius: "16px 16px 0 0",
+      padding: "16px 14px 20px",
+      maxHeight: "86vh",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15.5,
+      fontWeight: 700,
+      marginBottom: 5
+    }
+  }, md(delAsk.m.date), " 경기를 지울까요?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      lineHeight: 1.7,
+      marginBottom: 14
+    }
+  }, delAsk.m.ids.length > 1 ? `${delAsk.m.ids.length}게임이 모두 지워집니다.` : "이 경기를 지웁니다."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(0,0,0,.22)",
+      border: "1px solid var(--line)",
+      borderRadius: 9,
+      padding: 11,
+      marginBottom: 13,
+      fontSize: 12.5,
+      lineHeight: 1.6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "num",
+    style: {
+      color: ACCENT,
+      fontWeight: 600
+    }
+  }, md(delAsk.m.date)), delAsk.m.place ? ` ${delAsk.m.place}` : "", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#6F8598"
+    }
+  }, " · ", delAsk.m.ids.length > 1 ? `${delAsk.m.ids.length}게임` : "단판"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 4
+    }
+  }, (delAsk.m.score || []).map(x => x.name).join(" · ")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-block",
+      fontSize: 10,
+      fontWeight: 600,
+      padding: "2px 8px",
+      borderRadius: 999,
+      marginTop: 6,
+      background: "rgba(232,184,56,.16)",
+      color: ACCENT
+    }
+  }, delAsk.cs.map(c => c.name).join(" · "), " 에 올라가 있음")), /*#__PURE__*/React.createElement("button", {
+    disabled: delBusy,
+    onClick: () => delOnce(() => delBoth(delAsk.m, delAsk.cs)),
+    style: {
+      display: "block",
+      width: "100%",
+      textAlign: "left",
+      borderRadius: 11,
+      padding: 13,
+      marginBottom: 9,
+      background: "rgba(200,123,116,.1)",
+      border: "1px solid rgba(200,123,116,.45)",
+      opacity: delBusy ? .5 : 1,
+      lineHeight: 1.5
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 14.5,
+      color: "#F0A9A9",
+      display: "block"
+    }
+  }, delBusy ? "지우는 중…" : "동우회에서도 지우기"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      display: "block",
+      marginTop: 3
+    }
+  }, "모든 회원 화면에서 사라집니다 · 되돌릴 수 없습니다")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      save(wipeLocal(delAsk.m, true));
+      setDelAsk(null);
+      say("내 기록에서만 지웠습니다 · 동우회 성적에는 남습니다");
+    },
+    style: {
+      display: "block",
+      width: "100%",
+      textAlign: "left",
+      borderRadius: 11,
+      padding: 13,
+      marginBottom: 9,
+      background: "rgba(0,0,0,.24)",
+      border: "1px solid var(--line)",
+      lineHeight: 1.5
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 14.5,
+      display: "block"
+    }
+  }, "내 기록에서만 지우기"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: "#6F8598",
+      display: "block",
+      marginTop: 3
+    }
+  }, "동우회 성적에는 그대로 남습니다 · 다시 안 내려옵니다")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDelAsk(null),
+    style: {
+      width: "100%",
+      padding: 11,
+      fontSize: 14,
+      fontWeight: 600,
+      color: "#7d8f9b"
+    }
+  }, "그냥 두기"))), fix && /*#__PURE__*/React.createElement(NameFixSheet, {
     m: fix,
     data: data,
     onClose: () => setFix(null),
@@ -11614,6 +11804,14 @@ const reapClubTags = async (tok, data, clubIds) => {
 const pullClubGames = async (tok, data, clubIds) => {
   const mine = new Set((data.games || []).map(g => g.id));
   const sig = new Set((data.games || []).map(gameSig));
+  /* 🔴🔴 2026-11-18 — [대표님 「그래 ★지웠는데 되살아나더라구」]
+     까닭 — 기록 보기의 지우기는 ★data.games 에서만 뺐다. 동우회에 올린
+       ★사본은 서버에 그대로 남는다. 그리고 앱은 「내 판이 아닌 것」만
+       내려받으니, 지워서 ★내 판이 아니게 된 그 판을 ★도로 내려받았다.
+       그때는 「○○ 님이 적음」이 붙어 ★[삭제]조차 없다.
+     ⇒ 「내 기록에서만 지우기」를 고르시면 ★그 판 번호를 적어 둔다(hid).
+       여기서 ★걸러낸다. 안 적으면 몇 초 뒤 다시 올라온다. */
+  const hid = new Set(data.hid || []);
   const out = [];
   for (const cid of clubIds.slice(0, CLUB_MAX)) {
     try {
@@ -11622,6 +11820,7 @@ const pullClubGames = async (tok, data, clubIds) => {
         const g = r && r.data;
         if (!g || !Array.isArray(g.players)) return; /* 남이 보낸 글이다 — 꼴을 본다 */
         if (mine.has(g.id)) return; /* 내가 친 판 */
+        if (hid.has(g.id) || hid.has(String(r.client_id))) return; /* ★내가 지운 판 */
         if (sig.has(gameSig(g))) return; /* 내가 적어 둔 그 판 */
         if (out.some(x => x.id === g.id || gameSig(x) === gameSig(g))) return;
         out.push({
