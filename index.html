@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-93 지운 판이 되살아나던 것 -->
+<!-- build: 1판-94 개인 기록도 지우면 안 돌아오게 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -711,6 +711,22 @@ async function pushGame(g, token, me) {
     });
   }
   return sid;
+}
+
+/* 🔴🔴 2026-11-19 — [대표님 「11/14 오연희:류승현 ★삭제했는데도 계속 나온다」]
+   까닭 — 1판-93 은 ★동우회 쪽 길만 막았다. 개인 기록에는 ★또 다른 길이 있다.
+     지우면 data.games 에서만 빠지는데, score_games 의 ★내 줄은 그대로 남는다.
+     그리고 켤 때 내려받아 이렇게 합친다 —
+       const add = remote.filter((g) => !have.has(g.id));
+     지운 판은 ★「없는 판」이니 ★도로 들어온다. 이번엔 pool 이 아니라
+     ★data.games 로 들어와 [삭제]·[이름 고치기] 가 그대로 붙어 있다.
+   ⇒ 지울 때 ★서버의 내 줄도 지운다. 그리고 ★hid 로 한 번 더 막는다 —
+     못 지웠을 때(인터넷이 끊겼거나 서버가 막을 때) ★되살아나지 않게. */
+async function delMyGame(token, me, clientId) {
+  await sbFetch(`/rest/v1/score_games?owner=eq.${me}&client_id=eq.${encodeURIComponent(clientId)}`, {
+    method: "DELETE",
+    token
+  });
 }
 
 /* 서버에 있는 내 기록 내려받기 (기기를 바꿨을 때) */
@@ -8698,12 +8714,26 @@ function Log({
     });
     return [...ids].map(id => clubById(data, id)).filter(Boolean);
   };
-  const wipeLocal = (m, hide) => ({
+  /* ⛔ 2026-11-19 — 처음엔 ★동우회에 올라갔을 때만 적어 뒀다 (hide 참일 때만).
+        ★그것으로는 안 된다 — [대표님 「삭제했는데도 계속 나온다」].
+        개인 기록도 ★score_games 에 내 줄이 남아 켤 때 ★도로 들어온다.
+     ⇒ ★언제나 적어 둔다. 적어 두는 값은 판 번호뿐이라 가볍다. */
+  const wipeLocal = m => ({
     ...data,
     games: (data.games || []).filter(g => !m.ids.includes(g.id)),
-    /* ★ 서버에 사본이 남을 때만 적어 둔다 — 안 적으면 다시 내려온다 */
-    hid: hide ? [...new Set([...(data.hid || []), ...m.ids])].slice(-500) : data.hid || []
+    hid: [...new Set([...(data.hid || []), ...m.ids])].slice(-500)
   });
+  /* ★ 서버에 있는 ★내 줄도 지운다 — 다른 기기에서도 사라지게 */
+  const dropMine = async m => {
+    if (!data.me) return;
+    const tok = await cueTok(data);
+    if (!tok) return; /* 못 지워도 hid 가 막는다 */
+    for (const id of m.ids) {
+      try {
+        await delMyGame(tok, data.me, id);
+      } catch (e) {/* hid 가 막는다 */}
+    }
+  };
   const del = m => {
     const cs = clubsOfMatch(m);
     if (cs.length) {
@@ -8714,7 +8744,8 @@ function Log({
       return;
     }
     if (!confirm(m.ids.length > 1 ? `${md(m.date)} 경기를 지울까요? ${m.ids.length}게임이 모두 지워집니다` : `${md(m.date)} 경기를 지울까요?`)) return;
-    save(wipeLocal(m, false));
+    save(wipeLocal(m));
+    dropMine(m);
     say("지웠습니다");
   };
   /* 동우회에서도 지운다 — 서버에서 못 지우면 ★그렇게 말씀드린다 */
@@ -8739,8 +8770,8 @@ function Log({
         bad.push(c.name);
       }
     }
-    /* ★ 못 지운 동우회가 있으면 ★숨김으로라도 막는다 — 안 그러면 되살아난다 */
-    save(wipeLocal(m, bad.length > 0));
+    save(wipeLocal(m));
+    await dropMine(m); /* 개인 기록 쪽 사본도 지운다 */
     setDelAsk(null);
     say(bad.length ? `내 기록에서 지웠습니다 · ${bad.join("·")}에서는 못 지웠습니다 (총무나 올린 분만 지웁니다)` : "동우회에서도 지웠습니다");
   };
@@ -8891,7 +8922,9 @@ function Log({
     }
   }, "모든 회원 화면에서 사라집니다 · 되돌릴 수 없습니다")), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
-      save(wipeLocal(delAsk.m, true));
+      const m = delAsk.m;
+      save(wipeLocal(m));
+      dropMine(m); /* 내 줄은 지운다 — 동우회 사본만 남는다 */
       setDelAsk(null);
       say("내 기록에서만 지웠습니다 · 동우회 성적에는 남습니다");
     },
@@ -14772,7 +14805,9 @@ function App() {
       try {
         const remote = await pullGames(token, dataRef.current.me);
         const have = new Set(dataRef.current.games.map(g => g.id));
-        const add = remote.filter(g => !have.has(g.id));
+        /* ★ 내가 지운 판은 ★도로 들여오지 않는다 [대표님 「삭제했는데도 계속 나온다」] */
+        const hid = new Set(dataRef.current.hid || []);
+        const add = remote.filter(g => !have.has(g.id) && !hid.has(g.id));
         if (add.length) {
           down = add.length;
           await patch(p => ({
