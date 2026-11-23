@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-95 동우회를 기록이 있는 쪽으로 열기 -->
+<!-- build: 1판-96 동우회 맞추기 — 되고 있는지 보이게 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -10035,6 +10035,11 @@ function ClubRank({
 }) {
   /* ⚠ 두 번 눌리면 두 번 지우러 간다 — ★ref 로 잠근다 (useState 로는 안 잠긴다) */
   const [rmBusy, rmOnce] = useOnce();
+  const [sy, setSy] = useState(null); /* 맞추기 결과 — 보여 줄 말 */
+  const [syBusy, syOnce] = useOnce();
+  const dataRef2 = useRef(data);
+  dataRef2.current = data;
+  const poolKey2 = a => (a || []).map(g => g.id).sort().join("|");
   const [tidy, setTidy] = useState(false); /* 기록 관리 창 */
   const [tdBusy, tdOnce] = useOnce();
 
@@ -11048,7 +11053,76 @@ function ClubRank({
       fontSize: 14
     },
     onClick: () => setUndo("")
-  }, "그대로 두기")))), cgRows.length > 0 && /*#__PURE__*/React.createElement("button", {
+  }, "그대로 두기")))), club.srv && /*#__PURE__*/React.createElement("button", {
+    onClick: () => syOnce(async () => {
+      const r = await clubSyncOnce(data, [club.id]);
+      if (!r.ok) {
+        setSy({
+          bad: true,
+          msg: r.msg,
+          srv: r.srv
+        });
+        return;
+      }
+      const d2 = dataRef2.current || data;
+      if (r.got && poolKey2(d2.pool) !== poolKey2(r.pool)) save({
+        ...d2,
+        pool: r.pool
+      });
+      setSy({
+        bad: false,
+        srv: r.srv,
+        got: r.got,
+        at: Date.now()
+      });
+    }),
+    style: {
+      display: "flex",
+      gap: 9,
+      alignItems: "center",
+      width: "100%",
+      textAlign: "left",
+      background: sy && sy.bad ? "rgba(200,123,116,.1)" : "rgba(0,0,0,.24)",
+      border: `1px solid ${sy && sy.bad ? "rgba(200,123,116,.45)" : "var(--line)"}`,
+      borderRadius: 11,
+      padding: "11px 12px",
+      marginBottom: 9,
+      fontSize: 12.5,
+      lineHeight: 1.5
+    }
+  }, /*#__PURE__*/React.createElement("span", null, syBusy ? "⏳" : sy ? sy.bad ? "⛔" : "✓" : "🔄"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--ivory)",
+      minWidth: 0
+    }
+  }, syBusy ? /*#__PURE__*/React.createElement("b", null, "맞추는 중…") : !sy ? /*#__PURE__*/React.createElement("b", null, "동우회 기록 맞추기") : sy.bad ? /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "#F0A9A9"
+    }
+  }, sy.msg) : /*#__PURE__*/React.createElement("b", null, sy.got ? `${sy.got}판을 받았습니다` : "새로 받을 것이 없습니다"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: 11,
+      color: "#6F8598",
+      marginTop: 2
+    }
+  }, sy && !sy.bad ? /*#__PURE__*/React.createElement(React.Fragment, null, "서버에 올라온 기록 ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, sy.srv), "판 · 내 화면 ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, clubGames(allGames(data), club.id).length), "판") : "눌러서 지금 맞춥니다")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: "auto",
+      flexShrink: 0,
+      fontSize: 11.5,
+      fontWeight: 700,
+      color: ACCENT,
+      border: "1px solid rgba(232,184,56,.5)",
+      borderRadius: 999,
+      padding: "5px 12px",
+      whiteSpace: "nowrap"
+    }
+  }, sy && sy.bad ? "다시" : "지금 맞추기")), cgRows.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setTidy(true),
     style: {
       width: "100%",
@@ -11975,7 +12049,12 @@ const pushClubGames = async (tok, data) => {
 /* 🔴 2026-11-14 — ★같은 판을 두 분이 따로 적어 올리면 ★두 번 세어진다.
       판 번호는 기계마다 다르니 번호로는 못 잡는다.
    ⇒ 날짜 + 친 분들 + 점수로 ★지문을 떠서 맞춰 본다. */
-const gameSig = g => [g.date || "", g.mode || "", (g.players || []).map(p => `${p.name}/${Number(p.score) || 0}/${Number(p.handicap) || 0}`).sort().join(";")].join("|");
+/* ⚠ 2026-11-23 — ⛔ 전에는 ★수지(handicap) 를 지문에 넣었다. ★틀렸다 —
+      수지는 ★폰마다 다른 값이다 (명단에 적어 둔 사람이 다르다).
+      같은 판인데 한쪽은 12, 한쪽은 없으면 ★다른 판으로 보여 두 번 세어진다.
+   ⇒ 수지를 빼고 ★이닝을 넣는다. 이닝은 그 판에서 ★실제로 친 것이라
+     기계가 달라도 같고, 다른 판끼리는 잘 갈린다. */
+const gameSig = g => [g.date || "", g.mode || "", (g.players || []).map(p => `${p.name}/${Number(p.score) || 0}/${Number(p.inn) || 0}`).sort().join(";")].join("|");
 
 /* ══════ 동우회 기록 관리 — 삭제 ══════
    🔴🔴 2026-11-14 — [대표님 「동우회 기록 중 ★총무가 볼 때 불필요한 성적이거나
@@ -11989,6 +12068,65 @@ const gameSig = g => [g.date || "", g.mode || "", (g.players || []).map(p => `${
    ⛔ 뺀 판은 ★적은 분 폰에서도 꼬리표가 떨어져야 한다 — 안 그러면
       총무 화면에서는 빠졌는데 ★그분 화면에서만 계속 세어진다. reapClubTags 가 한다. */
 const delClubGame = async (tok, clubId, clientId) => cueDel(tok, `cue_club_games?club_id=eq.${clubId}&client_id=eq.${encodeURIComponent(clientId)}`);
+
+/* ══════ 동우회 맞추기 — ★되고 있는지 보이게 ══════
+   🔴🔴 2026-11-23 — [대표님 「김경석과 7게임 한 결과가 디딤돌 동우회에서
+        ★김경석 핸드폰은 나오고 내 핸드폰에서 안 나옴」]
+
+   두 폰을 맞대 보니 에버가 0.342 와 0.329 로 ★달랐다 — 같은 판이 두 번
+   세어진 것이 아니라 ★진짜 다른 7판이 안 내려온 것이다.
+   ⛔ 그런데 ★왜 안 왔는지 알 길이 없었다. cgSync 는 실패해도
+     catch (e) {} 로 ★조용히 넘어간다. 대표님도 나도 ★눈이 없었다.
+   ⇒ 한 번 맞춰 보고 ★무슨 일이 있었는지 말해 주는 자를 만든다.
+   ★ 서버에 ★몇 판 올라와 있는지를 함께 센다 — 그것이 갈림길이다.
+     내 화면 7판인데 서버 14판이면 ★내려받기가 막힌 것이고,
+     서버도 7판이면 ★상대 폰이 안 올린 것이다. */
+const clubSyncOnce = async (data, clubIds) => {
+  const out = {
+    ok: false,
+    got: 0,
+    srv: 0,
+    msg: ""
+  };
+  if (!data.me) {
+    out.msg = "로그인하신 뒤에 맞출 수 있습니다";
+    return out;
+  }
+  let tok;
+  try {
+    tok = await cueTok(data);
+  } catch (e) {
+    tok = null;
+  }
+  if (!tok) {
+    out.msg = "로그인이 만료됐습니다 — 오른쪽 위에서 다시 로그인해 주세요";
+    return out;
+  }
+  /* ★ 서버에 몇 판 있는지 먼저 센다 — 못 읽으면 ★그 자체가 답이다 */
+  for (const cid of clubIds) {
+    try {
+      const rows = await cueGet(tok, `cue_club_games?club_id=eq.${cid}&select=client_id&limit=2000`);
+      if (!Array.isArray(rows)) {
+        out.msg = "서버가 뜻밖의 답을 보냈습니다";
+        return out;
+      }
+      out.srv += rows.length;
+    } catch (e) {
+      const m = String(e && e.message || e || "");
+      out.msg = /JWT|token|expired|401/i.test(m) ? "로그인이 만료됐습니다 — 다시 로그인해 주세요" : /policy|42501|permission|row-level/i.test(m) ? "서버가 막았습니다 — 이 동우회 회원이 아니라고 합니다" : /fetch|network|Failed/i.test(m) ? "인터넷이 끊겼습니다 — 잠시 뒤 다시 눌러 주세요" : "못 받았습니다 · " + m.slice(0, 50);
+      return out;
+    }
+  }
+  try {
+    const got = await pullClubGames(tok, data, clubIds);
+    out.ok = true;
+    out.got = got.length;
+    out.pool = got;
+  } catch (e) {
+    out.msg = "받는 중에 끊겼습니다 — 다시 눌러 주세요";
+  }
+  return out;
+};
 
 /* 🔴 서버에 없어진 판은 ★내 폰에서도 꼬리표를 뗀다.
    ⚠ 서버를 못 읽었으면 ★아무것도 떼지 않는다 — 한 번 못 읽었다고
