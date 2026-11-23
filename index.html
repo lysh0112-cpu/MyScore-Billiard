@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-99 명단 회원은 한 사람으로 — 평균 에버 바로잡기 -->
+<!-- build: 1판-100 상대 에버 칸 · 상대 기준으로 보기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7789,10 +7789,16 @@ function rankOne(games, key, opt) {
       /* ★ 3인 이상 줄을 그리려면 판 자체가 필요하다 */
       avg: (Number(me.score) || 0) / (Number(me.inn) || 1),
       res: me.won === true ? "승" : me.won === false ? "패" : "무",
+      /* 🔴 2026-11-23 — [대표님 「나와 김경석의 에버가 같을 수는 없지않아」]
+            ⛔ 「함께 친 분」 표에 ★상대 이름 옆에 ★내 에버가 붙어 있었다.
+              머리글에 작게 「류승현 에버」라 적혀 있을 뿐이라, 김경석 이름 옆
+              0.342 를 보고 ★두 사람 에버가 같다고 읽으셨다.
+            ⇒ ★상대의 점수·이닝도 함께 들고 와서 ★상대 에버 칸을 만든다. */
       foes: g.players.filter(p => keyOfPlayer(p) !== key).map(f => ({
         key: keyOfPlayer(f),
         name: f.name || "",
-        score: Number(f.score) || 0
+        score: Number(f.score) || 0,
+        inn: Number(f.inn) || 0
       })),
       /* 🔴 2026-11-13 — 「함께 친 분 · 판 · 1등 2등 3등 · 에버」로 묶어 보여주기로
             [대표님]. 3인 경기를 사람마다 한 줄로 적으면 ★같은 6판이 두 줄이 되어
@@ -7818,12 +7824,16 @@ function rankOne(games, key, opt) {
       d: 0,
       l: 0,
       pt: 0,
-      inn: 0
+      inn: 0,
+      fpt: 0,
+      finn: 0
     });
     t.n++;
     t.pt += r.my;
     t.inn += r.inn;
     t.name = f.name || t.name;
+    t.fpt += f.score;
+    t.finn += f.inn || r.inn; /* ★ 상대 쪽 */
     if (r.res === "승") t.w++;else if (r.res === "패") t.l++;else t.d++;
   }));
   /* ★ 함께 친 분 묶음 — 그 판에 나 말고 누가 있었나 (이름 순으로 열쇠를 만든다) */
@@ -7841,12 +7851,20 @@ function rankOne(games, key, opt) {
       pt: 0,
       inn: 0,
       many: r.seats > 2,
-      place: {}
+      place: {},
+      /* ★ 상대가 ★한 분일 때만 상대 에버를 낸다 — 여럿이면 누구 것인지 알 수 없다 */
+      one: ks.length === 1,
+      fpt: 0,
+      finn: 0
     });
     r.mk = mk2;
     t.n++;
     t.pt += r.my;
     t.inn += r.inn;
+    if (t.one && r.foes[0]) {
+      t.fpt += r.foes[0].score;
+      t.finn += r.foes[0].inn || r.inn;
+    }
     if (r.seats > 2) {
       t.many = true;
       t.place[r.place] = (t.place[r.place] || 0) + 1;
@@ -7889,13 +7907,16 @@ function rankOne(games, key, opt) {
   return {
     rows,
     hd,
+    /* ★ favg — ★상대 에버. 상대가 한 분일 때만 뜻이 있다 */
     mates: Object.values(bm).map(t => ({
       ...t,
-      avg: t.inn ? t.pt / t.inn : 0
+      avg: t.inn ? t.pt / t.inn : 0,
+      favg: t.one && t.finn ? t.fpt / t.finn : -1
     })).sort((a, b) => b.n - a.n),
     foes: Object.values(bf).map(t => ({
       ...t,
-      avg: t.inn ? t.pt / t.inn : 0
+      avg: t.inn ? t.pt / t.inn : 0,
+      favg: t.finn ? t.fpt / t.finn : -1
     })).sort((a, b) => b.n - a.n),
     tot: {
       ...tot,
@@ -11557,7 +11578,8 @@ function ClubMember({
   mkey,
   P,
   openSheet,
-  onBack
+  onBack,
+  onMember
 }) {
   const {
     mode,
@@ -11767,7 +11789,30 @@ function ClubMember({
     className: "num"
   }, o.tot.pt), "점 ", /*#__PURE__*/React.createElement("span", {
     className: "num"
-  }, o.tot.inn), "이닝"))), o.foes.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, o.tot.inn), "이닝")), sel && onMember && !isMate && sel.key && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setFoe("");
+      onMember(sel.key);
+    },
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      width: "100%",
+      marginTop: 12,
+      padding: "11px 13px",
+      borderRadius: 11,
+      background: "rgba(232,184,56,.12)",
+      border: "1px solid rgba(232,184,56,.42)",
+      color: ACCENT,
+      fontSize: 13.5,
+      fontWeight: 700
+    }
+  }, /*#__PURE__*/React.createElement("span", null, selName, " 님 기준으로 보기"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16
+    }
+  }, "›"))), o.foes.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: "#6F8598",
@@ -11821,7 +11866,14 @@ function ClubMember({
       textAlign: "right",
       fontWeight: 500
     }
-  }, title, " 에버")), shownF.map(f => /*#__PURE__*/React.createElement("tr", {
+  }, title, " 에버"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      whiteSpace: "nowrap",
+      padding: "0 0 6px 9px",
+      textAlign: "right",
+      fontWeight: 500
+    }
+  }, "상대 에버")), shownF.map(f => /*#__PURE__*/React.createElement("tr", {
     key: f.key,
     onClick: () => setFoe(foe === f.key ? "" : f.key),
     style: {
@@ -11877,7 +11929,16 @@ function ClubMember({
       textAlign: "right",
       padding: "3px 0"
     }
-  }, fmtAvg(f.avg, mode)))))), o.mates.length > 6 && /*#__PURE__*/React.createElement("button", {
+  }, fmtAvg(f.avg, mode)), /*#__PURE__*/React.createElement("td", {
+    className: "num",
+    style: {
+      color: "var(--chalk)",
+      fontSize: 15,
+      whiteSpace: "nowrap",
+      textAlign: "right",
+      padding: "3px 0 3px 9px"
+    }
+  }, f.favg >= 0 ? fmtAvg(f.favg, mode) : "–"))))), o.mates.length > 6 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setMoreF(v => !v),
     style: {
       width: "100%",
@@ -15085,6 +15146,9 @@ function Clubs({
     P: P,
     openSheet: openSheet,
     onBack: () => setView(back)
+    /* 🔴 2026-11-23 — ★상대 기준으로 넘어가는 길. 전에는 이 화면에서
+          남의 에버를 볼 길이 ★아예 없어, 상대 알약을 눌러도 계속 내 기준이었다 */,
+    onMember: k => setMkey(k)
   });
   if (view === "roster") return /*#__PURE__*/React.createElement(ClubRoster, {
     data: data,
