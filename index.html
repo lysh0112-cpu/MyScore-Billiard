@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-97 로그인이 끊긴 것을 티 내기 -->
+<!-- build: 1판-98 내 성적 먼저 · 회원 번호 맞추기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -10067,7 +10067,10 @@ function ClubRank({
   const [syBusy, syOnce] = useOnce();
   const dataRef2 = useRef(data);
   dataRef2.current = data;
-  const poolKey2 = a => (a || []).map(g => g.id).sort().join("|");
+  /* ⚠⚠ 2026-11-23 — ⛔ 판 번호만 보고 있었다. 그러면 ★회원 번호(mid)만
+        바뀐 경우를 「같다」고 보아 ★저장을 건너뛴다 — 고쳐도 안 낫는다.
+     ⇒ 회원 번호까지 넣어 센다 (검사 mykey-test ㉳ 가 지킨다) */
+  const poolKey2 = a => (a || []).map(g => g.id + ":" + (g.players || []).map(p => p.mid || "").join(",")).sort().join("|");
 
   /* 🔴🔴 2026-11-23 — ⛔ 단추만 두었더니 ★대표님이 또 눌러야 했다 —
         「지금도 조회가 안 되네」 하실 때 화면은 ★누르기 전 그대로였다.
@@ -10343,13 +10346,16 @@ function ClubRank({
   }) => /*#__PURE__*/React.createElement("tr", {
     onClick: () => onMember(m.key),
     style: {
-      cursor: "pointer"
+      cursor: "pointer",
+      /* ★ 내 줄은 바탕을 밝혀 둔다 — 표에서 ★내 것을 먼저 찾으신다 */
+      background: isMe(m) ? "rgba(232,184,56,.09)" : "transparent"
     }
   }, /*#__PURE__*/React.createElement("td", {
     style: {
       textAlign: "left",
       fontWeight: 600,
-      width: "100%"
+      width: "100%",
+      color: isMe(m) ? ACCENT : "inherit"
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -10373,7 +10379,19 @@ function ClubRank({
       textOverflow: "ellipsis",
       whiteSpace: "nowrap"
     }
-  }, m.name || "이름 없음", who === "all" && !isMem(m) && /*#__PURE__*/React.createElement("span", {
+  }, m.name || "이름 없음", isMe(m) && /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "inline-block",
+      fontSize: 9.5,
+      fontWeight: 800,
+      padding: "1px 6px",
+      borderRadius: 5,
+      marginLeft: 6,
+      verticalAlign: 1,
+      background: ACCENT,
+      color: "#0A2438"
+    }
+  }, "나"), who === "all" && !isMem(m) && /*#__PURE__*/React.createElement("span", {
     style: {
       display: "inline-block",
       fontSize: 9.5,
@@ -10475,6 +10493,18 @@ function ClubRank({
     (byH[h] = byH[h] || []).push(m);
   });
 
+  /* 🔴🔴 2026-11-23 — [대표님 「동우회에서 ★김경석 핸드폰으로 조회 시 ★본인 기준
+        에버가 기본적으로 나와야 되고, ★류승현 따로 눌렀을 때만 류승현 에버가
+        나와야 된다는 것이지」]
+     ⛔ 전에는 ★들어가면 표만 있었다. 내 줄을 ★찾아 눌러야 내 에버가 나왔고,
+        남의 줄을 누르면 ★남의 에버가 떠 「내 것이 왜 저 사람과 같나」가 됐다.
+     ⇒ 맨 위에 ★내 성적을 먼저 둔다. 표에서도 ★내 줄에 「나」를 붙인다.
+     ⚠ 로그인을 안 하셨거나 명단에 내 줄이 없으면 ★아무것도 안 띄운다. */
+  const meMem = useMemo(() => memsOf(club).find(m => m.uid && m.uid === data.me) || null, [club.members, data.me]);
+  const meName = meMem && meMem.name || (data.nick || "").trim();
+  const isMe = m => !!m && (meMem && m.mid && m.mid === meMem.id || !!meName && (m.name || "").trim() === meName);
+  const meRow = useMemo(() => data.me ? rows.find(isMe) || null : null, [rows, meMem, meName, data.me]); // eslint-disable-line
+
   /* 동우회 없이 친 판 — 아직 어느 동우회에도 안 든 것만 */
   const orphan = useMemo(() => bilGames(data.games).filter(noClub), [data.games]);
   const [pick, setPick] = useState(false); /* 기록 보기에서 골라 넣는 창 */
@@ -10529,13 +10559,37 @@ function ClubRank({
       });
       const r = Array.isArray(rows) ? rows[0] : rows;
       const meName = (data.nick || "총무").slice(0, 20);
+      /* 🔴🔴 2026-11-23 — ⛔ 총무 줄이 ★두 번 만들어지고 있었다.
+            서버가 만들 때(cue_club_born) 한 줄을 ★이미 넣는다. 그런데 아래
+            되돌이가 ★명단을 통째로 다시 올려 ★총무 줄을 하나 더 만들었다.
+            ⇒ 서버 줄에는 local_mid 가 없고, 더 만든 줄에는 있다.
+              내려받는 폰은 ★두 줄을 보게 되고, 같은 사람이 ★두 줄로 갈린다.
+         ⇒ 총무 줄은 ★새로 만들지 않고, 서버가 만든 줄에 ★번호만 적어 넣는다. */
+      const meMem = memsOf(club).find(m => m.uid && m.uid === data.me) || memsOf(club).find(m => (m.name || "").trim() === meName);
+      let meSrvId = "";
       try {
-        await cuePatch(tok, `cue_club_members?club_id=eq.${r.id}&user_id=eq.${data.me}`, {
+        const back = await cuePatch(tok, `cue_club_members?club_id=eq.${r.id}&user_id=eq.${data.me}`, meMem ? {
+          name: meName,
+          local_mid: meMem.id
+        } : {
           name: meName
         });
+        const b0 = Array.isArray(back) ? back[0] : back;
+        meSrvId = b0 && b0.id || "";
       } catch (e) {}
       const mems = [];
       for (const m of memsOf(club)) {
+        if (meMem && m.id === meMem.id) {
+          /* ★ 서버가 이미 넣어 둔 줄이다 — 또 넣으면 두 줄이 된다 */
+          mems.push({
+            ...m,
+            srvId: meSrvId,
+            uid: data.me,
+            role: "admin",
+            status: "active"
+          });
+          continue;
+        }
         let srvId = "";
         try {
           const got = await cuePost(tok, "cue_club_members", {
@@ -10677,7 +10731,64 @@ function ClubRank({
       whiteSpace: "nowrap",
       flexShrink: 0
     }
-  }, "명단 ›")), club.srv ?
+  }, "명단 ›")), meRow && /*#__PURE__*/React.createElement("button", {
+    onClick: () => onMember(meRow.key),
+    style: {
+      width: "100%",
+      textAlign: "left",
+      display: "block",
+      marginBottom: 12,
+      background: "linear-gradient(180deg,#17496B,#123F5E)",
+      border: "1px solid rgba(232,184,56,.45)",
+      borderRadius: 14,
+      padding: "14px 15px 13px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 800,
+      letterSpacing: ".06em",
+      color: ACCENT
+    }
+  }, "내 성적"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      paddingTop: 3
+    }
+  }, meRow.name || meName), /*#__PURE__*/React.createElement("div", {
+    className: "num",
+    style: {
+      fontSize: 34,
+      color: ACCENT,
+      lineHeight: 1.2
+    }
+  }, fmtAvg(meRow.avg, mode)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--chalk)"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, meRow.n), "판 · ", wdlTxt(meRow, maxPlace(rows)), " · 하이런 ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, meRow.hi), " · ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, meRow.pt), "점 ", /*#__PURE__*/React.createElement("span", {
+    className: "num"
+  }, meRow.inn), "이닝"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 11,
+      paddingTop: 10,
+      borderTop: "1px solid rgba(244,238,223,.12)",
+      fontSize: 13.5,
+      fontWeight: 700,
+      color: ACCENT
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "내 기록 자세히 보기"), /*#__PURE__*/React.createElement("span", null, "›"))), club.srv ?
   /*#__PURE__*/
   /* 🔴 2026-11-14 — 「초대코드 복사 부분과 초청문자 복사 부분이 ★따로 되어 있잖아?
         이것은 문제 있어 보인다」 [대표님].
@@ -12247,6 +12358,45 @@ const reapClubTags = async (tok, data, clubIds) => {
 };
 
 /* 그 동우회의 판을 내려받는다 — ★내가 친 판은 뺀다 (내 것은 data.games 에 있다) */
+/* 🔴🔴 2026-11-23 — [대표님 「동우회에서 ★예전 쳤던 다른 게임은 본인 에버가
+      조회되고, ★오늘 친 거는 류승현 에버가 나오는 것 같음」]
+
+   까닭 — 회원 번호(mid)는 ★폰마다 따로 붙는다. 내가 적은 판에는 ★내 폰 번호가,
+     내려받은 판에는 ★올린 폰 번호가 박혀 있다. 이름이 같아도 번호가 다르니
+     ★같은 사람이 두 줄로 갈린다 — 「예전 3판」과 「오늘 7판」이 따로 선다.
+   ⇒ 내려받을 때 ★이 폰의 명단 번호로 바꿔 끼운다. 그래야 한 줄이 된다.
+   ⚠ 명단에 ★같은 이름이 둘이면 손대지 않는다 — 남의 성적이 섞인다. */
+const midMap = club => {
+  const cnt = {},
+    by = {};
+  memsOf(club).forEach(m => {
+    const n = (m.name || "").trim();
+    if (!n) return;
+    cnt[n] = (cnt[n] || 0) + 1;
+  });
+  memsOf(club).forEach(m => {
+    const n = (m.name || "").trim();
+    if (n && cnt[n] === 1 && m.id) by[n] = m.id;
+  });
+  return by;
+};
+const reMid = (g, by) => {
+  if (!by || !g || !Array.isArray(g.players)) return g;
+  let hit = false;
+  const players = g.players.map(p => {
+    const id = by[(p.name || "").trim()];
+    if (!id || id === p.mid) return p;
+    hit = true;
+    return {
+      ...p,
+      mid: id
+    };
+  });
+  return hit ? {
+    ...g,
+    players
+  } : g;
+};
 const pullClubGames = async (tok, data, clubIds) => {
   const mine = new Set((data.games || []).map(g => g.id));
   const sig = new Set((data.games || []).map(gameSig));
@@ -12260,6 +12410,8 @@ const pullClubGames = async (tok, data, clubIds) => {
   const hid = new Set(data.hid || []);
   const out = [];
   for (const cid of clubIds.slice(0, CLUB_MAX)) {
+    /* ★ 이 폰의 명단 번호표 — 내려받은 판의 번호를 여기에 맞춰 끼운다 */
+    const by = midMap(clubsOf(data).find(c => c.id === cid));
     try {
       const rows = await cueGet(tok, `cue_club_games?club_id=eq.${cid}&select=client_id,data&order=played_on.desc&limit=400`);
       (Array.isArray(rows) ? rows : []).forEach(r => {
@@ -12269,12 +12421,12 @@ const pullClubGames = async (tok, data, clubIds) => {
         if (hid.has(g.id) || hid.has(String(r.client_id))) return; /* ★내가 지운 판 */
         if (sig.has(gameSig(g))) return; /* 내가 적어 둔 그 판 */
         if (out.some(x => x.id === g.id || gameSig(x) === gameSig(g))) return;
-        out.push({
+        out.push(reMid({
           ...g,
           id: String(g.id || r.client_id),
           sport: "billiard",
           fromClub: true
-        });
+        }, by));
       });
     } catch (e) {/* 한 동우회 못 읽어도 나머지는 */}
   }
@@ -15329,7 +15481,9 @@ function App() {
        남이 친 판이 끝내 안 보인다 — 대표님은 ★같은 성적표를 보셔야 한다.
      ⚠ 받은 판을 그대로 save 하면 games 가 바뀌지도 않았는데 ★무한히 돈다.
        ⇒ 판 번호를 이어 붙여 ★달라졌을 때만 저장한다. */
-  const poolKey = a => (a || []).map(g => g.id).sort().join("|");
+  /* ⚠⚠ 2026-11-23 — 회원 번호(mid)까지 센다. 판 번호만 보면
+        ★번호만 고쳐진 판을 「같다」고 보아 저장을 건너뛴다 (위와 같은 자리) */
+  const poolKey = a => (a || []).map(g => g.id + ":" + (g.players || []).map(p => p.mid || "").join(",")).sort().join("|");
   const cgBusy = useRef(false);
   const cgSync = async () => {
     if (cgBusy.current) return;
