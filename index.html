@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-96 동우회 맞추기 — 되고 있는지 보이게 -->
+<!-- build: 1판-97 로그인이 끊긴 것을 티 내기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -9787,7 +9787,35 @@ function ClubList({
       fontWeight: 700,
       padding: "15px 2px 12px"
     }
-  }, "동우회"), cs.length === 0 && !mk && !join && /*#__PURE__*/React.createElement("div", {
+  }, "동우회"), data.tokBad && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 9,
+      alignItems: "flex-start",
+      background: "rgba(200,123,116,.1)",
+      border: "1px solid rgba(200,123,116,.45)",
+      borderRadius: 11,
+      padding: "11px 12px",
+      marginBottom: 11,
+      fontSize: 12.5,
+      lineHeight: 1.55
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "⛔"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--ivory)"
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: "#F0A9A9"
+    }
+  }, "로그인이 만료돼 기록을 주고받지 못합니다"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: 11.5,
+      color: "#6F8598",
+      marginTop: 2
+    }
+  }, "홈 오른쪽 위에서 다시 로그인하시면 바로 들어옵니다"))), cs.length === 0 && !mk && !join && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "34px 10px",
       textAlign: "center",
@@ -10040,6 +10068,50 @@ function ClubRank({
   const dataRef2 = useRef(data);
   dataRef2.current = data;
   const poolKey2 = a => (a || []).map(g => g.id).sort().join("|");
+
+  /* 🔴🔴 2026-11-23 — ⛔ 단추만 두었더니 ★대표님이 또 눌러야 했다 —
+        「지금도 조회가 안 되네」 하실 때 화면은 ★누르기 전 그대로였다.
+     ⇒ 동우회에 들어오시면 ★저절로 한 번 재서 보여드린다.
+       서버 판 수와 내 화면 판 수가 ★나란히 보이면 그 자리에서 갈린다.
+     ⚠ 동우회마다 ★한 번만 — 들어올 때마다 서버를 부르지 않는다. */
+  const syAuto = useRef("");
+  const syRun = async () => {
+    const r = await clubSyncOnce(dataRef2.current, [club.id], s2 => save({
+      ...dataRef2.current,
+      session: s2
+    }));
+    if (!r.ok) {
+      setSy({
+        bad: true,
+        msg: r.msg,
+        srv: r.srv
+      });
+      return;
+    }
+    let d2 = dataRef2.current;
+    if (r.up) {
+      d2 = r.up(d2);
+    } /* 올린 판에 표를 적는다 */
+    const next = r.got && poolKey2(d2.pool) !== poolKey2(r.pool) ? {
+      ...d2,
+      pool: r.pool
+    } : d2;
+    if (next !== dataRef2.current) save(next);
+    setSy({
+      bad: false,
+      srv: r.srv,
+      got: r.got,
+      at: Date.now()
+    });
+  };
+  const syRef = useRef(syRun);
+  syRef.current = syRun;
+  useEffect(() => {
+    if (!club.srv || syAuto.current === club.id) return;
+    syAuto.current = club.id;
+    const t = setTimeout(() => syOnce(() => syRef.current()), 400);
+    return () => clearTimeout(t);
+  }, [club.id, club.srv]); // eslint-disable-line
   const [tidy, setTidy] = useState(false); /* 기록 관리 창 */
   const [tdBusy, tdOnce] = useOnce();
 
@@ -11054,28 +11126,7 @@ function ClubRank({
     },
     onClick: () => setUndo("")
   }, "그대로 두기")))), club.srv && /*#__PURE__*/React.createElement("button", {
-    onClick: () => syOnce(async () => {
-      const r = await clubSyncOnce(data, [club.id]);
-      if (!r.ok) {
-        setSy({
-          bad: true,
-          msg: r.msg,
-          srv: r.srv
-        });
-        return;
-      }
-      const d2 = dataRef2.current || data;
-      if (r.got && poolKey2(d2.pool) !== poolKey2(r.pool)) save({
-        ...d2,
-        pool: r.pool
-      });
-      setSy({
-        bad: false,
-        srv: r.srv,
-        got: r.got,
-        at: Date.now()
-      });
-    }),
+    onClick: () => syOnce(() => syRef.current()),
     style: {
       display: "flex",
       gap: 9,
@@ -11095,7 +11146,7 @@ function ClubRank({
       color: "var(--ivory)",
       minWidth: 0
     }
-  }, syBusy ? /*#__PURE__*/React.createElement("b", null, "맞추는 중…") : !sy ? /*#__PURE__*/React.createElement("b", null, "동우회 기록 맞추기") : sy.bad ? /*#__PURE__*/React.createElement("b", {
+  }, syBusy ? /*#__PURE__*/React.createElement("b", null, "서버와 맞춰 보는 중…") : !sy ? /*#__PURE__*/React.createElement("b", null, "동우회 기록 맞추기") : sy.bad ? /*#__PURE__*/React.createElement("b", {
     style: {
       color: "#F0A9A9"
     }
@@ -11110,7 +11161,11 @@ function ClubRank({
     className: "num"
   }, sy.srv), "판 · 내 화면 ", /*#__PURE__*/React.createElement("span", {
     className: "num"
-  }, clubGames(allGames(data), club.id).length), "판") : "눌러서 지금 맞춥니다")), /*#__PURE__*/React.createElement("span", {
+  }, clubGames(allGames(data), club.id).length), "판", sy.srv > clubGames(allGames(data), club.id).length && /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: ACCENT
+    }
+  }, " · 아직 못 받은 것이 있습니다")) : syBusy ? "서버에 몇 판 있는지 세는 중입니다" : "눌러서 지금 맞춥니다")), /*#__PURE__*/React.createElement("span", {
     style: {
       marginLeft: "auto",
       flexShrink: 0,
@@ -12081,7 +12136,7 @@ const delClubGame = async (tok, clubId, clientId) => cueDel(tok, `cue_club_games
    ★ 서버에 ★몇 판 올라와 있는지를 함께 센다 — 그것이 갈림길이다.
      내 화면 7판인데 서버 14판이면 ★내려받기가 막힌 것이고,
      서버도 7판이면 ★상대 폰이 안 올린 것이다. */
-const clubSyncOnce = async (data, clubIds) => {
+const clubSyncOnce = async (data, clubIds, onNew) => {
   const out = {
     ok: false,
     got: 0,
@@ -12093,12 +12148,18 @@ const clubSyncOnce = async (data, clubIds) => {
     return out;
   }
   let tok;
+  /* ⚠ 2026-11-23 — ⛔ onNew 를 안 넘기고 있었다. 새로 받은 토큰을 ★안 적어 둬서
+        부를 때마다 ★또 새로 받았다. 넘겨서 적어 둔다. */
   try {
-    tok = await cueTok(data);
+    tok = await cueTok(data, onNew);
   } catch (e) {
     tok = null;
   }
   if (!tok) {
+    /* 🔴🔴 2026-11-23 — [대표님 「★로그인을 빠져나갔다 다시 오니 나오네」]
+          ★이것이 그 자리였다. 토큰이 죽으면 cgSync 가 ★조용히 돌아선다.
+          대표님은 ★몇 날을 「왜 안 나오지」 하셨다. ⇒ ★티를 낸다. */
+    out.tokBad = true;
     out.msg = "로그인이 만료됐습니다 — 오른쪽 위에서 다시 로그인해 주세요";
     return out;
   }
@@ -12117,11 +12178,31 @@ const clubSyncOnce = async (data, clubIds) => {
       return out;
     }
   }
+  /* ★ 받기 전에 ★내 것부터 올린다 — 「상대가 안 올렸다」가 제일 흔한 까닭이다.
+        들어오시기만 해도 올라가게 한다. */
+  try {
+    const up = await pushClubGames(tok, data);
+    if (up) {
+      out.up = up;
+      out.sent = true;
+    }
+  } catch (e) {/* 못 올려도 받기는 해본다 */}
   try {
     const got = await pullClubGames(tok, data, clubIds);
     out.ok = true;
     out.got = got.length;
     out.pool = got;
+    /* 올린 뒤라면 서버 수를 ★다시 센다 — 방금 올린 것이 빠지면 헷갈린다 */
+    if (out.sent) {
+      try {
+        let n = 0;
+        for (const cid of clubIds) {
+          const rows = await cueGet(tok, `cue_club_games?club_id=eq.${cid}&select=client_id&limit=2000`);
+          if (Array.isArray(rows)) n += rows.length;
+        }
+        if (n) out.srv = n;
+      } catch (e) {/* 처음 센 값을 그대로 쓴다 */}
+    }
   } catch (e) {
     out.msg = "받는 중에 끊겼습니다 — 다시 눌러 주세요";
   }
@@ -15262,7 +15343,21 @@ function App() {
         ...p,
         session: s2
       })));
-      if (!tok) return;
+      if (!tok) {
+        /* 🔴🔴 2026-11-23 — [대표님 「★로그인을 빠져나갔다 다시 오니 나오네」]
+              ★여기가 그 자리였다. 토큰이 죽으면 ★조용히 돌아섰다.
+              대표님은 그동안 ★왜 안 나오는지 알 길이 없으셨다.
+           ⇒ ★티를 낸다 — 동우회 목록에 빨간 줄이 선다. */
+        if (!dataRef.current.tokBad) save({
+          ...dataRef.current,
+          tokBad: true
+        });
+        return;
+      }
+      if (dataRef.current.tokBad) save({
+        ...dataRef.current,
+        tokBad: false
+      });
       const up = await pushClubGames(tok, dataRef.current);
       if (up) save(up(dataRef.current));
       /* ★ 누가 동우회 기록에서 지운 판은 ★내 폰에서도 꼬리표를 뗀다.
