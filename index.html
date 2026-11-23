@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-98 내 성적 먼저 · 회원 번호 맞추기 -->
+<!-- build: 1판-99 명단 회원은 한 사람으로 — 평균 에버 바로잡기 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -7416,6 +7416,32 @@ const dupNames = members => {
      번호는 ★기계가 다르면 갈라지고, 이름은 ★고치면 갈라진다 —
      둘을 이어 붙이면 ★양쪽 구멍이 다 막힌다.
    ⚠ 명단에 같은 이름이 둘이면 ★이름으로는 안 잇는다 (dup) — 성적이 섞인다. */
+/* 🔴🔴 2026-11-23 — [대표님 「동우회에서 ★평균 에버는 매우 중요해서」
+      — 류승현이 ★두 줄로 갈려 11/6 7판이 통째로 빠졌다.
+        명단 「실제 0.342 · 7판」. 실은 ★14판 143점 427이닝 = 0.335 다]
+
+   까닭 — 회원 번호(mid)는 폰마다·명단을 다시 만들 때마다 달라진다.
+     1판-98 은 ★내려받은 판만 맞췄다. ★이 폰에 직접 저장된 판끼리
+     번호가 갈린 경우는 못 잡았다.
+   ⇒ ★명단에 이름이 하나뿐인 회원은 ★물어볼 것 없이 한 사람으로 묶는다.
+     정식 명단에 「류승현」이 ★한 줄뿐이면 그 이름은 ★그 사람이다.
+   ⚠ 명단에 ★없는 분(손님·비회원)은 ★그대로 물어본다 — 1판-90 에서
+     대표님이 「합치겠느냐고 창을 띄우면 어때?」 하신 그 자리는 ★살린다.
+     같은 이름의 ★남남일 수 있기 때문이다 (문재길 건).
+   ⚠ 명단에 같은 이름이 둘이면(dup) 여기서도 ★안 묶는다. */
+const autoOne = (members, ok) => {
+  const cnt = {};
+  (members || []).forEach(m => {
+    const n = (m.name || "").trim();
+    if (!n) return;
+    cnt[n] = (cnt[n] || 0) + 1;
+  });
+  const s = new Set(ok ? [...ok] : []);
+  Object.keys(cnt).forEach(n => {
+    if (cnt[n] === 1) s.add(n);
+  });
+  return s;
+};
 const linkPlayers = (list, dup, ok) => {
   const par = {};
   const add = x => {
@@ -7596,7 +7622,8 @@ function rankList(games, opt) {
   const dup = dupNames(opt && opt.members);
   const picked = rankPick(games, opt);
   const flat = picked.reduce((a, g) => a.concat(g.players || []), []);
-  const keyOfPlayer = linkPlayers(flat, dup, opt && opt.oneNames);
+  /* ★ 명단에 이름이 하나뿐인 회원은 ★물어볼 것 없이 한 사람으로 묶는다 */
+  const keyOfPlayer = linkPlayers(flat, dup, autoOne(opt && opt.members, opt && opt.oneNames));
   picked.forEach(g => {
     /* 🔴 2026-11-13 — 「당초 우리가 ★그림을 그린 내용과는 다른데…
           함께 친 분 | 판 | ★1등-2등-3등 | 에버 — 이렇게 보여준다면서」 [대표님]
@@ -7653,10 +7680,14 @@ function rankList(games, opt) {
       m.name = p.name || m.name; /* 이름이 바뀌었으면 ★최근 것으로 */
     });
   });
+  /* 🔴 2026-11-23 — 「합친 분」 표는 ★대표님이 손수 합치신 이름에만 붙인다.
+        ⛔ 명단 회원은 ★물어본 적이 없으니(autoOne) 「합친 분」이라 하면 안 된다 —
+          찍어 보니 류승현 님께 붙었다. 누르면 ★다시 나누기가 떠 에버가 또 갈린다. */
+  const askedOne = opt && opt.oneNames || new Set();
   return Object.values(by).map(m => ({
     ...m,
     avg: m.inn ? m.pt / m.inn : 0,
-    joined: Object.keys(m.src || {}).length > 1
+    joined: Object.keys(m.src || {}).length > 1 && askedOne.has((m.name || "").trim())
   }));
 }
 /* 「1등-2등-3등」 또는 「승-무-패」 — 한 곳에서만 글자를 만든다.
@@ -7732,7 +7763,8 @@ function rankOne(games, key, opt) {
   /* ⚠ 2026-11-15 — ★랭킹 표와 ★같은 자로 사람을 가려야 한다.
         따로 가르면 표에서는 7판인데 들어가 보면 3판이 된다. */
   const picked = rankPick(games, opt);
-  const keyOfPlayer = linkPlayers(picked.reduce((a, g) => a.concat(g.players || []), []), dupNames(opt && opt.members), opt && opt.oneNames);
+  const keyOfPlayer = linkPlayers(picked.reduce((a, g) => a.concat(g.players || []), []), dupNames(opt && opt.members), /* ★ 랭킹 표와 ★같은 자 — 명단 회원은 자동으로 한 사람 */
+  autoOne(opt && opt.members, opt && opt.oneNames));
   picked.forEach(g => {
     const me = g.players.find(p => keyOfPlayer(p) === key);
     if (!me) return;
@@ -10292,7 +10324,17 @@ function ClubRank({
     whoFix.current = club.id;
     if (!rows.some(isMem)) setWho("all");
   }, [club.id, rows]); // eslint-disable-line
-  const hOf = m => handiOf(memById(club, m.mid), mode);
+  /* 🔴 2026-11-23 — ⛔ 수지 칸이 ★「–」로 비었다 (찍어서 봤다).
+        줄에 남은 번호가 ★옛 번호면 명단에서 못 찾는다 — 번호는 명단을 다시
+        만들 때마다 바뀌는데, 지난 판에는 ★옛 번호가 박혀 있다.
+     ⇒ 번호로 못 찾으면 ★이름으로 찾는다 (명단에 하나뿐인 이름일 때만). */
+  const hOf = m => {
+    const byMid = memById(club, m.mid);
+    if (byMid) return handiOf(byMid, mode);
+    const n = (m.name || "").trim();
+    const hit = memsOf(club).filter(x => (x.name || "").trim() === n);
+    return hit.length === 1 ? handiOf(hit[0], mode) : 0;
+  };
 
   /* 🔴 2026-11-13 — 「화면이 이상해」 [대표님]. 머리글이 ★세로로 쪼개져
         「수 지」 「승- 무-패」 「하 이 런」 처럼 한 글자씩 떨어졌다.
@@ -14270,13 +14312,30 @@ function ClubRoster({
     return by;
   }, [data.games, data.pool, data.nameOne, club.id, mode, bound]);
   /* 판 수는 ★기간과 상관없이 모두 센다 — 「이 사람이 우리와 몇 판 쳤나」 */
+  /* 🔴 2026-11-23 — ⛔ ★번호로만 세고 있었다. 번호는 명단을 다시 만들 때마다
+        바뀌므로, 지난 판에 박힌 ★옛 번호는 명단 줄과 안 맞는다.
+        대표님 폰에서 류승현 님이 ★「모두 7판」이었다 — 실은 ★14판이다.
+     ⇒ ★이름으로도 센다. 명단에 ★하나뿐인 이름만 (둘이면 섞이면 안 된다). */
   const allN = useMemo(() => {
-    const by = {};
+    const cnt = {};
+    memsOf(club).forEach(m => {
+      const n = (m.name || "").trim();
+      if (n) cnt[n] = (cnt[n] || 0) + 1;
+    });
+    const by = {},
+      byName = {};
     clubGames(allGames(data), club.id).forEach(g => g.players.forEach(p => {
       if (p.mid) by[p.mid] = (by[p.mid] || 0) + 1;
+      const n = (p.name || "").trim();
+      if (n) byName[n] = (byName[n] || 0) + 1;
     }));
-    return by;
-  }, [data.games, data.pool, club.id]);
+    const out = {};
+    memsOf(club).forEach(m => {
+      const n = (m.name || "").trim();
+      out[m.id] = n && cnt[n] === 1 ? byName[n] || 0 : by[m.id] || 0;
+    });
+    return out;
+  }, [data.games, data.pool, club.id, club.members]);
 
   /* 🔴 2026-11-14 — 명단을 ★서버와 맞춘다 [대표님 「초청하기 기능」].
         초대 코드로 들어온 분을 ★이름으로 이어 주려면, 총무가 적어 둔 이름이
