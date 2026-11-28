@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<!-- build: 1판-100 상대 에버 칸 · 상대 기준으로 보기 -->
+<!-- build: 1판-101 마지막 이닝 세기 · 4구 마무리 개수 크게 -->
 <title>큐보드 · CUEBOARD</title>
 <style>
   html{height:auto;}
@@ -910,7 +910,16 @@ function ScorePad({
   stats = [],
   onTap,
   onName,
-  ariaLabel
+  ariaLabel,
+  /* 🔴🔴 2026-11-28 — [대표님 「4구 목표숫자를 다친 사람의 경우,
+        ★3쿠션 몇개, 뱅크샷 몇개가 점수판화면에 ★크게 나오면 좋겠고,
+        목표숫자에 도달하지 못한 사람은 ★계속 그대로 나오게」]
+     ⛔ 전에는 큰 자리에 ★마무리 «점수» 가 0 부터 올라갔다.
+       당구대에서 보면 그냥 ★0점으로 보인다 — 몇 개를 더 쳐야
+       하는지는 이름 밑 ★작은 글씨뿐이었다.
+     ⇒ fin 이 있으면 큰 자리를 ★개수판으로 바꾼다 (대표님 ㉮).
+       없으면 ★그대로 숫자다 — 못 친 분은 아무것도 안 바뀐다. */
+  fin = null
 }) {
   return (
     /*#__PURE__*/
@@ -997,7 +1006,69 @@ function ScorePad({
         minHeight: 0,
         containerType: "size"
       }
-    }, /*#__PURE__*/React.createElement(Flip, {
+    }, fin && fin.length ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        background: bg,
+        borderRadius: 14,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "clamp(4px,3cqh,18px)",
+        padding: "0 clamp(6px,4cqw,18px)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: "clamp(9px,4.4cqw,19px)",
+        fontWeight: 800,
+        letterSpacing: ".2em",
+        color: fg,
+        opacity: .45
+      }
+    }, "마 무 리"), fin.map(r =>
+    /*#__PURE__*/
+    /* ★ 이름을 ★위에, 개수를 ★아래 크게 — 옆에 두면 폭에 눌려 작아진다
+          (390px 폰에서 재어 보니 23px 밖에 안 됐다) */
+    React.createElement("div", {
+      key: r.label,
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        lineHeight: 1
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: "clamp(11px,7cqw,30px)",
+        fontWeight: 700,
+        color: fg,
+        opacity: .66,
+        whiteSpace: "nowrap",
+        paddingBottom: "clamp(1px,1cqh,6px)"
+      }
+    }, r.label), /*#__PURE__*/React.createElement("span", {
+      style: {
+        whiteSpace: "nowrap",
+        display: "flex",
+        alignItems: "baseline"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "num",
+      style: {
+        fontSize: fin.length > 1 ? "min(clamp(30px,34cqw,120px),26cqh)" : "min(clamp(40px,44cqw,170px),40cqh)",
+        color: fg,
+        lineHeight: 1
+      }
+    }, r.made), /*#__PURE__*/React.createElement("span", {
+      className: "num",
+      style: {
+        fontSize: fin.length > 1 ? "min(clamp(14px,15cqw,52px),12cqh)" : "min(clamp(18px,19cqw,70px),18cqh)",
+        color: fg,
+        opacity: .45
+      }
+    }, " / ", r.want))))) : /*#__PURE__*/React.createElement(Flip, {
       value: value,
       size: size,
       bg: bg,
@@ -5192,6 +5263,16 @@ function Billiard({
   const [replay, setReplay] = useState(null);
   /* ★ 단판에서 목표에 닿는 순간 이미 승부를 말했다는 표시. finish 에서 또 말하지 않는다 */
   const endSaid = useRef(false);
+  /* 🔴🔴 2026-11-28 — [대표님 「4구 … ★에버리지가 서로 달라야되는데 같게 나오네」]
+        ⛔ ★이긴 분의 ★마지막 이닝이 빠지고 있었다. 이닝은 [다음 ⇒] 를 누를 때
+          ★나가는 사람 몫으로 는다. 그런데 목표를 채운 분은 ★다음을 안 누르고
+          그대로 끝내므로, ★그 이닝이 영영 안 세졌다.
+          마무리(3쿠션·뱅크샷)로 끝낸 이닝은 더 확실히 빠졌다 — finHit 은
+          점수도 run 도 안 건드리기 때문이다.
+        ⇒ ★이번 이닝에 무엇이든 친 것이 있으면 참으로 둔다. 끝낼 때 그 한 번을 센다.
+          쳤는데 안 세는 일도, ★안 쳤는데 세는 일도 없어야 한다.
+     ⚠ 되돌리기(undo)도 함께 되돌려야 한다 — 안 그러면 한 이닝이 남는다 */
+  const acted = useRef(false);
   const [memo, setMemo] = useState(R.memo || "");
   const [score, setScore] = useState(R.score || {});
   const [turns, setTurns] = useState(R.turns || {});
@@ -5487,6 +5568,23 @@ function Billiard({
   /* 번호판을 그냥 눌렀을 때 ★무엇을 친 것으로 볼지 — 3쿠션이 남았으면 3쿠션,
      다 쳤으면 뱅크샷. 「순서 없이 남은 것 아무거나」 [대표님 ㉢] 에 맞는다 */
   const finPick = k => finNeed(k).c > 0 ? "c" : "b";
+  /* ★ 2026-11-28 — 큰 자리에 띄울 ★개수판 [대표님 ㉮].
+        정한 것만 줄을 낸다 — 뱅크샷을 0 으로 두셨으면 3쿠션 한 줄뿐이다 */
+  const finRows = k => {
+    const f = finOf(k),
+      out = [];
+    if (fin3) out.push({
+      label: "3쿠션",
+      made: Math.min(f.c || 0, fin3),
+      want: fin3
+    });
+    if (finBank) out.push({
+      label: "뱅크샷",
+      made: Math.min(f.b || 0, finBank),
+      want: finBank
+    });
+    return out;
+  };
   const ptGoal = p => Number(p.handi) > 0 && sc(p.key) >= Number(p.handi);
   const reachedOf = p => ptGoal(p) && (!finOn || finLeft(p.key) === 0);
   /* 마무리 진행을 ● ○ 로 보여준다 — ● 친 것 · ○ 남은 것.
@@ -5529,7 +5627,9 @@ function Billiard({
     },
     fouls: {
       ...fouls
-    }
+    },
+    /* ★ 이번 이닝에 쳤는지도 담는다 (2026-11-28) */
+    acted: acted.current
   }]);
   const undo = () => {
     const l = hist[hist.length - 1];
@@ -5541,6 +5641,7 @@ function Billiard({
     setActive(l.active);
     setFin(l.fin || {});
     setFouls(l.fouls || {});
+    acted.current = !!l.acted;
     setHist(h => h.slice(0, -1));
   };
   const addPt = d => {
@@ -5560,6 +5661,7 @@ function Billiard({
     setBegun(true);
     if (!startAt) setStartAt(Date.now());
     snap();
+    acted.current = true; /* ★ 이번 이닝에 쳤다 */
     const now = clampSc(sc(k) + d);
     setScore(s => ({
       ...s,
@@ -5657,6 +5759,7 @@ function Billiard({
         return n;
       });
       setRun(0);
+      acted.current = false; /* ★ 위에서 ★이미 세었다 */
       setActive(i);
       setShot(clockSec);
       setTurnNo(t => t + steps);
@@ -5687,6 +5790,7 @@ function Billiard({
       [k]: (t[k] || 0) + 1
     }));
     setRun(0);
+    acted.current = false; /* ★ 이 이닝은 ★여기서 세었다 */
     /* ★ 끝난 사람은 건너뛴다. 차례 수는 «한 번만» 는다 — 건너뛴 사람은 안 쳤다 */
     const nx = nextAlive(active);
     setActive(nx);
@@ -5715,6 +5819,7 @@ function Billiard({
     setBegun(true);
     if (!startAt) setStartAt(Date.now());
     snap();
+    acted.current = false; /* ★ 아래에서 이닝을 ★이미 올린다 */
     setFouls(f => ({
       ...f,
       [k]: (f[k] || 0) + 1
@@ -5751,6 +5856,7 @@ function Billiard({
     setBegun(true);
     if (!startAt) setStartAt(Date.now());
     snap();
+    acted.current = true; /* ★ 마무리도 ★친 것이다 */
     const cur = finOf(k);
     const nx = {
       c: cur.c || 0,
@@ -5811,9 +5917,14 @@ function Billiard({
       ...high,
       [k]: Math.max(high[k] || 0, run)
     };
+    /* 🔴🔴 2026-11-28 — ★치고 있던 그 이닝을 센다 [대표님].
+          ⛔ 전에는 ★안 셌다. 목표를 채운 분은 [다음 ⇒] 를 안 누르고 그대로
+            끝내므로, ★이긴 분의 마지막 이닝이 늘 빠졌다 — 재서 확인했다
+            (실제 8이닝 → 7이닝으로 기록). 두 분 이닝이 같아져 ★에버도 같아졌다.
+          ⚠ 아무것도 안 친 채로 끝내면 ★안 센다 (acted 가 거짓) */
     const tu = {
       ...turns,
-      [k]: Math.max(1, turns[k] || 0)
+      [k]: Math.max(1, (turns[k] || 0) + (acted.current ? 1 : 0))
     };
     /* ★ 8판 — 여기도 units 다. 편으로 칠 때 사람 열쇠를 넣으면
           turns 에 쓰지도 않는 값이 섞이고, 아래 teams 의 inn 과도 어긋난다 */
@@ -6792,9 +6903,13 @@ function Billiard({
     accent: BALL[ballOf(i)],
     dim: i !== active || isDone(i)
     /* ★ 점수는 다 쳤는데 마무리가 남았으면 ★그것을 보여준다.
-          「도달 ✓」 를 띄우면 다 끝난 줄 알고 다음 사람에게 넘긴다 */,
-    badge: finOn && ptGoal(p) && finLeft(p.key) > 0 ? {
-      text: finTxt(p.key),
+          「도달 ✓」 를 띄우면 다 끝난 줄 알고 다음 사람에게 넘긴다 */
+    /* ★ 큰 자리를 개수판으로 — 목표를 ★다 친 분에게만 */,
+    fin: finOn && ptGoal(p) && finLeft(p.key) > 0 ? finRows(p.key) : null,
+    badge: finOn && ptGoal(p) && finLeft(p.key) > 0
+    /* ★ 개수는 ★큰 자리로 갔다. 여기는 ★왜 바뀌었는지만 말한다 */
+    /* ⚠ 길면 ★두 줄로 깨진다 (390px 폰에서 깨졌다) — 짧게 */ ? {
+      text: "목표 다 치셨습니다",
       color: "#8FC0E0"
     } : isDone(i) ? {
       text: finishOrder.includes(p.key) ? `${finishOrder.indexOf(p.key) + 1}위 도달 ✓` : "도달 ✓",
@@ -6818,7 +6933,7 @@ function Billiard({
     })]],
     onTap: () => hit(i),
     onName: () => team ? setTeamOpen(true) : setSeat(i),
-    ariaLabel: `${p.name} ${scoreDown ? `${shownOf(p)}점 남음` : `${sc(p.key)}점`}${i === active ? `, 공격 중. 누르면 ${STEP}점` : ", 누르면 공격권 넘기기"}`
+    ariaLabel: finOn && ptGoal(p) && finLeft(p.key) > 0 ? `${p.name} 목표 다 침, ${finRows(p.key).map(r => `${r.label} ${r.want}개 중 ${r.made}개`).join(", ")}${i === active ? ", 공격 중. 누르면 마무리 한 개" : ", 누르면 공격권 넘기기"}` : `${p.name} ${scoreDown ? `${shownOf(p)}점 남음` : `${sc(p.key)}점`}${i === active ? `, 공격 중. 누르면 ${STEP}점` : ", 누르면 공격권 넘기기"}`
   }), twoUp && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
